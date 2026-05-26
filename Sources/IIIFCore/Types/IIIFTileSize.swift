@@ -1,3 +1,7 @@
+#if CLIENT
+  import EmbeddedSwiftUtilities
+#endif
+
 public enum IIIFTileSize: Sendable {
   case max
   case exact(Int, Int?)

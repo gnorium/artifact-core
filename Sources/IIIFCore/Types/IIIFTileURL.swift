@@ -1,3 +1,7 @@
+#if CLIENT
+  import EmbeddedSwiftUtilities
+#endif
+
 public enum IIIFTileURL {
   public static func infoURL(from serviceID: String) -> String {
     serviceID.hasSuffix("/") ? "\(serviceID)info.json" : "\(serviceID)/info.json"

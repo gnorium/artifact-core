@@ -1,4 +1,4 @@
-public struct IIIFContentResource: Sendable, Codable {
+public struct IIIFContentResource: Sendable {
   public let id: String
   public let type: String
   public let format: String?
@@ -9,3 +9,7 @@ public struct IIIFContentResource: Sendable, Codable {
   public let service: [IIIFImageService]?
   public let language: String?
 }
+
+#if SERVER
+  extension IIIFContentResource: Codable {}
+#endif

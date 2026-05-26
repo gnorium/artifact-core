@@ -1,4 +1,4 @@
-public struct IIIFThumbnail: Sendable, Codable {
+public struct IIIFThumbnail: Sendable {
   public let id: String
   public let type: String
   public let format: String?
@@ -6,3 +6,7 @@ public struct IIIFThumbnail: Sendable, Codable {
   public let height: Int?
   public let service: [IIIFImageService]?
 }
+
+#if SERVER
+  extension IIIFThumbnail: Codable {}
+#endif

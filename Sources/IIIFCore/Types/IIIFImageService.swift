@@ -1,4 +1,4 @@
-public struct IIIFImageService: Sendable, Codable {
+public struct IIIFImageService: Sendable {
   public let id: String
   public let type: String
   public let profile: String?
@@ -11,3 +11,7 @@ public struct IIIFImageService: Sendable, Codable {
   public let formats: [String]?
   public let qualities: [String]?
 }
+
+#if SERVER
+  extension IIIFImageService: Codable {}
+#endif

@@ -1,4 +1,4 @@
-public struct IIIFCanvas: Sendable, Codable {
+public struct IIIFCanvas: Sendable {
   public let id: String
   public let type: String
   public let label: IIIFLanguageMap?
@@ -12,3 +12,7 @@ public struct IIIFCanvas: Sendable, Codable {
   public let rendering: [IIIFExternal]?
   public let seeAlso: [IIIFExternal]?
 }
+
+#if SERVER
+  extension IIIFCanvas: Codable {}
+#endif

@@ -1,4 +1,4 @@
-public struct IIIFManifest: Sendable, Codable {
+public struct IIIFManifest: Sendable {
   public let id: String
   public let type: String
   public let label: IIIFLanguageMap?
@@ -18,3 +18,7 @@ public struct IIIFManifest: Sendable, Codable {
   public let viewingDirection: String?
   public let behavior: [String]?
 }
+
+#if SERVER
+  extension IIIFManifest: Codable {}
+#endif

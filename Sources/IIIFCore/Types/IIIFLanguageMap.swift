@@ -1,20 +1,26 @@
-public struct IIIFLanguageMap: Sendable, Codable {
+public struct IIIFLanguageMap: Sendable {
   private var storage: [String: [String]]
 
-  public init(from decoder: Decoder) throws {
-    let container = try decoder.singleValueContainer()
-    storage = try container.decode([String: [String]].self)
+  public init(_ storage: [String: [String]] = [:]) {
+    self.storage = storage
   }
 
-  public func encode(to encoder: Encoder) throws {
-    var container = encoder.singleValueContainer()
-    try container.encode(storage)
-  }
+  #if SERVER
+    public init(from decoder: Decoder) throws {
+      let container = try decoder.singleValueContainer()
+      storage = try container.decode([String: [String]].self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+      var container = encoder.singleValueContainer()
+      try container.encode(storage)
+    }
+  #endif
 
   public var best: String {
     if let en = storage["en"]?.first { return en }
     if let none = storage["none"]?.first { return none }
-    return storage.values.first??.first ?? ""
+    return storage.values.first?.first ?? ""
   }
 
   public func best(for lang: String) -> String {
@@ -27,3 +33,7 @@ public struct IIIFLanguageMap: Sendable, Codable {
 
   public var allLanguages: [String] { Array(storage.keys) }
 }
+
+#if SERVER
+  extension IIIFLanguageMap: Codable {}
+#endif

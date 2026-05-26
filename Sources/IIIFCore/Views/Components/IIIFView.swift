@@ -1,6 +1,5 @@
 #if SERVER
   import CSSBuilder
-  import CSSOMBuilder
   import DesignTokens
   import DOMBuilder
   import HTMLBuilder
@@ -19,22 +18,26 @@
       div {
         header {
           span().id("iiif-title")
-            .fontFamily(typographyFontSans.value as String)
-            .fontSize(fontSizeMedium16.value as String)
-            .fontWeight(fontWeightBold.value as String)
-            .color(colorBase)
+            .style {
+              fontFamily(typographyFontSans)
+              fontSize(fontSizeMedium16)
+              fontWeight(fontWeightBold)
+              color(colorBase)
+            }
           span().id("iiif-canvas-label")
-            .fontFamily(typographyFontSans.value as String)
-            .fontSize(fontSizeXSmall12.value as String)
-            .color(colorSubtle)
-            .marginLeft(12)
+            .style {
+              fontFamily(typographyFontSans)
+              fontSize(fontSizeXSmall12)
+              color(colorSubtle)
+              marginLeft(spacing12)
+            }
         }
         .style {
           display(.flex)
           alignItems(.center)
-          padding(12, 16)
+          padding(spacing12, spacing16)
           borderBlockEnd(borderWidthBase, .solid, borderColorSubtle)
-          backgroundColor(backgroundColorSecondary)
+          backgroundColor(backgroundColorBase)
         }
 
         div {
@@ -42,11 +45,11 @@
             div()
               .id("iiif-viewport")
               .style {
-                width(100.percent)
-                height(100.percent)
+                width(perc(100))
+                height(perc(100))
                 overflow(.hidden)
                 position(.relative)
-                cursor("grab")
+                cursor(.grab)
                 backgroundColor(fillGrayQuaternaryAlpha)
               }
           }
@@ -68,15 +71,21 @@
         footer {
           div {
             button().id("iiif-prev").disabled(true)
-              .fontFamily(typographyFontSans.value as String)
-              .fontSize(fontSizeXSmall12.value as String)
+              .style {
+                fontFamily(typographyFontSans)
+                fontSize(fontSizeXSmall12)
+              }
             span().id("iiif-page-indicator")
-              .fontFamily(typographyFontMono.value as String)
-              .fontSize(fontSizeXSmall12.value as String)
-              .margin(0, 12)
+              .style {
+                fontFamily(typographyFontMono)
+                fontSize(fontSizeXSmall12)
+                margin(spacing0, spacing12)
+              }
             button().id("iiif-next").disabled(true)
-              .fontFamily(typographyFontSans.value as String)
-              .fontSize(fontSizeXSmall12.value as String)
+              .style {
+                fontFamily(typographyFontSans)
+                fontSize(fontSizeXSmall12)
+              }
           }
           .style {
             display(.flex)
@@ -88,16 +97,15 @@
               display(.flex)
               alignItems(.center)
               gap(4)
-              marginLeft(.auto)
             }
         }
         .style {
           display(.flex)
           alignItems(.center)
           justifyContent(.spaceBetween)
-          padding(8, 16)
+          padding(spacing8, spacing16)
           borderBlockStart(borderWidthBase, .solid, borderColorSubtle)
-          backgroundColor(backgroundColorSecondary)
+          backgroundColor(backgroundColorBase)
         }
       }
       .id("iiif-view")
@@ -106,8 +114,8 @@
       .style {
         display(.flex)
         flexDirection(.column)
-        width(100.percent)
-        height(100.percent)
+        width(perc(100))
+        height(perc(100))
         borderRadius(12)
         overflow(.hidden)
         border(borderWidthBase, .solid, borderColorSubtle)
@@ -126,7 +134,11 @@
 #endif
 
 #if CLIENT
+  import CSSBuilder
+  import CSSOMBuilder
   import DOMBuilder
+  import EmbeddedSwiftUtilities
+  import HTMLBuilder
   import WebAPIs
   import WebTypes
 
@@ -136,14 +148,8 @@
     public func hydrate() {
       guard let root = document.querySelector("#iiif-view") else { return }
       let manifestURL = root.dataset["manifest-url"] ?? ""
-      guard !manifestURL.isEmpty else { return }
-
-      Task {
-        await Engine.start(
-          root: root,
-          manifestURL: manifestURL
-        )
-      }
+      guard !stringIsEmpty(manifestURL) else { return }
+      Engine.start(root: root, manifestURL: manifestURL)
     }
   }
 
@@ -158,8 +164,9 @@
     private nonisolated(unsafe) static var prevBtn: Element?
     private nonisolated(unsafe) static var nextBtn: Element?
 
-    private nonisolated(unsafe) static var manifest: IIIFManifest?
-    private nonisolated(unsafe) static var canvases: [CanvasInfo] = []
+    private nonisolated(unsafe) static var serviceIDs: [String] = []
+    private nonisolated(unsafe) static var imageWidths: [Int] = []
+    private nonisolated(unsafe) static var imageHeights: [Int] = []
     private nonisolated(unsafe) static var canvasIndex: Int = 0
 
     private nonisolated(unsafe) static var zoom: Double = 1.0
@@ -175,15 +182,7 @@
     private nonisolated(unsafe) static var viewportW: Double = 0
     private nonisolated(unsafe) static var viewportH: Double = 0
 
-    struct CanvasInfo {
-      let id: String
-      let label: String
-      let serviceID: String
-      let width: Int
-      let height: Int
-    }
-
-    static func start(root: Element, manifestURL: String) async {
+    static func start(root: Element, manifestURL: String) {
       self.root = root
       viewport = root.querySelector("#iiif-viewport")
       titleEl = root.querySelector("#iiif-title")
@@ -193,67 +192,67 @@
       nextBtn = root.querySelector("#iiif-next")
 
       imageDiv = viewport
-      _ = imageDiv?.setInnerHTML("<div id=\"iiif-image\" style=\"position:absolute;transform-origin:0 0;will-change:transform\"></div>")
+      imageDiv?.innerHTML = renderHTML {
+      div().id("iiif-image")
+        .style {
+          position(.absolute)
+          transformOrigin(px(0))
+          willChange(.transform)
+        }
+      }
       imageDiv = viewport?.querySelector("#iiif-image")
 
       setupGestures()
-      await loadManifest(url: manifestURL)
+      loadManifest(url: manifestURL)
     }
 
-    private static func loadManifest(url: String) async {
+    private static func loadManifest(url: String) {
       root?.fetch(url) { jsonStr in
-        guard let jsonStr, let data = jsonStr.data(using: .utf8) else { return }
-        do {
-          let m = try JSONDecoder().decode(IIIFManifest.self, from: data)
-          manifest = m
-          canvases = parseCanvases(m)
-          canvasIndex = 0
-          updateUI()
-          Task { await loadCanvas(0) }
-        } catch {
-          print("[IIIF] Manifest parse error: \(error)")
-        }
+        guard let jsonStr else { return }
+        parseManifest(jsonStr)
+        canvasIndex = 0
+        updateUI()
+        loadCanvas(0)
       }
     }
 
-    private static func parseCanvases(_ m: IIIFManifest) -> [CanvasInfo] {
-      guard let items = m.items else { return [] }
-      return items.compactMap { canvas in
-        guard let ap = canvas.items.first,
-              let ann = ap.items?.first,
-              let body = ann.body,
-              let svc = body.service?.first,
-              svc.type.contains("ImageService"),
-              let w = svc.width,
-              let h = svc.height
-        else { return nil }
-        return CanvasInfo(
-          id: canvas.id,
-          label: canvas.label?.best ?? "",
-          serviceID: svc.id,
-          width: w,
-          height: h
-        )
+    private static func parseManifest(_ json: String) {
+      guard let label = extractJSONString(json, key: "label") else { return }
+      titleEl?.textContent = label
+
+      // Scan for canvases by splitting on "type":"Canvas"
+      let parts = stringSplit(json, separator: "\"type\":\"Canvas\"")
+      for part in parts {
+        guard let id = extractJSONString(part, key: "id") else { continue }
+        guard stringStartsWith(id, "http") || stringStartsWith(id, "/") else { continue }
+        guard let width = extractJSONInt(part, key: "width") else { continue }
+        guard let height = extractJSONInt(part, key: "height") else { continue }
+        serviceIDs.append(id)
+        imageWidths.append(width)
+        imageHeights.append(height)
       }
     }
-
-    private static func loadCanvas(_ idx: Int) async {
-      guard idx >= 0, idx < canvases.count else { return }
+    private static func loadCanvas(_ idx: Int) {
+      guard idx >= 0, idx < serviceIDs.count else { return }
       canvasIndex = idx
       updateUI()
-      let ci = canvases[idx]
-      fitToViewport(imageW: Double(ci.width), imageH: Double(ci.height))
-      _ = imageDiv?.setStyleProperty("backgroundImage", "url(\(iiifImageURL(serviceID: ci.serviceID, width: ci.width, height: ci.height)))")
-      _ = imageDiv?.setStyleProperty("backgroundSize", "\(ci.width)px \(ci.height)px")
-      _ = imageDiv?.setStyleProperty("backgroundRepeat", "no-repeat")
-      _ = imageDiv?.setStyleProperty("width", "\(ci.width)px")
-      _ = imageDiv?.setStyleProperty("height", "\(ci.height)px")
+      let serviceID = serviceIDs[idx]
+      let w = imageWidths[idx]
+      let h = imageHeights[idx]
+      fitToViewport(imageW: Double(w), imageH: Double(h))
+      let urlStr = iiifImageURL(serviceID: serviceID, width: w, height: h)
+      if let img = imageDiv {
+        img.style.backgroundImage(url(urlStr))
+        img.style.backgroundSize(px(w), px(h))
+        img.style.backgroundRepeat(.noRepeat)
+        img.style.width(px(w))
+        img.style.height(px(h))
+      }
       updateTransform()
     }
 
     private static func fitToViewport(imageW: Double, imageH: Double) {
-      guard let vp = viewport,
-            let rect = vp.getBoundingClientRect() else { return }
+      guard let vp = viewport, let rect = vp.getBoundingClientRect() else { return }
       viewportW = rect.width
       viewportH = rect.height
       let scaleW = viewportW / imageW
@@ -264,21 +263,18 @@
     }
 
     private static func updateTransform() {
-      let tx = "translate(\(Int(panX))px, \(Int(panY))px) scale(\(zoom))"
-      _ = imageDiv?.setStyleProperty("transform", tx)
+      imageDiv?.style.transform(translate(px(panX), px(panY)), scale(zoom))
     }
 
     private static func updateUI() {
-      let m = manifest
-      _ = titleEl?.setTextContent(m?.label?.best ?? "")
-      _ = canvasLabelEl?.setTextContent(canvasIndex < canvases.count ? canvases[canvasIndex].label : "")
-      _ = pageIndicator?.setTextContent("\(canvasIndex + 1) / \(canvases.count)")
-      _ = prevBtn?.setAttribute(.disabled, canvasIndex <= 0 ? 1 : 0)
-      _ = nextBtn?.setAttribute(.disabled, canvasIndex >= canvases.count - 1 ? 1 : 0)
+      canvasLabelEl?.textContent = canvasIndex < serviceIDs.count ? "" : ""
+      pageIndicator?.textContent = "\(canvasIndex + 1) / \(serviceIDs.count)"
+      prevBtn?.setAttribute(.disabled, canvasIndex <= 0 ? 1 : 0)
+      nextBtn?.setAttribute(.disabled, canvasIndex >= serviceIDs.count - 1 ? 1 : 0)
     }
 
     private static func iiifImageURL(serviceID: String, width: Int, height: Int) -> String {
-      let base = serviceID.hasSuffix("/") ? String(serviceID.dropLast()) : serviceID
+      let base = stringEndsWith(serviceID, "/") ? stringSubstring(serviceID, from: 0, to: serviceID.utf8.count - 1) : serviceID
       let vpW = Int(viewportW > 0 ? viewportW : 800)
       let reqW = min(width, Int(Double(vpW) * zoom * (window.devicePixelRatio > 0 ? window.devicePixelRatio : 1)))
       return "\(base)/full/\(reqW),/0/default.jpg"
@@ -287,28 +283,28 @@
     private static func setupGestures() {
       guard let vp = viewport else { return }
 
-      _ = vp.addEventListener(.mousedown) { e in
+      vp.addEventListener(.mousedown) { e in
         isDragging = true
         dragStartX = e.clientX
         dragStartY = e.clientY
         dragPanX = panX
         dragPanY = panY
-        _ = vp.setStyleProperty("cursor", "grabbing")
+        vp.style.cursor(.grabbing)
       }
 
-      _ = window.addEventListener(.mousemove) { e in
+      window.addEventListener(.mousemove) { e in
         guard isDragging else { return }
         panX = dragPanX + (e.clientX - dragStartX)
         panY = dragPanY + (e.clientY - dragStartY)
         updateTransform()
       }
 
-      _ = window.addEventListener(.mouseup) { _ in
+      window.addEventListener(.mouseup) { _ in
         isDragging = false
-        _ = vp.setStyleProperty("cursor", "grab")
+        vp.style.cursor(.grab)
       }
 
-      _ = vp.addEventListener(.wheel) { e in
+      vp.addEventListener(.wheel) { e in
         let dz = e.deltaY > 0 ? 0.9 : 1.1
         let cx = e.clientX - (viewport?.getBoundingClientRect()?.x ?? 0)
         let cy = e.clientY - (viewport?.getBoundingClientRect()?.y ?? 0)
@@ -317,33 +313,31 @@
         panY = cy - (cy - panY) * (newZoom / zoom)
         zoom = newZoom
         updateTransform()
-        Task { await refreshImage() }
+        refreshImage()
       }
 
-      _ = prevBtn?.addEventListener(.click) { _ in
-        Task { await navigate(-1) }
-      }
-      _ = nextBtn?.addEventListener(.click) { _ in
-        Task { await navigate(1) }
-      }
+      prevBtn?.addEventListener(.click) { _ in navigate(-1) }
+      nextBtn?.addEventListener(.click) { _ in navigate(1) }
 
-      _ = window.addEventListener(.keydown) { e in
-        if e.key == "ArrowLeft" { Task { await navigate(-1) } }
-        if e.key == "ArrowRight" { Task { await navigate(1) } }
+      window.addEventListener(.keydown) { e in
+        if stringEquals(e.key, "ArrowLeft") { navigate(-1) }
+        if stringEquals(e.key, "ArrowRight") { navigate(1) }
       }
     }
 
-    private static func navigate(_ delta: Int) async {
+    private static func navigate(_ delta: Int) {
       let next = canvasIndex + delta
-      guard next >= 0, next < canvases.count else { return }
-      await loadCanvas(next)
+      guard next >= 0, next < serviceIDs.count else { return }
+      loadCanvas(next)
     }
 
-    private static func refreshImage() async {
-      guard canvasIndex < canvases.count else { return }
-      let ci = canvases[canvasIndex]
-      let url = iiifImageURL(serviceID: ci.serviceID, width: ci.width, height: ci.height)
-      _ = imageDiv?.setStyleProperty("backgroundImage", "url(\(url))")
+    private static func refreshImage() {
+      guard canvasIndex < serviceIDs.count else { return }
+      let serviceID = serviceIDs[canvasIndex]
+      let w = imageWidths[canvasIndex]
+      let h = imageHeights[canvasIndex]
+      let urlStr = iiifImageURL(serviceID: serviceID, width: w, height: h)
+      imageDiv?.style.backgroundImage(url(urlStr))
     }
   }
 #endif

@@ -1,3 +1,7 @@
+#if CLIENT
+  import EmbeddedSwiftUtilities
+#endif
+
 public enum IIIFRegion: Sendable {
   case full
   case square
