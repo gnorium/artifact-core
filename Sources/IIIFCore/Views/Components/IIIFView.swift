@@ -14,7 +14,7 @@
       self.style = style
     }
 
-    public func build() -> Node {
+    public func build() -> DOM.Node {
       div {
         header {
           span().id("iiif-title")
@@ -154,15 +154,15 @@
   }
 
   private enum Engine {
-    private nonisolated(unsafe) static var root: Element?
-    private nonisolated(unsafe) static var viewport: Element?
-    private nonisolated(unsafe) static var imageDiv: Element?
+    private nonisolated(unsafe) static var root: DOM.Element?
+    private nonisolated(unsafe) static var viewport: DOM.Element?
+    private nonisolated(unsafe) static var imageDiv: DOM.Element?
 
-    private nonisolated(unsafe) static var titleEl: Element?
-    private nonisolated(unsafe) static var canvasLabelEl: Element?
-    private nonisolated(unsafe) static var pageIndicator: Element?
-    private nonisolated(unsafe) static var prevBtn: Element?
-    private nonisolated(unsafe) static var nextBtn: Element?
+    private nonisolated(unsafe) static var titleEl: DOM.Element?
+    private nonisolated(unsafe) static var canvasLabelEl: DOM.Element?
+    private nonisolated(unsafe) static var pageIndicator: DOM.Element?
+    private nonisolated(unsafe) static var prevBtn: DOM.Element?
+    private nonisolated(unsafe) static var nextBtn: DOM.Element?
 
     private nonisolated(unsafe) static var serviceIDs: [String] = []
     private nonisolated(unsafe) static var imageWidths: [Int] = []
@@ -182,7 +182,7 @@
     private nonisolated(unsafe) static var viewportW: Double = 0
     private nonisolated(unsafe) static var viewportH: Double = 0
 
-    static func start(root: Element, manifestURL: String) {
+    static func start(root: DOM.Element, manifestURL: String) {
       self.root = root
       viewport = root.querySelector("#iiif-viewport")
       titleEl = root.querySelector("#iiif-title")
