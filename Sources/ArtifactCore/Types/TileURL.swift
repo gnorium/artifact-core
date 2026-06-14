@@ -2,15 +2,15 @@
   import EmbeddedSwiftUtilities
 #endif
 
-public enum IIIFTileURL {
+public enum TileURL {
   public static func infoURL(from serviceID: String) -> String {
     serviceID.hasSuffix("/") ? "\(serviceID)info.json" : "\(serviceID)/info.json"
   }
 
   public static func url(
     serviceID: String,
-    region: IIIFRegion = .full,
-    size: IIIFTileSize,
+    region: Region = .full,
+    size: TileSize,
     rotation: String = "0",
     quality: String = "default",
     format: String = "jpg"

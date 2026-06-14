@@ -2,7 +2,7 @@
   import EmbeddedSwiftUtilities
 #endif
 
-public enum IIIFRegion: Sendable {
+public enum Region: Sendable {
   case full
   case square
   case xywh(Int, Int, Int, Int)

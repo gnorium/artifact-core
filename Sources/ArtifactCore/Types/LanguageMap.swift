@@ -1,4 +1,4 @@
-public struct IIIFLanguageMap: Sendable {
+public struct LanguageMap: Sendable {
   private var storage: [String: [String]]
 
   public init(_ storage: [String: [String]] = [:]) {
@@ -35,5 +35,5 @@ public struct IIIFLanguageMap: Sendable {
 }
 
 #if SERVER
-  extension IIIFLanguageMap: Codable {}
+  extension LanguageMap: Codable {}
 #endif

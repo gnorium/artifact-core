@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-  name: "iiif-core",
+  name: "artifact-core",
   platforms: [.macOS(.v15), .iOS(.v18)],
   products: [
     .library(
-      name: "IIIFCore",
-      targets: ["IIIFCore"]
+      name: "ArtifactCore",
+      targets: ["ArtifactCore"]
     )
   ],
   dependencies: [
@@ -20,7 +20,7 @@ let package = Package(
   ],
   targets: [
     .target(
-      name: "IIIFCore",
+      name: "ArtifactCore",
       dependencies: [
         .product(name: "CSSBuilder", package: "web-builders"),
         .product(name: "CSSOMBuilder", package: "web-builders"),
@@ -41,8 +41,8 @@ let package = Package(
       ]
     ),
     .testTarget(
-      name: "IIIFCoreTests",
-      dependencies: ["IIIFCore"]
+      name: "ArtifactCoreTests",
+      dependencies: ["ArtifactCore"]
     ),
   ]
 )

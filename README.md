@@ -1,10 +1,10 @@
-# IIIFCore, as used in [gnorium.com](https://gnorium.com)
+# ArtifactCore, as used in [gnorium.com](https://gnorium.com)
 
-A Swift package for IIIF Presentation API v3 manifest parsing and deep zoom image viewing.
+A Swift package for viewing and parsing artifacts — IIIF Presentation API v3 manifests, deep zoom images, and other artifact types (3D objects, audio/video, maps).
 
 ## Overview
 
-IIIFCore provides a complete IIIF Image API client and Presentation API v3 model types compiled for both server-side rendering and client-side WebAssembly. The IIIF viewer handles tile-based deep zoom with pan, zoom, and canvas navigation — all without JavaScript.
+ArtifactCore provides a general-purpose artifact viewer compiled for both server-side rendering and client-side WebAssembly. The viewer handles tile-based deep zoom with pan, zoom, and canvas navigation — all without JavaScript. Built on IIIF Presentation API v3, it is designed to extend beyond images as new artifact types are supported.
 
 ### Features
 - **Presentation API v3**: Full manifest, canvas, annotation, and range model types.
@@ -12,23 +12,23 @@ IIIFCore provides a complete IIIF Image API client and Presentation API v3 model
 - **Embedded WASM Viewer**: Zero-dependency deep zoom with CSS transforms, gesture handling (pan/zoom), keyboard navigation, and multi-canvas support.
 - **Server-side Rendering**: HTMLContent view for embedding in any page.
 
-### IIIF Model Types
-- `IIIFManifest` — Top-level manifest with label, metadata, thumbnail, provider
-- `IIIFCanvas` — Individual page/view with dimensions, annotations, image services
-- `IIIFImageService` — Tile info for deep zoom
-- `IIIFRegion` / `IIIFTileSize` — Image API region and size selectors
-- `IIIFTileURL` — URL builder for IIIF Image API tile requests
+### Model Types
+- `Manifest` — Top-level manifest with label, metadata, thumbnail, provider
+- `Canvas` — Individual page/view with dimensions, annotations, image services
+- `ImageService` — Tile info for deep zoom
+- `Region` / `TileSize` — Image API region and size selectors
+- `TileURL` — URL builder for IIIF Image API tile requests
 - Full support for W3C Web Annotations, Ranges (table of contents), and language maps
 
 ## Installation
 
 ### Swift Package Manager
 
-Add IIIFCore to your `Package.swift`:
+Add ArtifactCore to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/gnorium/iiif-core.git", branch: "main")
+    .package(url: "https://github.com/gnorium/artifact-core.git", branch: "main")
 ]
 ```
 
@@ -38,7 +38,7 @@ Then add it to your target dependencies:
 .target(
     name: "YourTarget",
     dependencies: [
-        .product(name: "IIIFCore", package: "iiif-core")
+        .product(name: "ArtifactCore", package: "artifact-core")
     ]
 )
 ```
@@ -50,13 +50,13 @@ Then add it to your target dependencies:
 ## Usage
 
 ```swift
-import IIIFCore
+import ArtifactCore
 
-// Fetch and render a IIIF manifest
-IIIFView(manifestURL: "https://iiif.folger.edu/manifest/First_Folio/manifest.json")
+// Fetch and render an artifact manifest
+ArtifactView(manifestURL: "https://iiif.folger.edu/manifest/First_Folio/manifest.json")
 ```
 
-For client-side WASM hydation, call `IIIFView.hydrate()` after the server renders the container.
+For client-side WASM hydration, call `ArtifactView.hydrate()` after the server renders the container.
 
 ## License
 

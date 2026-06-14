@@ -5,7 +5,7 @@
   import HTMLBuilder
   import WebTypes
 
-  public struct IIIFView: HTMLContent {
+  public struct ArtifactView: HTMLContent {
     let manifestURL: String
     let style: CSSStyle
 
@@ -17,14 +17,14 @@
     public func build() -> DOM.Node {
       div {
         header {
-          span().id("iiif-title")
+          span().id("artifact-title")
             .style {
               fontFamily(typographyFontSans)
               fontSize(fontSizeMedium16)
               fontWeight(fontWeightBold)
               color(colorBase)
             }
-          span().id("iiif-canvas-label")
+          span().id("artifact-canvas-label")
             .style {
               fontFamily(typographyFontSans)
               fontSize(fontSizeXSmall12)
@@ -43,7 +43,7 @@
         div {
           div {
             div()
-              .id("iiif-viewport")
+              .id("artifact-viewport")
               .style {
                 width(perc(100))
                 height(perc(100))
@@ -53,14 +53,14 @@
                 backgroundColor(fillGrayQuaternaryAlpha)
               }
           }
-          .id("iiif-viewer-container")
+          .id("artifact-viewer-container")
           .style {
             flex(1)
             position(.relative)
             overflow(.hidden)
           }
         }
-        .id("iiif-viewer-body")
+        .id("artifact-viewer-body")
         .style {
           display(.flex)
           flexDirection(.column)
@@ -70,18 +70,18 @@
 
         footer {
           div {
-            button().id("iiif-prev").disabled(true)
+            button().id("artifact-prev").disabled(true)
               .style {
                 fontFamily(typographyFontSans)
                 fontSize(fontSizeXSmall12)
               }
-            span().id("iiif-page-indicator")
+            span().id("artifact-page-indicator")
               .style {
                 fontFamily(typographyFontMono)
                 fontSize(fontSizeXSmall12)
                 margin(spacing0, spacing12)
               }
-            button().id("iiif-next").disabled(true)
+            button().id("artifact-next").disabled(true)
               .style {
                 fontFamily(typographyFontSans)
                 fontSize(fontSizeXSmall12)
@@ -92,7 +92,7 @@
             alignItems(.center)
             justifyContent(.center)
           }
-          div().id("iiif-zoom-controls")
+          div().id("artifact-zoom-controls")
             .style {
               display(.flex)
               alignItems(.center)
@@ -108,7 +108,7 @@
           backgroundColor(backgroundColorBase)
         }
       }
-      .id("iiif-view")
+      .id("artifact-view")
       .data("manifest-url", manifestURL)
       .data("style", style.rawValue)
       .style {
@@ -124,7 +124,7 @@
     }
   }
 
-  extension IIIFView {
+  extension ArtifactView {
     public enum CSSStyle: String, Sendable {
       case `default`
       case dark
@@ -142,11 +142,11 @@
   import WebAPIs
   import WebTypes
 
-  public final class IIIFHydration: @unchecked Sendable {
+  public final class ArtifactHydration: @unchecked Sendable {
     public init() {}
 
     public func hydrate() {
-      guard let root = document.querySelector("#iiif-view") else { return }
+      guard let root = document.querySelector("#artifact-view") else { return }
       let manifestURL = root.dataset["manifest-url"] ?? ""
       guard !stringIsEmpty(manifestURL) else { return }
       Engine.start(root: root, manifestURL: manifestURL)
@@ -184,23 +184,23 @@
 
     static func start(root: DOM.Element, manifestURL: String) {
       self.root = root
-      viewport = root.querySelector("#iiif-viewport")
-      titleEl = root.querySelector("#iiif-title")
-      canvasLabelEl = root.querySelector("#iiif-canvas-label")
-      pageIndicator = root.querySelector("#iiif-page-indicator")
-      prevBtn = root.querySelector("#iiif-prev")
-      nextBtn = root.querySelector("#iiif-next")
+      viewport = root.querySelector("#artifact-viewport")
+      titleEl = root.querySelector("#artifact-title")
+      canvasLabelEl = root.querySelector("#artifact-canvas-label")
+      pageIndicator = root.querySelector("#artifact-page-indicator")
+      prevBtn = root.querySelector("#artifact-prev")
+      nextBtn = root.querySelector("#artifact-next")
 
       imageDiv = viewport
       imageDiv?.innerHTML = renderHTML {
-      div().id("iiif-image")
+      div().id("artifact-image")
         .style {
           position(.absolute)
           transformOrigin(px(0))
           willChange(.transform)
         }
       }
-      imageDiv = viewport?.querySelector("#iiif-image")
+      imageDiv = viewport?.querySelector("#artifact-image")
 
       setupGestures()
       loadManifest(url: manifestURL)
@@ -240,7 +240,7 @@
       let w = imageWidths[idx]
       let h = imageHeights[idx]
       fitToViewport(imageW: Double(w), imageH: Double(h))
-      let urlStr = iiifImageURL(serviceID: serviceID, width: w, height: h)
+      let urlStr = artifactImageURL(serviceID: serviceID, width: w, height: h)
       if let img = imageDiv {
         img.style.backgroundImage(url(urlStr))
         img.style.backgroundSize(px(w), px(h))
@@ -273,7 +273,7 @@
       nextBtn?.setAttribute(.disabled, canvasIndex >= serviceIDs.count - 1 ? 1 : 0)
     }
 
-    private static func iiifImageURL(serviceID: String, width: Int, height: Int) -> String {
+    private static func artifactImageURL(serviceID: String, width: Int, height: Int) -> String {
       let base = stringEndsWith(serviceID, "/") ? stringSubstring(serviceID, from: 0, to: serviceID.utf8.count - 1) : serviceID
       let vpW = Int(viewportW > 0 ? viewportW : 800)
       let reqW = min(width, Int(Double(vpW) * zoom * (window.devicePixelRatio > 0 ? window.devicePixelRatio : 1)))
@@ -336,7 +336,7 @@
       let serviceID = serviceIDs[canvasIndex]
       let w = imageWidths[canvasIndex]
       let h = imageHeights[canvasIndex]
-      let urlStr = iiifImageURL(serviceID: serviceID, width: w, height: h)
+      let urlStr = artifactImageURL(serviceID: serviceID, width: w, height: h)
       imageDiv?.style.backgroundImage(url(urlStr))
     }
   }

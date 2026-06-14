@@ -1,17 +1,17 @@
-public struct IIIFImageService: Sendable {
+public struct ImageService: Sendable {
   public let id: String
   public let type: String
   public let profile: String?
   public let width: Int?
   public let height: Int?
-  public let tiles: [IIIFTileInfo]?
+  public let tiles: [TileInfo]?
   public let maxWidth: Int?
   public let maxHeight: Int?
-  public let sizes: [IIIFSize]?
+  public let sizes: [Size]?
   public let formats: [String]?
   public let qualities: [String]?
 }
 
 #if SERVER
-  extension IIIFImageService: Codable {}
+  extension ImageService: Codable {}
 #endif

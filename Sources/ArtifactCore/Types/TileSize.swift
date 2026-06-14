@@ -2,7 +2,7 @@
   import EmbeddedSwiftUtilities
 #endif
 
-public enum IIIFTileSize: Sendable {
+public enum TileSize: Sendable {
   case max
   case exact(Int, Int?)
   case pct(Double)
