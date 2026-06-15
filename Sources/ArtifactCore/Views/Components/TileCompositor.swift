@@ -91,7 +91,7 @@
       let infoUrl = "\(base)/info.json"
       let capturedHost = host
       window.fetch(infoUrl) { response in
-        let json = response.jsonString ?? ""
+        let json = response.jsonString
         let supportsWebP = stringContains(json, "\"webp\"") || stringContains(json, "webp")
         let fmt = supportsWebP ? "webp" : "jpg"
         formatCache.append(capturedHost)
