@@ -17,6 +17,7 @@ let package = Package(
     .package(url: "https://github.com/gnorium/web-builders", branch: "main"),
     .package(url: "https://github.com/gnorium/web-types", branch: "main"),
     .package(url: "https://github.com/gnorium/web-formats", branch: "main"),
+    .package(url: "https://github.com/gnorium/web-components", branch: "main"),
   ],
   targets: [
     .target(
@@ -32,6 +33,7 @@ let package = Package(
         .product(name: "JSONFormat", package: "web-formats"),
         .product(name: "SVGBuilder", package: "web-builders"),
         .product(name: "WebAPIs", package: "web-apis"),
+        .product(name: "WebComponents", package: "web-components"),
         .product(name: "WebTypes", package: "web-types"),
       ],
       swiftSettings: [
