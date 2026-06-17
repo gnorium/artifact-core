@@ -1,10 +1,8 @@
-#if CLIENT
-  import EmbeddedSwiftUtilities
-#endif
+import EmbeddedSwiftUtilities
 
 public enum TileURL {
   public static func infoURL(from serviceID: String) -> String {
-    serviceID.hasSuffix("/") ? "\(serviceID)info.json" : "\(serviceID)/info.json"
+    stringEndsWith(serviceID, "/") ? "\(serviceID)info.json" : "\(serviceID)/info.json"
   }
 
   public static func url(
@@ -15,7 +13,7 @@ public enum TileURL {
     quality: String = "default",
     format: String = "jpg"
   ) -> String {
-    let base = serviceID.hasSuffix("/") ? String(serviceID.dropLast()) : serviceID
+    let base = stringEndsWith(serviceID, "/") ? stringRemoveSuffix(serviceID, "/") : serviceID
     return "\(base)/\(region.stringValue)/\(size.stringValue)/\(rotation)/\(quality).\(format)"
   }
 

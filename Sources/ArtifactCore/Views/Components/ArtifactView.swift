@@ -261,7 +261,7 @@
           backgroundColor(backgroundColorBase)
         }
       }
-      .id("artifact-view")
+      .class("artifact-view")
       .data("manifest-url", manifestURL)
       .data("style", style.rawValue)
       .style {
@@ -296,10 +296,20 @@
   import WebTypes
 
   public final class ArtifactHydration: @unchecked Sendable {
+    public static nonisolated(unsafe) var instance: ArtifactHydration?
+
+    public static func hydrateIfPresent() {
+      guard document.querySelector(".artifact-view") != nil
+      else { return }
+      let h = ArtifactHydration()
+      h.hydrate()
+      instance = h
+    }
+
     public init() {}
 
     public func hydrate() {
-      guard let root = document.querySelector("#artifact-view") else { return }
+      guard let root = document.querySelector(".artifact-view") else { return }
       let manifestURL = root.dataset["manifest-url"] ?? ""
       guard !stringIsEmpty(manifestURL) else { return }
       Engine.start(root: root, manifestURL: manifestURL)
