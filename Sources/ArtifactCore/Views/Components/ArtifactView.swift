@@ -234,15 +234,15 @@
             .style { display(.flex); alignItems(.center); gap(spacing4) }
 
           button {
-            FullscreenIconView(width: px(14), height: px(14))
+            IconView(icon: { size in [FullscreenIconView(width: size, height: size)] }, size: .small)
           }
           .id("artifact-fullscreen-btn")
           .style {
             display(.flex)
             alignItems(.center)
             justifyContent(.center)
-            width(px(28))
-            height(px(28))
+            width(px(20))
+            height(px(20))
             borderRadius(borderRadiusBase)
             border(.none)
             backgroundColor(.transparent)
@@ -581,6 +581,12 @@
         } else {
           root?.requestFullscreen()
         }
+      }
+
+      _ = document.addEventListener(.fullscreenchange) { _ in
+        guard Self.canvasIndex < Self.imageWidths.count else { return }
+        Self.fitToViewport(imageW: Double(Self.imageWidths[Self.canvasIndex]), imageH: Double(Self.imageHeights[Self.canvasIndex]))
+        TileCompositor.update(panX: Self.panX, panY: Self.panY, zoom: Self.zoom, viewportW: Self.viewportW, viewportH: Self.viewportH)
       }
 
       pageInput?.addEventListener(.keydown) { e in
