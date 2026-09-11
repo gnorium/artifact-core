@@ -22,6 +22,7 @@
     private nonisolated(unsafe) static var currentTier: Int = -1
 
     private nonisolated(unsafe) static var container: DOM.Element?
+    private nonisolated(unsafe) static var surface: DOM.Element?
     private nonisolated(unsafe) static var spinnerEl: DOM.Element?
 
     private nonisolated(unsafe) static var serviceID: String = ""
@@ -42,11 +43,14 @@
 
     static func attach(to viewport: DOM.Element, spinner: DOM.Element) {
       spinnerEl = spinner
-      let c = document.createElement("div")
-      c.style.position(.absolute)
-      c.style.transformOrigin(px(0), px(0))
-      c.style.willChange(.transform)
-      viewport.insertBefore(c, spinner)
+      let svgNamespace = "http://www.w3.org/2000/svg"
+      let svg = document.createElementNS(svgNamespace, "svg")
+      svg.setAttribute(.class, "artifact-tile-surface")
+      let c = document.createElementNS(svgNamespace, "g")
+      c.setAttribute(.class, "artifact-tile-compositor")
+      svg.appendChild(c)
+      viewport.insertBefore(svg, spinner)
+      surface = svg
       container = c
     }
 
@@ -58,8 +62,9 @@
       cancelDebounce()
       clearAllTiles()
       backdropImg = nil
-      container?.style.width(px(width))
-      container?.style.height(px(height))
+      surface?.setAttribute("width", intToString(width))
+      surface?.setAttribute("height", intToString(height))
+      surface?.setAttribute("viewBox", "0 0 \(intToString(width)) \(intToString(height))")
       probeFormat(base: baseURL(serviceID)) { fmt in
         imageFormat = fmt
         loadBackdrop()
@@ -102,7 +107,7 @@
 
     static func update(panX: Double, panY: Double, zoom: Double, viewportW: Double, viewportH: Double) {
       // Transform is applied immediately — smooth pan/zoom feel
-      container?.style.transform(translate(px(panX), px(panY)), scale(zoom))
+      container?.setAttribute("transform", "translate(\(doubleToString(panX)) \(doubleToString(panY))) scale(\(doubleToString(zoom)))")
       guard imageW > 0, imageH > 0 else { return }
 
       // Debounce: cancel previous timer and reschedule 150ms out
@@ -112,7 +117,7 @@
     }
 
     static func showSpinner() {
-      spinnerEl?.style.display(.flex)
+      spinnerEl?.setAttribute(data("visible"), "true")
     }
 
     // MARK: - Private
@@ -141,17 +146,16 @@
       guard imageW > 0 else { return }
       let base = baseURL(serviceID)
       let url = "\(base)/full/256,/0/default.\(imageFormat)"
-      let img = document.createElement("img")
+      let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
+      img.setAttribute(.class, "artifact-tile-image")
       img.setAttribute(.draggable, "false")
-      img.style.position(.absolute)
-      img.style.left(px(0))
-      img.style.top(px(0))
-      img.style.width(px(imageW))
-      img.style.height(px(imageH))
-      img.style.display(.block)
-      img.style.opacity(0)
-      img.setAttribute(.src, url)
-      _ = img.addEventListener(.load) { _ in img.style.opacity(1) }
+      img.setAttribute("x", "0")
+      img.setAttribute("y", "0")
+      img.setAttribute("width", intToString(imageW))
+      img.setAttribute("height", intToString(imageH))
+      img.setAttribute(data("loaded"), "false")
+      img.setAttribute("href", url)
+      _ = img.addEventListener(.load) { _ in img.setAttribute(data("loaded"), "true") }
       // Insert at bottom so tiles layer on top
       if let first = container?.firstChild {
         container?.insertBefore(img, first)
@@ -161,7 +165,7 @@
       backdropImg = img
       // Hide spinner once backdrop is ready (first visible content)
       pollUntilLoaded(img) {
-        spinnerEl?.style.display(.none)
+        spinnerEl?.setAttribute(data("visible"), "false")
       }
     }
 
@@ -247,19 +251,18 @@
     }
 
     private static func addTile(x: Int, y: Int, w: Int, h: Int, url: String) -> DOM.Element {
-      let img = document.createElement("img")
+      let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
+      img.setAttribute(.class, "artifact-tile-image")
       img.setAttribute(.draggable, "false")
-      img.style.position(.absolute)
-      img.style.left(px(x))
-      img.style.top(px(y))
       // 1px overdraw on each edge eliminates sub-pixel rendering seams between adjacent tiles
-      img.style.width(px(w + 1))
-      img.style.height(px(h + 1))
-      img.style.display(.block)
-      // Hidden until loaded — backdrop shows through
-      img.style.opacity(0)
-      img.setAttribute(.src, url)
-      _ = img.addEventListener(.load) { _ in img.style.opacity(1) }
+      img.setAttribute("x", intToString(x))
+      img.setAttribute("y", intToString(y))
+      img.setAttribute("width", intToString(w + 1))
+      img.setAttribute("height", intToString(h + 1))
+      // Hidden until loaded — backdrop shows through.
+      img.setAttribute(data("loaded"), "false")
+      img.setAttribute("href", url)
+      _ = img.addEventListener(.load) { _ in img.setAttribute(data("loaded"), "true") }
       container?.appendChild(img)
       return img
     }

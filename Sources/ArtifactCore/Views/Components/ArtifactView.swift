@@ -47,85 +47,33 @@
             span {
               span { t }
                 .id("artifact-title")
-                .style {
-                  fontWeight(fontWeightSemiBold)
-                  color(colorBase)
-                }
+                .class("artifact-title-primary")
               if !headerSubtitle.isEmpty {
                 span { " \(headerSubtitle)" }
-                  .style { color(colorSubtle) }
+                  .class("artifact-title-subtitle")
               }
             }
-            .style {
-              fontFamily(typographyFontSans)
-              fontSize(fontSizeXSmall12)
-              lineHeight(1.4)
-              flex(1)
-              minWidth(0)
-              overflow(.hidden)
-              textOverflow(.ellipsis)
-              whiteSpace(.nowrap)
-            }
+            .class("artifact-title-block")
           } else {
-            span().id("artifact-title").style { flex(1); minWidth(0) }
+            span().id("artifact-title").class("artifact-title-empty")
           }
 
-          // Page nav — top right
-          div {
-            input()
-              .type(.number)
-              .id("artifact-page-input")
-              .min(1)
-              .max(1)
-              .value("")
-              .style {
-                fontFamily(typographyFontMono)
-                fontSize(fontSizeXSmall12)
-                color(colorBase)
-                fontWeight(fontWeightNormal)
-                padding(spacing0, spacing4)
-                border(borderWidthBase, .solid, borderColorSubtle)
-                borderRadius(borderRadiusBase)
-                backgroundColor(backgroundColorBase)
-                height(px(20))
-                textAlign(.center)
-                width(calc(ch(1) + px(10)))
-                transition(.width, transitionDurationBase, .ease)
-                outline(.none)
-                pseudoClass(.focus) {
-                  borderColor(colorBlue).important()
-                  boxShadow(0, 0, 0, px(2), colorBlueFocus)
-                }
-                boxSizing(.borderBox)
-                webkitAppearance(.none)
-                mozAppearance(.textfield)
-                margin(0)
-                pseudoElement(.webkitOuterSpinButton) {
-                  webkitAppearance(.none)
-                  margin(0)
-                }
-                pseudoElement(.webkitInnerSpinButton) {
-                  webkitAppearance(.none)
-                  margin(0)
-                }
-              }
-            span { "of" }
-              .style { fontSize(fontSizeXSmall12); color(colorBase) }
-            span { "—" }
-              .id("artifact-page-total")
-              .style { fontFamily(typographyFontMono); fontSize(fontSizeXSmall12); color(colorBase) }
-          }
-          .style { display(.flex); alignItems(.center); gap(spacing6); flexShrink(0) }
+          // Page nav — top right (edge prev/next stay on the viewer)
+          PaginationView(
+            currentPage: 1,
+            totalPages: 1,
+            size: .mini,
+            showControls: false,
+            kind: "artifact",
+            inputID: "artifact-page-input",
+            totalID: "artifact-page-total",
+            totalDisplay: "—",
+            ariaLabel: "Pages",
+            inputAriaLabel: "Page number",
+            class: "artifact-page-nav"
+          )
         }
-        .style {
-          display(.flex)
-          alignItems(.center)
-          gap(spacing12)
-          padding(spacing8, spacing16)
-          borderBlockEnd(borderWidthBase, .solid, borderColorSubtle)
-          backgroundColor(backgroundColorBase)
-          minHeight(px(36))
-        }
+        .class("artifact-header")
 
         // ── Viewer body with prev/next overlaid on edges ─────────────────────
         div {
@@ -135,53 +83,19 @@
           }
           .id("artifact-prev")
           .disabled(true)
-          .style {
-            position(.absolute)
-            insetInlineStart(spacing8)
-            top(perc(50))
-            transform(translate(px(0), perc(-50)))
-            zIndex(10)
-            width(px(36))
-            height(px(36))
-            borderRadius(borderRadiusCircle)
-            border(borderWidthBase, .solid, borderColorBase)
-            backgroundColor(backgroundColorBase)
-            boxShadow(px(0), px(2), px(8), boxShadowColorAlphaBase)
-            cursor(.pointer)
-            display(.flex)
-            alignItems(.center)
-            justifyContent(.center)
-            color(colorBase)
-            opacity(0.85)
-          }
+          .class("artifact-nav-button artifact-nav-prev")
 
           // Viewport — explicit flex(1) + height(0) forces flex to size it correctly
           div {
             // Spinner overlay — shown while image loads, hidden when done
             div {
-              ProgressIndicatorView(ariaHidden: true)
+              RotatingSectorView(ariaHidden: true)
             }
             .id("artifact-spinner")
-            .style {
-              display(.none)
-              position(.absolute)
-              inset(0)
-              zIndex(5)
-              alignItems(.center)
-              justifyContent(.center)
-              backgroundColor(backgroundColorBase)
-            }
+            .class("artifact-spinner")
           }
           .id("artifact-viewport")
-          .style {
-            width(perc(100))
-            flex(1)
-            minHeight(0)
-            overflow(.hidden)
-            position(.relative)
-            cursor(.grab)
-            userSelect(.none)
-          }
+          .class("artifact-viewport")
 
           // Next button — right edge overlay
           button {
@@ -189,90 +103,167 @@
           }
           .id("artifact-next")
           .disabled(true)
-          .style {
-            position(.absolute)
-            insetInlineEnd(spacing8)
-            top(perc(50))
-            transform(translate(px(0), perc(-50)))
-            zIndex(10)
-            width(px(36))
-            height(px(36))
-            borderRadius(borderRadiusCircle)
-            border(borderWidthBase, .solid, borderColorBase)
-            backgroundColor(backgroundColorBase)
-            boxShadow(px(0), px(2), px(8), boxShadowColorAlphaBase)
-            cursor(.pointer)
-            display(.flex)
-            alignItems(.center)
-            justifyContent(.center)
-            color(colorBase)
-            opacity(0.85)
-          }
+          .class("artifact-nav-button artifact-nav-next")
         }
         .id("artifact-viewer-container")
-        .style {
-          flex(1)
-          display(.flex)
-          position(.relative)
-          overflow(.hidden)
-        }
+        .class("artifact-viewer-container")
 
         // ── Footer ───────────────────────────────────────────────────────────
         footer {
           span {}
             .id("artifact-canvas-label")
-            .style {
-              fontSize(fontSizeXSmall12)
-              color(colorSubtle)
-              flex(1)
-              overflow(.hidden)
-              textOverflow(.ellipsis)
-              whiteSpace(.nowrap)
-            }
+            .class("artifact-canvas-label")
 
           div().id("artifact-zoom-controls")
-            .style { display(.flex); alignItems(.center); gap(spacing4) }
+            .class("artifact-zoom-controls")
 
           button {
             IconView(icon: { size in [FullscreenIconView(width: size, height: size)] }, size: .small)
           }
           .id("artifact-fullscreen-btn")
-          .style {
-            display(.flex)
-            alignItems(.center)
-            justifyContent(.center)
-            width(px(20))
-            height(px(20))
-            borderRadius(borderRadiusBase)
-            border(.none)
-            backgroundColor(.transparent)
-            color(colorSubtle)
-            cursor(.pointer)
-            flexShrink(0)
-            pseudoClass(.hover) { color(colorBase) }
-          }
+          .class("artifact-fullscreen-button")
         }
-        .style {
-          display(.flex)
-          alignItems(.center)
-          gap(spacing8)
-          padding(spacing8, spacing16)
-          borderBlockStart(borderWidthBase, .solid, borderColorSubtle)
-          backgroundColor(backgroundColorBase)
-        }
+        .class("artifact-footer")
       }
       .class("artifact-view")
       .data("manifest-url", manifestURL)
       .data("style", style.rawValue)
       .style {
-        display(.flex)
-        flexDirection(.column)
-        width(perc(100))
-        height(perc(100))
-        borderRadius(borderRadiusBase)
-        overflow(.hidden)
-        border(borderWidthBase, .solid, borderColorSubtle)
-        backgroundColor(backgroundColorBase)
+        selector("&") {
+          display(.flex)
+          flexDirection(.column)
+          width(perc(100))
+          height(perc(100))
+          borderRadius(borderRadiusBase)
+          overflow(.hidden)
+          border(borderWidthBase, .solid, borderColorBase)
+          backgroundColor(backgroundColorBase)
+        }
+
+        selector(".artifact-header", ".artifact-footer") {
+          display(.flex)
+          alignItems(.center)
+          backgroundColor(backgroundColorBase)
+        }
+        selector(".artifact-header") {
+          gap(spacing12)
+          padding(spacing8, spacing16)
+          borderBlockEnd(borderWidthBase, .solid, borderColorBase)
+          minHeight(px(36))
+        }
+        selector(".artifact-title-block") {
+          fontFamily(typographyFontSans)
+          fontSize(fontSizeXSmall12)
+          lineHeight(1.4)
+          flex(1)
+          minWidth(0)
+          overflow(.hidden)
+          textOverflow(.ellipsis)
+          whiteSpace(.nowrap)
+        }
+        descendant(".artifact-title-primary") {
+          fontWeight(fontWeightSemiBold)
+          color(colorBase)
+        }
+        descendant(".artifact-title-subtitle") { color(colorSubtle) }
+        descendant(".artifact-title-empty") {
+          flex(1)
+          minWidth(0)
+        }
+        descendant(".artifact-page-nav") {
+          flexShrink(0)
+        }
+        descendant(".artifact-viewer-container") {
+          flex(1)
+          display(.flex)
+          position(.relative)
+          overflow(.hidden)
+        }
+        descendant(".artifact-nav-button") {
+          position(.absolute)
+          top(perc(50))
+          transform(translate(px(0), perc(-50)))
+          zIndex(10)
+          width(px(36))
+          height(px(36))
+          borderRadius(borderRadiusCircle)
+          border(borderWidthBase, .solid, borderColorBase)
+          backgroundColor(backgroundColorBase)
+          boxShadow(px(0), px(2), px(8), boxShadowColorAlphaBase)
+          cursor(.pointer)
+          display(.flex)
+          alignItems(.center)
+          justifyContent(.center)
+          color(colorBase)
+          opacity(0.85)
+        }
+        descendant(".artifact-nav-prev") { insetInlineStart(spacing8) }
+        descendant(".artifact-nav-next") { insetInlineEnd(spacing8) }
+        descendant(".artifact-viewport") {
+          width(perc(100))
+          flex(1)
+          minHeight(0)
+          overflow(.hidden)
+          position(.relative)
+          cursor(.grab)
+          userSelect(.none)
+        }
+        descendant(".artifact-spinner") {
+          display(.none)
+          position(.absolute)
+          inset(0)
+          zIndex(5)
+          alignItems(.center)
+          justifyContent(.center)
+          backgroundColor(backgroundColorBase)
+        }
+        descendant(".artifact-footer") {
+          gap(spacing8)
+          padding(spacing8, spacing16)
+          borderBlockStart(borderWidthBase, .solid, borderColorBase)
+        }
+        descendant(".artifact-canvas-label") {
+          fontSize(fontSizeXSmall12)
+          color(colorSubtle)
+          flex(1)
+          overflow(.hidden)
+          textOverflow(.ellipsis)
+          whiteSpace(.nowrap)
+        }
+        descendant(".artifact-zoom-controls") {
+          display(.flex)
+          alignItems(.center)
+          gap(spacing4)
+        }
+        selector(".artifact-fullscreen-button") {
+          display(.flex)
+          alignItems(.center)
+          justifyContent(.center)
+          width(px(20))
+          height(px(20))
+          borderRadius(borderRadiusBase)
+          border(.none)
+          backgroundColor(.transparent)
+          color(colorSubtle)
+          cursor(.pointer)
+          flexShrink(0)
+          pseudoClass(.hover) { color(colorBase) }
+        }
+
+        selector(".artifact-tile-surface") {
+          position(.absolute)
+          inset(0)
+          overflow(.visible)
+        }
+        selector(".artifact-tile-compositor") {
+          transformOrigin(px(0), px(0))
+          willChange(.transform)
+        }
+        selector(".artifact-tile-image[data-loaded='false']") { opacity(0) }
+        selector(".artifact-tile-image[data-loaded='true']") { opacity(1) }
+        selector("#artifact-spinner[data-visible='true']") { display(.flex) }
+        selector("#artifact-spinner[data-visible='false']") { display(.none) }
+        selector("#artifact-viewport[data-dragging='true']") { cursor(.grabbing) }
       }
     }
   }
@@ -492,13 +483,15 @@
     private static func updateUI() {
       let page = canvasIndex + 1
       let total = serviceIDs.count
-      pageInput?.setAttribute(.value, "\(page)")
+      if let input = pageInput as? HTML.HTMLInputElement {
+        input.value = "\(page)"
+      }
       pageInput?.setAttribute(.max, "\(total)")
       pageTotal?.textContent = "\(total)"
       var digits = 1
       var n = total
       while n >= 10 { n /= 10; digits += 1 }
-      pageInput?.style.width(calc(ch(digits) + px(10)))
+      pageInput?.setAttribute("size", intToString(digits))
       let label = canvasIndex < canvasLabels.count ? canvasLabels[canvasIndex] : ""
       canvasLabelEl?.textContent = label
       prevBtn?.setDisabled(canvasIndex <= 0)
@@ -507,15 +500,32 @@
 
     private static func commitPageInput() {
       guard let input = pageInput else { return }
+      let total = serviceIDs.count
+      guard total > 0 else {
+        (input as? HTML.HTMLInputElement)?.value = "1"
+        return
+      }
       let valStr = input.inputValue
       var page = 0
+      var hasDigit = false
       for ch in valStr.utf8 {
         guard ch >= 48 && ch <= 57 else { continue }
+        hasDigit = true
         page = page * 10 + Int(ch - 48)
       }
-      guard page > 0 else { return }
-      let idx = max(0, min(serviceIDs.count - 1, page - 1))
-      guard idx != canvasIndex else { return }
+      // Invalid (empty, 0, non-numeric): snap input back to the current page (1-based)
+      if !hasDigit || page < 1 {
+        (input as? HTML.HTMLInputElement)?.value = "\(canvasIndex + 1)"
+        return
+      }
+      // Clamp to [1, total]
+      if page > total { page = total }
+      let idx = page - 1
+      if idx == canvasIndex {
+        // Already on this page — still normalize display (e.g. leading zeros, overshoot clamp)
+        (input as? HTML.HTMLInputElement)?.value = "\(page)"
+        return
+      }
       loadCanvas(idx)
     }
 
@@ -537,7 +547,7 @@
         dragStartY = e.clientY
         dragPanX = panX
         dragPanY = panY
-        vp.style.cursor(.grabbing)
+        vp.setAttribute(data("dragging"), "true")
       }
 
       window.addEventListener(.mousemove) { e in
@@ -550,7 +560,7 @@
 
       window.addEventListener(.mouseup) { _ in
         isDragging = false
-        vp.style.cursor(.grab)
+        vp.setAttribute(data("dragging"), "false")
         if zoom <= minZoom + 0.001 {
           snapToHorizontalCenter()
           updateTransform()
@@ -597,14 +607,18 @@
           || stringEquals(key, "ArrowLeft") || stringEquals(key, "ArrowRight")
           || stringEquals(key, "ArrowUp") || stringEquals(key, "ArrowDown")
         if !allowed { e.preventDefault(); return }
-        if stringEquals(key, "Enter") { commitPageInput() }
+        if stringEquals(key, "ArrowLeft") || stringEquals(key, "ArrowRight") {
+          e.stopPropagation()
+        }
+        if stringEquals(key, "Enter") {
+          commitPageInput()
+          pageInput?.blur()
+        }
       }
       pageInput?.addEventListener(.change) { _ in commitPageInput() }
       pageInput?.addEventListener(.blur) { _ in
-        guard let input = pageInput else { return }
-        if stringIsEmpty(input.inputValue) {
-          input.setAttribute(.value, "\(canvasIndex + 1)")
-        }
+        // Always re-validate on blur (0, empty, or out-of-range → current page, min 1)
+        commitPageInput()
       }
 
       window.addEventListener(.keydown) { e in

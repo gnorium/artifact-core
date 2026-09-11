@@ -20,6 +20,14 @@ let package = Package(
     .package(url: "https://github.com/gnorium/web-components", branch: "main"),
   ],
   targets: [
+    .executableTarget(
+      name: "StyleSheetEmitter",
+      dependencies: [
+        "ArtifactCore",
+        .product(name: "CSSBuilder", package: "web-builders"),
+      ],
+      path: "Sources/Executables/StyleSheetEmitter"
+    ),
     .target(
       name: "ArtifactCore",
       dependencies: [
