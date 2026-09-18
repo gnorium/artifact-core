@@ -309,8 +309,13 @@
         selector("&:has(.artifact-source-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='text']") {
           display(.none)
         }
+        // Flex, not block: a layer holding one element also holds the
+        // whitespace around it in the markup, and a block container turns that
+        // into a line box above and below — a gap that looks like padding
+        // nobody asked for. A flex container drops whitespace-only children.
         selector("&:has(.artifact-source-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='source']") {
-          display(.block)
+          display(.flex)
+          flexDirection(.column)
         }
         // Only the reading of the canvas on screen. The rest stay in the
         // document so that paging is a class change, not a fetch.
