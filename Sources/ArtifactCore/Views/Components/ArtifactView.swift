@@ -784,10 +784,15 @@
       }
       // No pane names this canvas: fall back to the transcriber's order, which
       // is right whenever the two sequences run together.
-      guard !matched else { return }
-      for (position, pane) in readingPanes.enumerated() {
-        pane.setAttribute(data("active"), position == index ? "true" : "false")
+      if !matched {
+        for (position, pane) in readingPanes.enumerated() {
+          pane.setAttribute(data("active"), position == index ? "true" : "false")
+        }
       }
+      // Whoever drew the reading may have work to do when it changes — syntax
+      // colouring a page of markup, say, which is worth doing for the page on
+      // screen and wasteful for the nine hundred behind it.
+      root?.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
     }
 
     private static func navigate(_ delta: Int) {

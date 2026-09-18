@@ -164,7 +164,7 @@
       }
       backdropImg = img
       // Hide spinner once backdrop is ready (first visible content)
-      pollUntilLoaded(img) {
+      whenSettled(img) {
         spinnerEl?.setAttribute(data("visible"), "false")
       }
     }
@@ -179,7 +179,7 @@
       let img = addTile(x: 0, y: 0, w: imageW, h: imageH, url: url)
       tiles[key] = img
       // Once this tile loads, remove stale tiles from other tiers
-      pollUntilLoaded(img) { clearTilesExcept(tier: tier) }
+      whenSettled(img) { clearTilesExcept(tier: tier) }
     }
 
     private static func updateTiles(
@@ -221,15 +221,26 @@
       // When first tile of this tier is ready, remove all other-tier tiles
       if let firstNew = newTileImg, tier != currentTier {
         currentTier = tier
-        pollUntilLoaded(firstNew) { clearTilesExcept(tier: tier) }
+        whenSettled(firstNew) { clearTilesExcept(tier: tier) }
       }
     }
 
-    // Poll until img is decoded/loaded, then call onReady
-    private static func pollUntilLoaded(_ img: DOM.Element, onReady: @escaping @Sendable () -> Void) {
-      _ = window.requestAnimationFrame {
-        if img.isImageLoaded { onReady() } else { pollUntilLoaded(img, onReady: onReady) }
+    /// Call `onReady` when this tile has arrived, or given up arriving.
+    ///
+    /// These tiles are SVG `<image>` elements, which have no `complete` to
+    /// poll: that property belongs to `HTMLImageElement`. Polling one asked the
+    /// bridge a question it could only answer "no" to, so the spinner ran every
+    /// frame for the life of the page and never hid — over an image that had
+    /// been on screen since the first second. The element says when it is
+    /// ready, so listen to it; a tile that errors also counts as settled, or a
+    /// dead URL is an object that never finishes loading.
+    private static func whenSettled(_ img: DOM.Element, onReady: @escaping @Sendable () -> Void) {
+      if img.isImageLoaded {
+        onReady()
+        return
       }
+      _ = img.addEventListener(.load) { _ in onReady() }
+      _ = img.addEventListener(.error) { _ in onReady() }
     }
 
     // Remove all tiles not belonging to `tier` (backdrop is untouched — not in tiles dict)
