@@ -11,12 +11,44 @@
     let title: String?
     let authors: [String]
     let style: CSSStyle
+    /// Which canvas the viewer opens on, when the page knows better than the
+    /// reader's last visit — a deep link to one page of the object.
+    ///
+    /// ``startService`` names it by image service, which is what a deep link
+    /// should carry: a page number only means the same page if the manifest is
+    /// ordered the way the page that linked to it was. ``startCanvas`` is the
+    /// positional fallback.
+    let startCanvas: Int?
+    let startService: String?
+    /// A reading of the object, shown beside it: a transcription, a
+    /// translation, an apparatus. Any descendant carrying `data-service-id` is
+    /// shown only while the canvas with that image service is the one on
+    /// screen, so the reading pages with the object.
+    let reading: [DOM.Node]
+    /// Whether the footer carries a switch from the reading to the source it
+    /// was made from — markup, in the usual case. The reading marks its two
+    /// layers with `data-reading-layer`, `"text"` and `"source"`, and the
+    /// switch swaps them in place.
+    let sourceSwitch: Bool
 
-    public init(manifestURL: String, title: String? = nil, authors: [String] = [], style: CSSStyle = .default) {
+    public init(
+      manifestURL: String,
+      title: String? = nil,
+      authors: [String] = [],
+      style: CSSStyle = .default,
+      startCanvas: Int? = nil,
+      startService: String? = nil,
+      sourceSwitch: Bool = false,
+      @HTMLBuilder reading: () -> [DOM.Node] = { [] }
+    ) {
       self.manifestURL = manifestURL
       self.title = title
       self.authors = authors
       self.style = style
+      self.startCanvas = startCanvas
+      self.startService = startService
+      self.sourceSwitch = sourceSwitch
+      self.reading = reading()
     }
 
     private var authorsLine: String {
@@ -77,33 +109,49 @@
 
         // ── Viewer body with prev/next overlaid on edges ─────────────────────
         div {
-          // Prev button — left edge overlay
-          button {
-            PreviousIconView(width: px(16), height: px(16))
-          }
-          .id("artifact-prev")
-          .disabled(true)
-          .class("artifact-nav-button artifact-nav-prev")
-
-          // Viewport — explicit flex(1) + height(0) forces flex to size it correctly
+          // The object, with its own page turns on its own edges: the arrows
+          // belong to the thing being paged, not to the reading of it.
           div {
-            // Spinner overlay — shown while image loads, hidden when done
-            div {
-              RotatingSectorView(ariaHidden: true)
+            // Prev button — left edge overlay
+            button {
+              PreviousIconView(width: px(16), height: px(16))
             }
-            .id("artifact-spinner")
-            .class("artifact-spinner")
-          }
-          .id("artifact-viewport")
-          .class("artifact-viewport")
+            .id("artifact-prev")
+            .disabled(true)
+            .class("artifact-nav-button artifact-nav-prev")
 
-          // Next button — right edge overlay
-          button {
-            NextIconView(width: px(16), height: px(16))
+            // Viewport — explicit flex(1) + height(0) forces flex to size it correctly
+            div {
+              // Spinner overlay — shown while image loads, hidden when done
+              div {
+                RotatingSectorView(ariaHidden: true)
+              }
+              .id("artifact-spinner")
+              .class("artifact-spinner")
+            }
+            .id("artifact-viewport")
+            .class("artifact-viewport")
+
+            // Next button — right edge overlay
+            button {
+              NextIconView(width: px(16), height: px(16))
+            }
+            .id("artifact-next")
+            .disabled(true)
+            .class("artifact-nav-button artifact-nav-next")
           }
-          .id("artifact-next")
-          .disabled(true)
-          .class("artifact-nav-button artifact-nav-next")
+          .class("artifact-object")
+
+          // The reading of the object, beside the object. It is a sibling of
+          // the viewport rather than a block under the viewer so that the two
+          // page together and fullscreen carries both.
+          if !reading.isEmpty {
+            div {
+              reading
+            }
+            .id("artifact-reading")
+            .class("artifact-reading")
+          }
         }
         .id("artifact-viewer-container")
         .class("artifact-viewer-container")
@@ -113,6 +161,22 @@
           span {}
             .id("artifact-canvas-label")
             .class("artifact-canvas-label")
+
+          if sourceSwitch, !reading.isEmpty {
+            ToggleButtonView(
+              label: "Raw",
+              icon: nil as HTML.HTMLSpanElement?,
+              modelValue: false,
+              weight: .static,
+              buttonColor: .gray,
+              fullWidth: false,
+              ariaLabel: "Source of this reading",
+              indicateSelection: true,
+              size: .mini,
+              class: "artifact-source-toggle",
+              labelFontWeight: fontWeightNormal
+            )
+          }
 
           div().id("artifact-zoom-controls")
             .class("artifact-zoom-controls")
@@ -127,6 +191,8 @@
       }
       .class("artifact-view")
       .data("manifest-url", manifestURL)
+      .data("start-canvas", startCanvas.map { "\($0)" } ?? "")
+      .data("start-service", startService ?? "")
       .data("style", style.rawValue)
       .style {
         selector("&") {
@@ -178,6 +244,20 @@
           display(.flex)
           position(.relative)
           overflow(.hidden)
+          // Side by side is a comparison; stacked is what fits. On a narrow
+          // screen the object takes the top half and its reading the bottom,
+          // rather than two columns too thin to read either.
+          media(maxWidth(maxWidthBreakpointMobile)) {
+            flexDirection(.column).important()
+          }
+        }
+        descendant(".artifact-object") {
+          flex(1, 1, perc(50))
+          display(.flex)
+          position(.relative)
+          minWidth(0)
+          minHeight(0)
+          overflow(.hidden)
         }
         descendant(".artifact-nav-button") {
           position(.absolute)
@@ -207,6 +287,35 @@
           position(.relative)
           cursor(.grab)
           userSelect(.none)
+        }
+        descendant(".artifact-reading") {
+          // Half the surface, whichever way the two are laid out. Without the
+          // zero minimums a flex item never shrinks past its content, and a
+          // page of verse would take two thirds of the viewer.
+          flex(1, 1, perc(50))
+          minWidth(0)
+          minHeight(0)
+          overflowY(.auto)
+          padding(spacing16)
+          borderInlineStart(borderWidthBase, .solid, borderColorBase)
+          backgroundColor(backgroundColorBase)
+          media(maxWidth(maxWidthBreakpointMobile)) {
+            borderInlineStart(.none).important()
+            borderBlockStart(borderWidthBase, .solid, borderColorBase).important()
+          }
+        }
+        // The switch is in the footer and the layers are in the pane, so the
+        // rule that ties them lives on the viewer, where both are in scope.
+        selector("&:has(.artifact-source-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='text']") {
+          display(.none)
+        }
+        selector("&:has(.artifact-source-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='source']") {
+          display(.block)
+        }
+        // Only the reading of the canvas on screen. The rest stay in the
+        // document so that paging is a class change, not a fetch.
+        selector(".artifact-reading [data-service-id][data-active='false']") {
+          display(.none)
         }
         descendant(".artifact-spinner") {
           display(.none)
@@ -303,7 +412,12 @@
       guard let root = document.querySelector(".artifact-view") else { return }
       let manifestURL = root.dataset["manifest-url"] ?? ""
       guard !stringIsEmpty(manifestURL) else { return }
-      Engine.start(root: root, manifestURL: manifestURL)
+      Engine.start(
+        root: root,
+        manifestURL: manifestURL,
+        startCanvas: parseInt(root.dataset["start-canvas"] ?? ""),
+        startService: root.dataset["start-service"] ?? ""
+      )
     }
   }
 
@@ -337,6 +451,11 @@
     private nonisolated(unsafe) static var viewportH: Double = 0
 
     private nonisolated(unsafe) static var manifestURL: String = ""
+    /// The canvas the page asked for, which outranks the one this reader was
+    /// last on: a link to a page of the object means that page.
+    private nonisolated(unsafe) static var startCanvas: Int?
+    private nonisolated(unsafe) static var startService: String = ""
+    private nonisolated(unsafe) static var readingPanes: [DOM.Element] = []
 
     private static func storageKey() -> String { "gnorium:artifact-canvas:\(manifestURL)" }
     private static func saveCanvasIndex() { localStorage.setItem(storageKey(), "\(canvasIndex)") }
@@ -344,8 +463,16 @@
       parseInt(localStorage.getItem(storageKey()) ?? "") ?? 0
     }
 
-    static func start(root: DOM.Element, manifestURL: String) {
+    static func start(
+      root: DOM.Element,
+      manifestURL: String,
+      startCanvas: Int? = nil,
+      startService: String = ""
+    ) {
       self.root = root
+      self.startCanvas = startCanvas
+      self.startService = startService
+      readingPanes = root.querySelectorAll(".artifact-reading [data-service-id]")
       let vp = root.querySelector("#artifact-viewport")
       viewport = vp
       pageInput = root.querySelector("#artifact-page-input")
@@ -383,10 +510,11 @@
       root?.fetch(url) { jsonStr in
         guard let jsonStr else { return }
         parseManifest(jsonStr)
-        let saved = min(savedCanvasIndex(), serviceIDs.count - 1)
-        canvasIndex = saved
+        let asked = canvasIndex(ofService: startService) ?? startCanvas ?? savedCanvasIndex()
+        let opening = max(0, min(asked, serviceIDs.count - 1))
+        canvasIndex = opening
         updateUI()
-        loadCanvas(saved)
+        loadCanvas(opening)
       }
     }
 
@@ -494,6 +622,7 @@
       pageInput?.setAttribute("size", intToString(digits))
       let label = canvasIndex < canvasLabels.count ? canvasLabels[canvasIndex] : ""
       canvasLabelEl?.textContent = label
+      showReading(for: canvasIndex)
       prevBtn?.setDisabled(canvasIndex <= 0)
       nextBtn?.setDisabled(canvasIndex >= total - 1)
     }
@@ -624,6 +753,40 @@
       window.addEventListener(.keydown) { e in
         if stringEquals(e.key, "ArrowLeft") { navigate(-1) }
         if stringEquals(e.key, "ArrowRight") { navigate(1) }
+      }
+    }
+
+    /// Where an image service sits in this manifest, if it is in it at all.
+    private static func canvasIndex(ofService service: String) -> Int? {
+      guard !stringIsEmpty(service) else { return nil }
+      for (index, id) in serviceIDs.enumerated() where stringEquals(id, service) {
+        return index
+      }
+      return nil
+    }
+
+    /// The reading of the canvas on screen, and only that one.
+    ///
+    /// A pane names the image service it reads, not a page number, because the
+    /// two orders are written by different hands: the manifest is the library's
+    /// and the reading is the transcriber's. Matching on the service id means a
+    /// reading that skips a canvas still lands on the right one; a pane that
+    /// names nothing the manifest has simply never shows.
+    private static func showReading(for index: Int) {
+      guard !readingPanes.isEmpty else { return }
+      let service = index < serviceIDs.count ? serviceIDs[index] : ""
+      var matched = false
+      for pane in readingPanes {
+        let id = pane.dataset["service-id"] ?? ""
+        let isActive = !stringIsEmpty(service) && stringEquals(id, service)
+        if isActive { matched = true }
+        pane.setAttribute(data("active"), isActive ? "true" : "false")
+      }
+      // No pane names this canvas: fall back to the transcriber's order, which
+      // is right whenever the two sequences run together.
+      guard !matched else { return }
+      for (position, pane) in readingPanes.enumerated() {
+        pane.setAttribute(data("active"), position == index ? "true" : "false")
       }
     }
 
