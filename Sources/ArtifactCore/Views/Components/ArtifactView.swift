@@ -295,7 +295,7 @@
           flex(1, 1, perc(50))
           minWidth(0)
           minHeight(0)
-          overflowY(.auto)
+          overflow(.auto)
           padding(spacing16)
           borderInlineStart(borderWidthBase, .solid, borderColorBase)
           backgroundColor(backgroundColorBase)
