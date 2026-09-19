@@ -7,7 +7,7 @@
   import WebTypes
 
   public struct ArtifactView: HTMLContent {
-    let manifestURL: String
+    let testamentURL: String
     let title: String?
     let authors: [String]
     let style: CSSStyle
@@ -32,7 +32,7 @@
     let sourceSwitch: Bool
 
     public init(
-      manifestURL: String,
+      testamentURL: String,
       title: String? = nil,
       authors: [String] = [],
       style: CSSStyle = .default,
@@ -41,7 +41,7 @@
       sourceSwitch: Bool = false,
       @HTMLBuilder reading: () -> [DOM.Node] = { [] }
     ) {
-      self.manifestURL = manifestURL
+      self.testamentURL = testamentURL
       self.title = title
       self.authors = authors
       self.style = style
@@ -190,7 +190,7 @@
         .class("artifact-footer")
       }
       .class("artifact-view")
-      .data("manifest-url", manifestURL)
+      .data("testament-url", testamentURL)
       .data("start-canvas", startCanvas.map { "\($0)" } ?? "")
       .data("start-service", startService ?? "")
       .data("style", style.rawValue)
@@ -419,11 +419,11 @@
 
     public func hydrate() {
       guard let root = document.querySelector(".artifact-view") else { return }
-      let manifestURL = root.dataset["manifest-url"] ?? ""
-      guard !stringIsEmpty(manifestURL) else { return }
+      let testamentURL = root.dataset["testament-url"] ?? ""
+      guard !stringIsEmpty(testamentURL) else { return }
       Engine.start(
         root: root,
-        manifestURL: manifestURL,
+        testamentURL: testamentURL,
         startCanvas: parseInt(root.dataset["start-canvas"] ?? ""),
         startService: root.dataset["start-service"] ?? ""
       )
@@ -459,14 +459,14 @@
     private nonisolated(unsafe) static var viewportW: Double = 0
     private nonisolated(unsafe) static var viewportH: Double = 0
 
-    private nonisolated(unsafe) static var manifestURL: String = ""
+    private nonisolated(unsafe) static var testamentURL: String = ""
     /// The canvas the page asked for, which outranks the one this reader was
     /// last on: a link to a page of the object means that page.
     private nonisolated(unsafe) static var startCanvas: Int?
     private nonisolated(unsafe) static var startService: String = ""
     private nonisolated(unsafe) static var readingPanes: [DOM.Element] = []
 
-    private static func storageKey() -> String { "gnorium:artifact-canvas:\(manifestURL)" }
+    private static func storageKey() -> String { "gnorium:artifact-canvas:\(testamentURL)" }
     private static func saveCanvasIndex() { localStorage.setItem(storageKey(), "\(canvasIndex)") }
     private static func savedCanvasIndex() -> Int {
       parseInt(localStorage.getItem(storageKey()) ?? "") ?? 0
@@ -474,7 +474,7 @@
 
     static func start(
       root: DOM.Element,
-      manifestURL: String,
+      testamentURL: String,
       startCanvas: Int? = nil,
       startService: String = ""
     ) {
@@ -514,9 +514,9 @@
         updateTransform()
       }
 
-      Self.manifestURL = manifestURL
+      Self.testamentURL = testamentURL
       setupGestures()
-      loadManifest(url: manifestURL)
+      loadManifest(url: testamentURL)
     }
 
     private static func loadManifest(url: String) {
