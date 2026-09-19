@@ -75,6 +75,25 @@
       div {
         // ── Header ──────────────────────────────────────────────────────────
         header {
+          // The switch between the reading and the source it was made from.
+          // First in the row, so it sits at the top left beside the reading it
+          // changes: the title block grows to fill and would push it right.
+          if sourceSwitch, !reading.isEmpty {
+            ToggleButtonView(
+              label: "Raw",
+              icon: nil as HTML.HTMLSpanElement?,
+              modelValue: false,
+              weight: .static,
+              buttonColor: .gray,
+              fullWidth: false,
+              ariaLabel: "Source of this reading",
+              indicateSelection: true,
+              size: .mini,
+              class: "artifact-source-toggle",
+              labelFontWeight: fontWeightNormal
+            )
+          }
+
           if let t = title, !t.isEmpty {
             span {
               span { t }
@@ -95,7 +114,11 @@
             currentPage: 1,
             totalPages: 1,
             size: .mini,
-            showControls: false,
+            // The page turns live here, with the number they change. Overlaid
+            // on the object they sat halfway down a tall image, far from the
+            // reading, and read as controls for the picture rather than the
+            // page.
+            showControls: true,
             kind: "artifact",
             inputID: "artifact-page-input",
             totalID: "artifact-page-total",
@@ -109,17 +132,28 @@
 
         // ── Viewer body with prev/next overlaid on edges ─────────────────────
         div {
+          // The reading first, the object beside it.
+          //
+          // The reading is what the page is for: it arrives with the document,
+          // it carries the figures cut from the facsimile inline, and it is
+          // what a reader reads. The object corroborates it — you look across
+          // when you doubt a word. Putting the image first made the thing being
+          // checked come before the thing being read, and on a narrow screen it
+          // pushed the reading below the fold entirely.
+          // The reading of the object, beside the object. It is a sibling of
+          // the viewport rather than a block under the viewer so that the two
+          // page together and fullscreen carries both.
+          if !reading.isEmpty {
+            div {
+              reading
+            }
+            .id("artifact-reading")
+            .class("artifact-reading")
+          }
+
           // The object, with its own page turns on its own edges: the arrows
           // belong to the thing being paged, not to the reading of it.
           div {
-            // Prev button — left edge overlay
-            button {
-              PreviousIconView(width: px(16), height: px(16))
-            }
-            .id("artifact-prev")
-            .disabled(true)
-            .class("artifact-nav-button artifact-nav-prev")
-
             // Viewport — explicit flex(1) + height(0) forces flex to size it correctly
             div {
               // Spinner overlay — shown while image loads, hidden when done
@@ -132,26 +166,8 @@
             .id("artifact-viewport")
             .class("artifact-viewport")
 
-            // Next button — right edge overlay
-            button {
-              NextIconView(width: px(16), height: px(16))
-            }
-            .id("artifact-next")
-            .disabled(true)
-            .class("artifact-nav-button artifact-nav-next")
           }
           .class("artifact-object")
-
-          // The reading of the object, beside the object. It is a sibling of
-          // the viewport rather than a block under the viewer so that the two
-          // page together and fullscreen carries both.
-          if !reading.isEmpty {
-            div {
-              reading
-            }
-            .id("artifact-reading")
-            .class("artifact-reading")
-          }
         }
         .id("artifact-viewer-container")
         .class("artifact-viewer-container")
@@ -161,22 +177,6 @@
           span {}
             .id("artifact-canvas-label")
             .class("artifact-canvas-label")
-
-          if sourceSwitch, !reading.isEmpty {
-            ToggleButtonView(
-              label: "Raw",
-              icon: nil as HTML.HTMLSpanElement?,
-              modelValue: false,
-              weight: .static,
-              buttonColor: .gray,
-              fullWidth: false,
-              ariaLabel: "Source of this reading",
-              indicateSelection: true,
-              size: .mini,
-              class: "artifact-source-toggle",
-              labelFontWeight: fontWeightNormal
-            )
-          }
 
           div().id("artifact-zoom-controls")
             .class("artifact-zoom-controls")
@@ -297,14 +297,18 @@
           minHeight(0)
           overflow(.auto)
           padding(spacing16)
-          borderInlineStart(borderWidthBase, .solid, borderColorBase)
+          // The divider sits on the reading's far edge, because the reading
+          // comes first: to its right when the two are side by side, under it
+          // when they stack. It used to be a leading border, from when the
+          // object led and the reading sat to its right.
+          borderInlineEnd(borderWidthBase, .solid, borderColorSubtle)
           backgroundColor(backgroundColorBase)
           media(maxWidth(maxWidthBreakpointMobile)) {
-            borderInlineStart(.none).important()
-            borderBlockStart(borderWidthBase, .solid, borderColorBase).important()
+            borderInlineEnd(.none).important()
+            borderBlockEnd(borderWidthBase, .solid, borderColorSubtle).important()
           }
         }
-        // The switch is in the footer and the layers are in the pane, so the
+        // The switch is in the header and the layers are in the pane, so the
         // rule that ties them lives on the viewer, where both are in scope.
         selector("&:has(.artifact-source-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='text']") {
           display(.none)
@@ -483,8 +487,12 @@
       pageInput = root.querySelector("#artifact-page-input")
       pageTotal = root.querySelector("#artifact-page-total")
       canvasLabelEl = root.querySelector("#artifact-canvas-label")
-      prevBtn = root.querySelector("#artifact-prev")
-      nextBtn = root.querySelector("#artifact-next")
+      // The page turns are the pager's buttons now; the ids are kept so a
+      // caller that still renders its own arrows keeps working.
+      prevBtn =
+        root.querySelector("#artifact-prev") ?? root.querySelector(".pagination-prev")
+      nextBtn =
+        root.querySelector("#artifact-next") ?? root.querySelector(".pagination-next")
 
       if let vp, let spinner = root.querySelector("#artifact-spinner") {
         TileCompositor.attach(to: vp, spinner: spinner)
@@ -628,8 +636,26 @@
       let label = canvasIndex < canvasLabels.count ? canvasLabels[canvasIndex] : ""
       canvasLabelEl?.textContent = label
       showReading(for: canvasIndex)
-      prevBtn?.setDisabled(canvasIndex <= 0)
-      nextBtn?.setDisabled(canvasIndex >= total - 1)
+      // The property AND the class. The pager greys itself with
+      // `pagination-disabled`, so setting only the property left a working
+      // button that looked dead — which is worse than a dead one.
+      setPageTurn(prevBtn, disabled: canvasIndex <= 0)
+      setPageTurn(nextBtn, disabled: canvasIndex >= total - 1)
+    }
+
+    /// A page turn's enabled state, on the property and in the class.
+    ///
+    /// The pager greys itself with `pagination-disabled`, so setting only the
+    /// property left a working button that looked dead — worse than a dead one,
+    /// because nobody presses it.
+    private static func setPageTurn(_ button: DOM.Element?, disabled: Bool) {
+      guard let button else { return }
+      button.setDisabled(disabled)
+      // Which turn it is, read off the button rather than passed in: a caller
+      // that passes the wrong one produces a button styled as its opposite.
+      let base = stringContains(button.getAttribute(.class) ?? "", "pagination-next")
+        ? "pagination-next" : "pagination-prev"
+      button.setAttribute(.class, disabled ? "\(base) pagination-disabled" : base)
     }
 
     private static func commitPageInput() {
