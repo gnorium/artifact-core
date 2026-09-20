@@ -516,7 +516,33 @@
 
       Self.testamentURL = testamentURL
       setupGestures()
+      setupSourceSwitch()
       loadManifest(url: testamentURL)
+    }
+
+    /// The source switch changes the reading, not the image viewport.  Keep
+    /// that state in the hydrated view instead of relying on `:has()`: that
+    /// selector is not consistently reevaluated when `aria-pressed` changes
+    /// in every browser context that hosts the reader.
+    private static func setupSourceSwitch() {
+      guard let root, let toggle = root.querySelector(".artifact-source-toggle") else { return }
+
+      setSourceVisible(stringEquals(toggle.getAttribute("aria-pressed") ?? "false", "true"))
+      _ = toggle.addEventListener("toggle-button-update") { (event: Event) in
+        Self.setSourceVisible(stringEquals(event.detail, "true"))
+      }
+    }
+
+    private static func setSourceVisible(_ visible: Bool) {
+      guard let root else { return }
+      for text in root.querySelectorAll(".artifact-reading [data-reading-layer='text']") {
+        if visible { text.style.display(.none) }
+        else { text.style.display(.block) }
+      }
+      for source in root.querySelectorAll(".artifact-reading [data-reading-layer='source']") {
+        if visible { source.style.display(.flex) }
+        else { source.style.display(.none) }
+      }
     }
 
     private static func loadManifest(url: String) {
