@@ -243,6 +243,7 @@
           flex(1)
           display(.flex)
           position(.relative)
+          minWidth(0)
           overflow(.hidden)
           // Side by side is a comparison; stacked is what fits. On a narrow
           // screen the object takes the top half and its reading the bottom,
@@ -320,6 +321,19 @@
         selector("&:has(.artifact-source-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='source']") {
           display(.flex)
           flexDirection(.column)
+          width(perc(100))
+          minWidth(0)
+          maxWidth(perc(100))
+          overflow(.hidden)
+        }
+        // Raw XML is intentionally preformatted and can contain very long
+        // lines. It must scroll inside the reading half instead of giving the
+        // artifact viewer a wider intrinsic width than its container.
+        descendant(".artifact-reading [data-reading-layer='source'] .source-view") {
+          width(perc(100))
+          minWidth(0)
+          maxWidth(perc(100))
+          overflowX(.auto)
         }
         // Only the reading of the canvas on screen. The rest stay in the
         // document so that paging is a class change, not a fetch.
