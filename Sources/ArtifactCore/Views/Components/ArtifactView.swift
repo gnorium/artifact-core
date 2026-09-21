@@ -324,16 +324,18 @@
           width(perc(100))
           minWidth(0)
           maxWidth(perc(100))
-          overflow(.hidden)
+          // The reading pane owns both scrollbars. Giving this layer an
+          // overflow value creates a second vertical scroller in Raw mode.
+          overflow(.visible)
         }
         // Raw XML is intentionally preformatted and can contain very long
-        // lines. It must scroll inside the reading half instead of giving the
-        // artifact viewer a wider intrinsic width than its container.
+        // lines. Let it contribute overflow to `.artifact-reading`, which is
+        // the single scroll owner for the entire reading half.
         descendant(".artifact-reading [data-reading-layer='source'] .source-view") {
           width(perc(100))
           minWidth(0)
           maxWidth(perc(100))
-          overflowX(.auto)
+          overflow(.visible)
         }
         // Only the reading of the canvas on screen. The rest stay in the
         // document so that paging is a class change, not a fetch.
