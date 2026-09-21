@@ -243,7 +243,9 @@
           flex(1)
           display(.flex)
           position(.relative)
+          width(perc(100))
           minWidth(0)
+          maxWidth(perc(100))
           overflow(.hidden)
           // Side by side is a comparison; stacked is what fits. On a narrow
           // screen the object takes the top half and its reading the bottom,
@@ -336,6 +338,13 @@
           minWidth(0)
           maxWidth(perc(100))
           overflow(.visible)
+        }
+        descendant(".artifact-reading [data-reading-layer='source'] .source-view-code") {
+          // A long XML token is paint overflow, not the intrinsic width of
+          // the accordion row. The outer reading pane provides its horizontal
+          // scrollbar.
+          flexShrink(1)
+          minWidth(0)
         }
         // Only the reading of the canvas on screen. The rest stay in the
         // document so that paging is a class change, not a fetch.
