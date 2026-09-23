@@ -30,6 +30,9 @@
     /// layers with `data-reading-layer`, `"text"` and `"source"`, and the
     /// switch swaps them in place.
     let sourceSwitch: Bool
+    /// What the switch is for, behind an ⓘ beside it, where the page needs to
+    /// say — an editor that takes its edits in the source says so here.
+    let sourceSwitchInfo: String?
 
     public init(
       testamentURL: String,
@@ -39,6 +42,7 @@
       startCanvas: Int? = nil,
       startService: String? = nil,
       sourceSwitch: Bool = false,
+      sourceSwitchInfo: String? = nil,
       @HTMLBuilder reading: () -> [DOM.Node] = { [] }
     ) {
       self.testamentURL = testamentURL
@@ -48,6 +52,7 @@
       self.startCanvas = startCanvas
       self.startService = startService
       self.sourceSwitch = sourceSwitch
+      self.sourceSwitchInfo = sourceSwitchInfo
       self.reading = reading()
     }
 
@@ -92,6 +97,11 @@
               class: "artifact-source-toggle",
               labelFontWeight: fontWeightNormal
             )
+            if let info = sourceSwitchInfo {
+              TooltipView(tooltip: info, class: "artifact-source-info") {
+                IconView(icon: { size in [InfoIconView(width: size, height: size)] }, size: .small)
+              }
+            }
           }
 
           if let t = title, !t.isEmpty {
@@ -238,6 +248,13 @@
         }
         descendant(".artifact-page-nav") {
           flexShrink(0)
+        }
+        // Beside the switch it explains, no nearer than the switch sits to
+        // the title: the header's own gap.
+        descendant(".artifact-source-info") {
+          flexShrink(0)
+          display(.inlineFlex)
+          alignItems(.center)
         }
         descendant(".artifact-viewer-container") {
           flex(1)
