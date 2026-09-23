@@ -5,43 +5,47 @@
   import WebAPIs
   import WebTypes
 
-  final class TileCompositor {
+  /// The tiles of one viewer. One per reader, like the reader: the image
+  /// on screen, its tiers and its pending load belong to one viewport.
+  final class TileCompositor: @unchecked Sendable {
     static let tileSize: Int = 512
 
+    /// What a reader asks for before the probe has answered.
+    static let defaultFormat = "jpg"
     // Image format: "webp" if IIIF server supports it, "jpg" otherwise — probed via info.json
-    private nonisolated(unsafe) static var imageFormat: String = "jpg"
+    private var imageFormat: String = TileCompositor.defaultFormat
     // Cache probe result per service host so we only fetch info.json once per server
     private nonisolated(unsafe) static var formatCache: [String] = []  // even=host, odd=format
 
     // Backdrop: permanent low-res full image always visible — never cleared on zoom
-    private nonisolated(unsafe) static var backdropImg: DOM.Element?
+    private var backdropImg: DOM.Element?
 
     // Tile key: zoomTier * 10_000_000 + ty * 10_000 + tx
     // Different zoom tiers coexist as layered placeholders until new tier is ready
-    private nonisolated(unsafe) static var tiles: [Int: DOM.Element] = [:]
-    private nonisolated(unsafe) static var currentTier: Int = -1
+    private var tiles: [Int: DOM.Element] = [:]
+    private var currentTier: Int = -1
 
-    private nonisolated(unsafe) static var container: DOM.Element?
-    private nonisolated(unsafe) static var surface: DOM.Element?
-    private nonisolated(unsafe) static var spinnerEl: DOM.Element?
+    private var container: DOM.Element?
+    private var surface: DOM.Element?
+    private var spinnerEl: DOM.Element?
 
-    private nonisolated(unsafe) static var serviceID: String = ""
-    private nonisolated(unsafe) static var imageW: Int = 0
-    private nonisolated(unsafe) static var imageH: Int = 0
+    private var serviceID: String = ""
+    private var imageW: Int = 0
+    private var imageH: Int = 0
 
     // Debounce state — tile loads fire 150ms after last wheel/pan event
-    private nonisolated(unsafe) static var debounceTimer: Int32 = -1
-    private nonisolated(unsafe) static var pendingPanX: Double = 0
-    private nonisolated(unsafe) static var pendingPanY: Double = 0
-    private nonisolated(unsafe) static var pendingZoom: Double = 1
-    private nonisolated(unsafe) static var pendingVW: Double = 0
-    private nonisolated(unsafe) static var pendingVH: Double = 0
+    private var debounceTimer: Int32 = -1
+    private var pendingPanX: Double = 0
+    private var pendingPanY: Double = 0
+    private var pendingZoom: Double = 1
+    private var pendingVW: Double = 0
+    private var pendingVH: Double = 0
 
     // MARK: - Public API
 
-    static var format: String { imageFormat }
+    var format: String { imageFormat }
 
-    static func attach(to viewport: DOM.Element, spinner: DOM.Element) {
+    init(viewport: DOM.Element, spinner: DOM.Element) {
       spinnerEl = spinner
       let svgNamespace = "http://www.w3.org/2000/svg"
       let svg = document.createElementNS(svgNamespace, "svg")
@@ -54,8 +58,8 @@
       container = c
     }
 
-    static func setCanvas(serviceID: String, width: Int, height: Int) {
-      Self.serviceID = serviceID
+    func setCanvas(serviceID: String, width: Int, height: Int) {
+      self.serviceID = serviceID
       imageW = width
       imageH = height
       currentTier = -1
@@ -65,7 +69,7 @@
       surface?.setAttribute("width", intToString(width))
       surface?.setAttribute("height", intToString(height))
       surface?.setAttribute("viewBox", "0 0 \(intToString(width)) \(intToString(height))")
-      probeFormat(base: baseURL(serviceID)) { fmt in
+      Self.probeFormat(base: baseURL(serviceID)) { [self] fmt in
         imageFormat = fmt
         loadBackdrop()
       }
@@ -105,7 +109,7 @@
       }
     }
 
-    static func update(panX: Double, panY: Double, zoom: Double, viewportW: Double, viewportH: Double) {
+    func update(panX: Double, panY: Double, zoom: Double, viewportW: Double, viewportH: Double) {
       // Transform is applied immediately — smooth pan/zoom feel
       container?.setAttribute("transform", "translate(\(doubleToString(panX)) \(doubleToString(panY))) scale(\(doubleToString(zoom)))")
       guard imageW > 0, imageH > 0 else { return }
@@ -113,26 +117,31 @@
       // Debounce: cancel previous timer and reschedule 150ms out
       pendingPanX = panX; pendingPanY = panY; pendingZoom = zoom; pendingVW = viewportW; pendingVH = viewportH
       cancelDebounce()
-      debounceTimer = window.setTimeout(150) { flushTileLoad() }
+      debounceTimer = window.setTimeout(150) { [self] in flushTileLoad() }
     }
 
-    static func showSpinner() {
+    func showSpinner() {
       spinnerEl?.setAttribute(data("visible"), "true")
+    }
+
+    /// Stop a tile load that is still waiting to fire: its viewer is gone.
+    func detach() {
+      cancelDebounce()
     }
 
     // MARK: - Private
 
-    private static func cancelDebounce() {
+    private func cancelDebounce() {
       if debounceTimer >= 0 { window.clearTimeout(debounceTimer); debounceTimer = -1 }
     }
 
-    private static func flushTileLoad() {
+    private func flushTileLoad() {
       debounceTimer = -1
       let dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 2.0
       let zoom = pendingZoom
       let tier = zoomTier(zoom)
-      let shouldTile = Double(imageW) * zoom > Double(tileSize * 2)
-                    || Double(imageH) * zoom > Double(tileSize * 2)
+      let shouldTile = Double(imageW) * zoom > Double(Self.tileSize * 2)
+                    || Double(imageH) * zoom > Double(Self.tileSize * 2)
       if shouldTile {
         updateTiles(panX: pendingPanX, panY: pendingPanY, zoom: zoom,
                     viewportW: pendingVW, viewportH: pendingVH, dpr: dpr, tier: tier)
@@ -142,7 +151,7 @@
     }
 
     // Low-res backdrop: full image at 256px — loads in ~200ms, always present
-    private static func loadBackdrop() {
+    private func loadBackdrop() {
       guard imageW > 0 else { return }
       let base = baseURL(serviceID)
       let url = "\(base)/full/256,/0/default.\(imageFormat)"
@@ -164,12 +173,12 @@
       }
       backdropImg = img
       // Hide spinner once backdrop is ready (first visible content)
-      whenSettled(img) {
+      whenSettled(img) { [self] in
         spinnerEl?.setAttribute(data("visible"), "false")
       }
     }
 
-    private static func updateFullTile(zoom: Double, dpr: Double, tier: Int) {
+    private func updateFullTile(zoom: Double, dpr: Double, tier: Int) {
       let key = tier * 10_000_000 + 5_000_000
       guard tiles[key] == nil else { return }
       let base = baseURL(serviceID)
@@ -179,15 +188,15 @@
       let img = addTile(x: 0, y: 0, w: imageW, h: imageH, url: url)
       tiles[key] = img
       // Once this tile loads, remove stale tiles from other tiers
-      whenSettled(img) { clearTilesExcept(tier: tier) }
+      whenSettled(img) { [self] in clearTilesExcept(tier: tier) }
     }
 
-    private static func updateTiles(
+    private func updateTiles(
       panX: Double, panY: Double, zoom: Double,
       viewportW: Double, viewportH: Double, dpr: Double, tier: Int
     ) {
-      let cols = (imageW + tileSize - 1) / tileSize
-      let rows = (imageH + tileSize - 1) / tileSize
+      let cols = (imageW + Self.tileSize - 1) / Self.tileSize
+      let rows = (imageH + Self.tileSize - 1) / Self.tileSize
       var newTileImg: DOM.Element? = nil
 
       for ty in 0..<rows {
@@ -195,10 +204,10 @@
           let key = tier * 10_000_000 + ty * 10_000 + tx
           guard tiles[key] == nil else { continue }
 
-          let rx = tx * tileSize
-          let ry = ty * tileSize
-          let rw = min(tileSize, imageW - rx)
-          let rh = min(tileSize, imageH - ry)
+          let rx = tx * Self.tileSize
+          let ry = ty * Self.tileSize
+          let rw = min(Self.tileSize, imageW - rx)
+          let rh = min(Self.tileSize, imageH - ry)
 
           let screenX = Double(rx) * zoom + panX
           let screenY = Double(ry) * zoom + panY
@@ -221,7 +230,7 @@
       // When first tile of this tier is ready, remove all other-tier tiles
       if let firstNew = newTileImg, tier != currentTier {
         currentTier = tier
-        whenSettled(firstNew) { clearTilesExcept(tier: tier) }
+        whenSettled(firstNew) { [self] in clearTilesExcept(tier: tier) }
       }
     }
 
@@ -234,7 +243,7 @@
     /// been on screen since the first second. The element says when it is
     /// ready, so listen to it; a tile that errors also counts as settled, or a
     /// dead URL is an object that never finishes loading.
-    private static func whenSettled(_ img: DOM.Element, onReady: @escaping @Sendable () -> Void) {
+    private func whenSettled(_ img: DOM.Element, onReady: @escaping @Sendable () -> Void) {
       if img.isImageLoaded {
         onReady()
         return
@@ -244,7 +253,7 @@
     }
 
     // Remove all tiles not belonging to `tier` (backdrop is untouched — not in tiles dict)
-    private static func clearTilesExcept(tier: Int) {
+    private func clearTilesExcept(tier: Int) {
       var toRemove: [Int] = []
       for (key, el) in tiles {
         let keyTier = key / 10_000_000
@@ -253,7 +262,7 @@
       for k in toRemove { tiles.removeValue(forKey: k) }
     }
 
-    private static func clearAllTiles() {
+    private func clearAllTiles() {
       if let c = container {
         for (_, el) in tiles { c.removeChild(el) }
         if let b = backdropImg { c.removeChild(b) }
@@ -261,7 +270,7 @@
       tiles = [:]
     }
 
-    private static func addTile(x: Int, y: Int, w: Int, h: Int, url: String) -> DOM.Element {
+    private func addTile(x: Int, y: Int, w: Int, h: Int, url: String) -> DOM.Element {
       let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
       img.setAttribute(.class, "artifact-tile-image")
       img.setAttribute(.draggable, "false")
@@ -279,18 +288,18 @@
     }
 
     // Discrete zoom tier: power-of-2 bucket (1, 2, 4, 8, ...) for tile cache reuse
-    private static func zoomTier(_ zoom: Double) -> Int {
+    private func zoomTier(_ zoom: Double) -> Int {
       var tier = 1
       var z = zoom
       while z >= 1.5 { z /= 2; tier *= 2 }
       return tier
     }
 
-    private static func baseURL(_ sid: String) -> String {
+    private func baseURL(_ sid: String) -> String {
       stringEndsWith(sid, "/") ? stringSubstring(sid, from: 0, to: sid.utf8.count - 1) : sid
     }
 
-    private static func snapToPowerOfTwo(_ value: Int) -> Int {
+    private func snapToPowerOfTwo(_ value: Int) -> Int {
       var snapped = 64
       while snapped < value { snapped *= 2 }
       return snapped
