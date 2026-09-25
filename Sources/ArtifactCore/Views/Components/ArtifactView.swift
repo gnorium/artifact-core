@@ -103,7 +103,6 @@
               }
             }
           }
-
           if let t = title, !t.isEmpty {
             span {
               span { t }
@@ -602,7 +601,7 @@
 
       self.testamentURL = testamentURL
       setupGestures()
-      setupSourceSwitch()
+      setupLayers()
       loadManifest(url: testamentURL)
     }
 
@@ -610,23 +609,49 @@
     /// that state in the hydrated view instead of relying on `:has()`: that
     /// selector is not consistently reevaluated when `aria-pressed` changes
     /// in every browser context that hosts the reader.
-    private func setupSourceSwitch() {
-      guard let toggle = root.querySelector(".artifact-source-toggle") else { return }
-
-      setSourceVisible(stringEquals(toggle.getAttribute("aria-pressed") ?? "false", "true"))
-      _ = toggle.addEventListener("toggle-button-update") { [self] (event: Event) in
-        self.setSourceVisible(stringEquals(event.detail, "true"))
+    ///
+    /// A reading with a translation follows its page's language switch too,
+    /// which is not the viewer's: the page sets `data-reading-translated` on
+    /// an ancestor and tells each viewer with a `reading-translated` event.
+    /// A viewer fetched in after the switch was pressed reads the attribute
+    /// as it stands.
+    private func setupLayers() {
+      let source = root.querySelector(".artifact-source-toggle")
+      if case .some = root.querySelector(".artifact-reading [data-reading-layer='translation']") {
+        translatable = true
+      }
+      sourceVisible = stringEquals(source?.getAttribute("aria-pressed") ?? "false", "true")
+      translationVisible = stringEquals(
+        root.closest("[data-reading-translated]")?.getAttribute(data("reading-translated")) ?? "false", "true")
+      showLayers()
+      _ = source?.addEventListener("toggle-button-update") { [self] (event: Event) in
+        self.sourceVisible = stringEquals(event.detail, "true")
+        self.showLayers()
+      }
+      _ = root.addEventListener("reading-translated") { [self] (event: Event) in
+        self.translationVisible = stringEquals(event.detail, "true")
+        self.showLayers()
       }
     }
 
-    private func setSourceVisible(_ visible: Bool) {
+    private var sourceVisible = false
+    private var translationVisible = false
+    /// Whether the reading has a translated layer to show at all.
+    private var translatable = false
+
+    /// The one layer of the reading that shows: the translated one while the
+    /// page's language switch is on, else the source while Raw is on, else
+    /// the reading.
+    private func showLayers() {
+      let layer = translatable && translationVisible ? "translation" : sourceVisible ? "source" : "text"
       for text in root.querySelectorAll(".artifact-reading [data-reading-layer='text']") {
-        if visible { text.style.display(.none) }
-        else { text.style.display(.block) }
+        if stringEquals(layer, "text") { text.style.display(.block) } else { text.style.display(.none) }
       }
       for source in root.querySelectorAll(".artifact-reading [data-reading-layer='source']") {
-        if visible { source.style.display(.flex) }
-        else { source.style.display(.none) }
+        if stringEquals(layer, "source") { source.style.display(.flex) } else { source.style.display(.none) }
+      }
+      for translated in root.querySelectorAll(".artifact-reading [data-reading-layer='translation']") {
+        if stringEquals(layer, "translation") { translated.style.display(.flex) } else { translated.style.display(.none) }
       }
     }
 
