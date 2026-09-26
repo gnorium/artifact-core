@@ -25,14 +25,14 @@
     /// shown only while the canvas with that image service is the one on
     /// screen, so the reading pages with the object.
     let reading: [DOM.Node]
-    /// Whether the footer carries a switch from the reading to the source it
+    /// Whether the footer carries a switch from the reading to the code it
     /// was made from — markup, in the usual case. The reading marks its two
-    /// layers with `data-reading-layer`, `"text"` and `"source"`, and the
+    /// layers with `data-reading-layer`, `"text"` and `"code"`, and the
     /// switch swaps them in place.
-    let sourceSwitch: Bool
+    let codeSwitch: Bool
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
-    /// say — an editor that takes its edits in the source says so here.
-    let sourceSwitchInfo: String?
+    /// say — an editor that takes its edits in the code says so here.
+    let codeSwitchInfo: String?
 
     public init(
       testamentURL: String,
@@ -41,8 +41,8 @@
       style: CSSStyle = .default,
       startCanvas: Int? = nil,
       startService: String? = nil,
-      sourceSwitch: Bool = false,
-      sourceSwitchInfo: String? = nil,
+      codeSwitch: Bool = false,
+      codeSwitchInfo: String? = nil,
       @HTMLBuilder reading: () -> [DOM.Node] = { [] }
     ) {
       self.testamentURL = testamentURL
@@ -51,8 +51,8 @@
       self.style = style
       self.startCanvas = startCanvas
       self.startService = startService
-      self.sourceSwitch = sourceSwitch
-      self.sourceSwitchInfo = sourceSwitchInfo
+      self.codeSwitch = codeSwitch
+      self.codeSwitchInfo = codeSwitchInfo
       self.reading = reading()
     }
 
@@ -80,10 +80,10 @@
       div {
         // ── Header ──────────────────────────────────────────────────────────
         header {
-          // The switch between the reading and the source it was made from.
+          // The switch between the reading and the code it was made from.
           // First in the row, so it sits at the top left beside the reading it
           // changes: the title block grows to fill and would push it right.
-          if sourceSwitch, !reading.isEmpty {
+          if codeSwitch, !reading.isEmpty {
             ToggleButtonView(
               label: "Raw",
               icon: nil as HTML.HTMLSpanElement?,
@@ -91,14 +91,14 @@
               weight: .static,
               buttonColor: .gray,
               fullWidth: false,
-              ariaLabel: "Source of this reading",
+              ariaLabel: "Code of this reading",
               indicateSelection: true,
               size: .mini,
-              class: "artifact-source-toggle",
+              class: "artifact-code-toggle",
               labelFontWeight: fontWeightNormal
             )
-            if let info = sourceSwitchInfo {
-              TooltipView(tooltip: info, class: "artifact-source-info") {
+            if let info = codeSwitchInfo {
+              TooltipView(tooltip: info, class: "artifact-code-info") {
                 IconView(icon: { size in [InfoIconView(width: size, height: size)] }, size: .small)
               }
             }
@@ -250,7 +250,7 @@
         }
         // Beside the switch it explains, no nearer than the switch sits to
         // the title: the header's own gap.
-        descendant(".artifact-source-info") {
+        descendant(".artifact-code-info") {
           flexShrink(0)
           display(.inlineFlex)
           alignItems(.center)
@@ -329,14 +329,14 @@
         }
         // The switch is in the header and the layers are in the pane, so the
         // rule that ties them lives on the viewer, where both are in scope.
-        selector("&:has(.artifact-source-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='text']") {
+        selector("&:has(.artifact-code-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='text']") {
           display(.none)
         }
         // Flex, not block: a layer holding one element also holds the
         // whitespace around it in the markup, and a block container turns that
         // into a line box above and below — a gap that looks like padding
         // nobody asked for. A flex container drops whitespace-only children.
-        selector("&:has(.artifact-source-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='source']") {
+        selector("&:has(.artifact-code-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='code']") {
           display(.flex)
           flexDirection(.column)
           width(perc(100))
@@ -349,13 +349,13 @@
         // Raw XML is intentionally preformatted and can contain very long
         // lines. Let it contribute overflow to `.artifact-reading`, which is
         // the single scroll owner for the entire reading half.
-        descendant(".artifact-reading [data-reading-layer='source'] .source-view") {
+        descendant(".artifact-reading [data-reading-layer='code'] .code-view") {
           width(perc(100))
           minWidth(0)
           maxWidth(perc(100))
           overflow(.visible)
         }
-        descendant(".artifact-reading [data-reading-layer='source'] .source-view-code") {
+        descendant(".artifact-reading [data-reading-layer='code'] .code-view-code") {
           // A long XML token is paint overflow, not the intrinsic width of
           // the accordion row. The outer reading pane provides its horizontal
           // scrollbar.
@@ -605,7 +605,7 @@
       loadManifest(url: testamentURL)
     }
 
-    /// The source switch changes the reading, not the image viewport.  Keep
+    /// The code switch changes the reading, not the image viewport.  Keep
     /// that state in the hydrated view instead of relying on `:has()`: that
     /// selector is not consistently reevaluated when `aria-pressed` changes
     /// in every browser context that hosts the reader.
@@ -616,16 +616,16 @@
     /// A viewer fetched in after the switch was pressed reads the attribute
     /// as it stands.
     private func setupLayers() {
-      let source = root.querySelector(".artifact-source-toggle")
+      let code = root.querySelector(".artifact-code-toggle")
       if case .some = root.querySelector(".artifact-reading [data-reading-layer='translation']") {
         translatable = true
       }
-      sourceVisible = stringEquals(source?.getAttribute("aria-pressed") ?? "false", "true")
+      codeVisible = stringEquals(code?.getAttribute("aria-pressed") ?? "false", "true")
       translationVisible = stringEquals(
         root.closest("[data-reading-translated]")?.getAttribute(data("reading-translated")) ?? "false", "true")
       showLayers()
-      _ = source?.addEventListener("toggle-button-update") { [self] (event: Event) in
-        self.sourceVisible = stringEquals(event.detail, "true")
+      _ = code?.addEventListener("toggle-button-update") { [self] (event: Event) in
+        self.codeVisible = stringEquals(event.detail, "true")
         self.showLayers()
       }
       _ = root.addEventListener("reading-translated") { [self] (event: Event) in
@@ -634,21 +634,21 @@
       }
     }
 
-    private var sourceVisible = false
+    private var codeVisible = false
     private var translationVisible = false
     /// Whether the reading has a translated layer to show at all.
     private var translatable = false
 
     /// The one layer of the reading that shows: the translated one while the
-    /// page's language switch is on, else the source while Raw is on, else
+    /// page's language switch is on, else the code while Raw is on, else
     /// the reading.
     private func showLayers() {
-      let layer = translatable && translationVisible ? "translation" : sourceVisible ? "source" : "text"
+      let layer = translatable && translationVisible ? "translation" : codeVisible ? "code" : "text"
       for text in root.querySelectorAll(".artifact-reading [data-reading-layer='text']") {
         if stringEquals(layer, "text") { text.style.display(.block) } else { text.style.display(.none) }
       }
-      for source in root.querySelectorAll(".artifact-reading [data-reading-layer='source']") {
-        if stringEquals(layer, "source") { source.style.display(.flex) } else { source.style.display(.none) }
+      for code in root.querySelectorAll(".artifact-reading [data-reading-layer='code']") {
+        if stringEquals(layer, "code") { code.style.display(.flex) } else { code.style.display(.none) }
       }
       for translated in root.querySelectorAll(".artifact-reading [data-reading-layer='translation']") {
         if stringEquals(layer, "translation") { translated.style.display(.flex) } else { translated.style.display(.none) }
