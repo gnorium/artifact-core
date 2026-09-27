@@ -20,14 +20,14 @@
     /// positional fallback.
     let startCanvas: Int?
     let startService: String?
-    /// A reading of the object, shown beside it: a transcription, a
+    /// A transcript of the object, shown beside it: a transcription, a
     /// translation, an apparatus. Any descendant carrying `data-service-id` is
     /// shown only while the canvas with that image service is the one on
-    /// screen, so the reading pages with the object.
-    let reading: [DOM.Node]
-    /// Whether the footer carries a switch from the reading to the code it
-    /// was made from — markup, in the usual case. The reading marks its two
-    /// layers with `data-reading-layer`, `"text"` and `"code"`, and the
+    /// screen, so the transcript pages with the object.
+    let transcript: [DOM.Node]
+    /// Whether the footer carries a switch from the transcript to the code it
+    /// was made from — markup, in the usual case. The transcript marks its two
+    /// layers with `data-transcript-layer`, `"rendered"` and `"code"`, and the
     /// switch swaps them in place.
     let codeSwitch: Bool
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
@@ -43,7 +43,7 @@
       startService: String? = nil,
       codeSwitch: Bool = false,
       codeSwitchInfo: String? = nil,
-      @HTMLBuilder reading: () -> [DOM.Node] = { [] }
+      @HTMLBuilder transcript: () -> [DOM.Node] = { [] }
     ) {
       self.testamentURL = testamentURL
       self.title = title
@@ -53,7 +53,7 @@
       self.startService = startService
       self.codeSwitch = codeSwitch
       self.codeSwitchInfo = codeSwitchInfo
-      self.reading = reading()
+      self.transcript = transcript()
     }
 
     private var authorsLine: String {
@@ -80,10 +80,10 @@
       div {
         // ── Header ──────────────────────────────────────────────────────────
         header {
-          // The switch between the reading and the code it was made from.
-          // First in the row, so it sits at the top left beside the reading it
+          // The switch between the transcript and the code it was made from.
+          // First in the row, so it sits at the top left beside the transcript it
           // changes: the title block grows to fill and would push it right.
-          if codeSwitch, !reading.isEmpty {
+          if codeSwitch, !transcript.isEmpty {
             ToggleButtonView(
               label: "Raw",
               icon: nil as HTML.HTMLSpanElement?,
@@ -91,7 +91,7 @@
               weight: .static,
               buttonColor: .gray,
               fullWidth: false,
-              ariaLabel: "Code of this reading",
+              ariaLabel: "Code of this transcript",
               indicateSelection: true,
               size: .mini,
               class: "artifact-code-toggle",
@@ -126,7 +126,7 @@
             size: .mini,
             // The page turns live here, with the number they change. Overlaid
             // on the object they sat halfway down a tall image, far from the
-            // reading, and read as controls for the picture rather than the
+            // transcript, and read as controls for the picture rather than the
             // page.
             showControls: true,
             kind: "artifact",
@@ -142,27 +142,27 @@
 
         // ── Viewer body with prev/next overlaid on edges ─────────────────────
         div {
-          // The reading first, the object beside it.
+          // The transcript first, the object beside it.
           //
-          // The reading is what the page is for: it arrives with the document,
+          // The transcript is what the page is for: it arrives with the document,
           // it carries the figures cut from the facsimile inline, and it is
           // what a reader reads. The object corroborates it — you look across
           // when you doubt a word. Putting the image first made the thing being
           // checked come before the thing being read, and on a narrow screen it
-          // pushed the reading below the fold entirely.
-          // The reading of the object, beside the object. It is a sibling of
+          // pushed the transcript below the fold entirely.
+          // The transcript of the object, beside the object. It is a sibling of
           // the viewport rather than a block under the viewer so that the two
           // page together and fullscreen carries both.
-          if !reading.isEmpty {
+          if !transcript.isEmpty {
             div {
-              reading
+              transcript
             }
-            .id("artifact-reading")
-            .class("artifact-reading")
+            .id("artifact-transcript")
+            .class("artifact-transcript")
           }
 
           // The object, with its own page turns on its own edges: the arrows
-          // belong to the thing being paged, not to the reading of it.
+          // belong to the thing being paged, not to the transcript of it.
           div {
             // Viewport — explicit flex(1) + height(0) forces flex to size it correctly
             div {
@@ -264,7 +264,7 @@
           maxWidth(perc(100))
           overflow(.hidden)
           // Side by side is a comparison; stacked is what fits. On a narrow
-          // screen the object takes the top half and its reading the bottom,
+          // screen the object takes the top half and its transcript the bottom,
           // rather than two columns too thin to read either.
           media(maxWidth(maxWidthBreakpointMobile)) {
             flexDirection(.column).important()
@@ -307,7 +307,7 @@
           cursor(.grab)
           userSelect(.none)
         }
-        descendant(".artifact-reading") {
+        descendant(".artifact-transcript") {
           // Half the surface, whichever way the two are laid out. Without the
           // zero minimums a flex item never shrinks past its content, and a
           // page of verse would take two thirds of the viewer.
@@ -316,10 +316,10 @@
           minHeight(0)
           overflow(.auto)
           padding(spacing16)
-          // The divider sits on the reading's far edge, because the reading
+          // The divider sits on the transcript's far edge, because the transcript
           // comes first: to its right when the two are side by side, under it
           // when they stack. It used to be a leading border, from when the
-          // object led and the reading sat to its right.
+          // object led and the transcript sat to its right.
           borderInlineEnd(borderWidthBase, .solid, borderColorSubtle)
           backgroundColor(backgroundColorBase)
           media(maxWidth(maxWidthBreakpointMobile)) {
@@ -329,42 +329,42 @@
         }
         // The switch is in the header and the layers are in the pane, so the
         // rule that ties them lives on the viewer, where both are in scope.
-        selector("&:has(.artifact-code-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='text']") {
+        selector("&:has(.artifact-code-toggle[aria-pressed='true']) .artifact-transcript [data-transcript-layer='rendered']") {
           display(.none)
         }
         // Flex, not block: a layer holding one element also holds the
         // whitespace around it in the markup, and a block container turns that
         // into a line box above and below — a gap that looks like padding
         // nobody asked for. A flex container drops whitespace-only children.
-        selector("&:has(.artifact-code-toggle[aria-pressed='true']) .artifact-reading [data-reading-layer='code']") {
+        selector("&:has(.artifact-code-toggle[aria-pressed='true']) .artifact-transcript [data-transcript-layer='code']") {
           display(.flex)
           flexDirection(.column)
           width(perc(100))
           minWidth(0)
           maxWidth(perc(100))
-          // The reading pane owns both scrollbars. Giving this layer an
+          // The transcript pane owns both scrollbars. Giving this layer an
           // overflow value creates a second vertical scroller in Raw mode.
           overflow(.visible)
         }
         // Raw XML is intentionally preformatted and can contain very long
-        // lines. Let it contribute overflow to `.artifact-reading`, which is
-        // the single scroll owner for the entire reading half.
-        descendant(".artifact-reading [data-reading-layer='code'] .code-view") {
+        // lines. Let it contribute overflow to `.artifact-transcript`, which is
+        // the single scroll owner for the entire transcript half.
+        descendant(".artifact-transcript [data-transcript-layer='code'] .code-view") {
           width(perc(100))
           minWidth(0)
           maxWidth(perc(100))
           overflow(.visible)
         }
-        descendant(".artifact-reading [data-reading-layer='code'] .code-view-code") {
+        descendant(".artifact-transcript [data-transcript-layer='code'] .code-view-code") {
           // A long XML token is paint overflow, not the intrinsic width of
-          // the accordion row. The outer reading pane provides its horizontal
+          // the accordion row. The outer transcript pane provides its horizontal
           // scrollbar.
           flexShrink(1)
           minWidth(0)
         }
-        // Only the reading of the canvas on screen. The rest stay in the
+        // Only the transcript of the canvas on screen. The rest stay in the
         // document so that paging is a class change, not a fetch.
-        selector(".artifact-reading [data-service-id][data-active='false']") {
+        selector(".artifact-transcript [data-service-id][data-active='false']") {
           display(.none)
         }
         descendant(".artifact-spinner") {
@@ -524,7 +524,7 @@
     /// last on: a link to a page of the object means that page.
     private var startCanvas: Int?
     private var startService: String = ""
-    private var readingPanes: [DOM.Element] = []
+    private var transcriptPanes: [DOM.Element] = []
 
     private func storageKey() -> String { "gnorium:artifact-canvas:\(testamentURL)" }
     private func saveCanvasIndex() { localStorage.setItem(storageKey(), "\(canvasIndex)") }
@@ -564,7 +564,7 @@
       self.root = root
       self.startCanvas = startCanvas
       self.startService = startService
-      readingPanes = root.querySelectorAll(".artifact-reading [data-service-id]")
+      transcriptPanes = root.querySelectorAll(".artifact-transcript [data-service-id]")
       let vp = root.querySelector("#artifact-viewport")
       viewport = vp
       pageInput = root.querySelector("#artifact-page-input")
@@ -603,30 +603,30 @@
       loadManifest(url: testamentURL)
     }
 
-    /// The code switch changes the reading, not the image viewport.  Keep
+    /// The code switch changes the transcript, not the image viewport.  Keep
     /// that state in the hydrated view instead of relying on `:has()`: that
     /// selector is not consistently reevaluated when `aria-pressed` changes
     /// in every browser context that hosts the reader.
     ///
-    /// A reading with a translation follows its page's language switch too,
-    /// which is not the viewer's: the page sets `data-reading-translated` on
-    /// an ancestor and tells each viewer with a `reading-translated` event.
+    /// A transcript with a translation follows its page's language switch too,
+    /// which is not the viewer's: the page sets `data-transcript-translated` on
+    /// an ancestor and tells each viewer with a `transcript-translated` event.
     /// A viewer fetched in after the switch was pressed reads the attribute
     /// as it stands.
     private func setupLayers() {
       let code = root.querySelector(".artifact-code-toggle")
-      if case .some = root.querySelector(".artifact-reading [data-reading-layer='translation']") {
+      if case .some = root.querySelector(".artifact-transcript [data-transcript-layer='translation']") {
         translatable = true
       }
       codeVisible = stringEquals(code?.getAttribute("aria-pressed") ?? "false", "true")
       translationVisible = stringEquals(
-        root.closest("[data-reading-translated]")?.getAttribute(data("reading-translated")) ?? "false", "true")
+        root.closest("[data-transcript-translated]")?.getAttribute(data("transcript-translated")) ?? "false", "true")
       showLayers()
       _ = code?.addEventListener("toggle-button-update") { [self] (event: Event) in
         self.codeVisible = stringEquals(event.detail, "true")
         self.showLayers()
       }
-      _ = root.addEventListener("reading-translated") { [self] (event: Event) in
+      _ = root.addEventListener("transcript-translated") { [self] (event: Event) in
         self.translationVisible = stringEquals(event.detail, "true")
         self.showLayers()
       }
@@ -634,21 +634,21 @@
 
     private var codeVisible = false
     private var translationVisible = false
-    /// Whether the reading has a translated layer to show at all.
+    /// Whether the transcript has a translated layer to show at all.
     private var translatable = false
 
-    /// The one layer of the reading that shows: the translated one while the
+    /// The one layer of the transcript that shows: the translated one while the
     /// page's language switch is on, else the code while Raw is on, else
-    /// the reading.
+    /// the transcript.
     private func showLayers() {
-      let layer = translatable && translationVisible ? "translation" : codeVisible ? "code" : "text"
-      for text in root.querySelectorAll(".artifact-reading [data-reading-layer='text']") {
-        if stringEquals(layer, "text") { text.style.display(.block) } else { text.style.display(.none) }
+      let layer = translatable && translationVisible ? "translation" : codeVisible ? "code" : "rendered"
+      for text in root.querySelectorAll(".artifact-transcript [data-transcript-layer='rendered']") {
+        if stringEquals(layer, "rendered") { text.style.display(.block) } else { text.style.display(.none) }
       }
-      for code in root.querySelectorAll(".artifact-reading [data-reading-layer='code']") {
+      for code in root.querySelectorAll(".artifact-transcript [data-transcript-layer='code']") {
         if stringEquals(layer, "code") { code.style.display(.flex) } else { code.style.display(.none) }
       }
-      for translated in root.querySelectorAll(".artifact-reading [data-reading-layer='translation']") {
+      for translated in root.querySelectorAll(".artifact-transcript [data-transcript-layer='translation']") {
         if stringEquals(layer, "translation") { translated.style.display(.flex) } else { translated.style.display(.none) }
       }
     }
@@ -769,7 +769,7 @@
       pageInput?.setAttribute("size", intToString(digits))
       let label = canvasIndex < canvasLabels.count ? canvasLabels[canvasIndex] : ""
       canvasLabelEl?.textContent = label
-      showReading(for: canvasIndex)
+      showTranscript(for: canvasIndex)
       // The property AND the class. The pager greys itself with
       // `pagination-disabled`, so setting only the property left a working
       // button that looked dead — which is worse than a dead one.
@@ -930,18 +930,18 @@
       return nil
     }
 
-    /// The reading of the canvas on screen, and only that one.
+    /// The transcript of the canvas on screen, and only that one.
     ///
     /// A pane names the image service it reads, not a page number, because the
     /// two orders are written by different hands: the manifest is the library's
-    /// and the reading is the transcriber's. Matching on the service id means a
-    /// reading that skips a canvas still lands on the right one; a pane that
+    /// and the transcript is the transcriber's. Matching on the service id means a
+    /// transcript that skips a canvas still lands on the right one; a pane that
     /// names nothing the manifest has simply never shows.
-    private func showReading(for index: Int) {
-      guard !readingPanes.isEmpty else { return }
+    private func showTranscript(for index: Int) {
+      guard !transcriptPanes.isEmpty else { return }
       let service = index < serviceIDs.count ? serviceIDs[index] : ""
       var matched = false
-      for pane in readingPanes {
+      for pane in transcriptPanes {
         let id = pane.dataset["service-id"] ?? ""
         let isActive = !stringIsEmpty(service) && stringEquals(id, service)
         if isActive { matched = true }
@@ -950,11 +950,11 @@
       // No pane names this canvas: fall back to the transcriber's order, which
       // is right whenever the two sequences run together.
       if !matched {
-        for (position, pane) in readingPanes.enumerated() {
+        for (position, pane) in transcriptPanes.enumerated() {
           pane.setAttribute(data("active"), position == index ? "true" : "false")
         }
       }
-      // Whoever drew the reading may have work to do when it changes — syntax
+      // Whoever drew the transcript may have work to do when it changes — syntax
       // colouring a page of markup, say, which is worth doing for the page on
       // screen and wasteful for the nine hundred behind it.
       root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
