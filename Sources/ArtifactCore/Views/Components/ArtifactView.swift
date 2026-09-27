@@ -6,8 +6,20 @@
   import WebComponents
   import WebTypes
 
+  /// An object read page by page: a pager, a transcript of each page and,
+  /// in its canvas slot, the object's images.
+  ///
+  /// The pages are the manifest's canvases when the viewer is given one
+  /// (their order, labels and sizes), else the transcript's own pages. The
+  /// canvas slot is an add-in: without it the viewer is a pager over the
+  /// transcript; with it, each canvas (a ``CanvasView``, or a view wrapping
+  /// one) is shown beside the transcript while its page is on screen, and
+  /// only the canvas on screen reads its image. A canvas the manifest has and
+  /// the slot lacks is drawn by the reader when it is paged to.
   public struct ArtifactView: HTMLContent {
-    let testamentURL: String
+    /// The IIIF manifest whose canvases are paged; empty pages the
+    /// transcript.
+    let manifestURL: String
     let title: String?
     let authors: [String]
     let style: CSSStyle
@@ -33,9 +45,13 @@
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
     /// say — an editor that takes its edits in the code says so here.
     let codeSwitchInfo: String?
+    /// The object's images, one per canvas, each naming its image service in
+    /// `data-service-id`: shown, like the transcript, only while its canvas
+    /// is on screen, and read only then.
+    let canvas: [DOM.Node]
 
     public init(
-      testamentURL: String,
+      manifestURL: String = "",
       title: String? = nil,
       authors: [String] = [],
       style: CSSStyle = .default,
@@ -43,9 +59,10 @@
       startService: String? = nil,
       codeSwitch: Bool = false,
       codeSwitchInfo: String? = nil,
-      @HTMLBuilder transcript: () -> [DOM.Node] = { [] }
+      @HTMLBuilder transcript: () -> [DOM.Node] = { [] },
+      @HTMLBuilder canvas: () -> [DOM.Node] = { [] }
     ) {
-      self.testamentURL = testamentURL
+      self.manifestURL = manifestURL
       self.title = title
       self.authors = authors
       self.style = style
@@ -54,6 +71,7 @@
       self.codeSwitch = codeSwitch
       self.codeSwitchInfo = codeSwitchInfo
       self.transcript = transcript()
+      self.canvas = canvas()
     }
 
     private var authorsLine: String {
@@ -77,7 +95,11 @@
     }
 
     public func build() -> DOM.Node {
-      div {
+      // A canvas the reader draws itself, for a canvas the slot lacks, is
+      // styled by the canvas's own sheet, which the page must link.
+      _ = CanvasView(serviceID: "").build()
+
+      return div {
         // ── Header ──────────────────────────────────────────────────────────
         header {
           // The switch between the transcript and the code it was made from.
@@ -151,7 +173,7 @@
           // checked come before the thing being read, and on a narrow screen it
           // pushed the transcript below the fold entirely.
           // The transcript of the object, beside the object. It is a sibling of
-          // the viewport rather than a block under the viewer so that the two
+          // the object rather than a block under the viewer so that the two
           // page together and fullscreen carries both.
           if !transcript.isEmpty {
             div {
@@ -161,23 +183,13 @@
             .class("artifact-transcript")
           }
 
-          // The object, with its own page turns on its own edges: the arrows
-          // belong to the thing being paged, not to the transcript of it.
-          div {
-            // Viewport — explicit flex(1) + height(0) forces flex to size it correctly
+          // The object: the canvas of the page on screen.
+          if !canvas.isEmpty {
             div {
-              // Spinner overlay — shown while image loads, hidden when done
-              div {
-                RotatingSectorView(ariaHidden: true)
-              }
-              .id("artifact-spinner")
-              .class("artifact-spinner")
+              canvas
             }
-            .id("artifact-viewport")
-            .class("artifact-viewport")
-
+            .class("artifact-object")
           }
-          .class("artifact-object")
         }
         .id("artifact-viewer-container")
         .class("artifact-viewer-container")
@@ -201,7 +213,7 @@
         .class("artifact-footer")
       }
       .class("artifact-view")
-      .data("testament-url", testamentURL)
+      .data("manifest-url", manifestURL)
       .data("start-canvas", startCanvas.map { "\($0)" } ?? "")
       .data("start-service", startService ?? "")
       .data("style", style.rawValue)
@@ -278,35 +290,6 @@
           minHeight(0)
           overflow(.hidden)
         }
-        descendant(".artifact-nav-button") {
-          position(.absolute)
-          top(perc(50))
-          transform(translate(px(0), perc(-50)))
-          zIndex(10)
-          width(px(36))
-          height(px(36))
-          borderRadius(borderRadiusCircle)
-          border(borderWidthBase, .solid, borderColorBase)
-          backgroundColor(backgroundColorBase)
-          boxShadow(px(0), px(2), px(8), boxShadowColorAlphaBase)
-          cursor(.pointer)
-          display(.flex)
-          alignItems(.center)
-          justifyContent(.center)
-          color(colorBase)
-          opacity(0.85)
-        }
-        descendant(".artifact-nav-prev") { insetInlineStart(spacing8) }
-        descendant(".artifact-nav-next") { insetInlineEnd(spacing8) }
-        descendant(".artifact-viewport") {
-          width(perc(100))
-          flex(1)
-          minHeight(0)
-          overflow(.hidden)
-          position(.relative)
-          cursor(.grab)
-          userSelect(.none)
-        }
         descendant(".artifact-transcript") {
           // Half the surface, whichever way the two are laid out. Without the
           // zero minimums a flex item never shrinks past its content, and a
@@ -362,19 +345,13 @@
           flexShrink(1)
           minWidth(0)
         }
-        // Only the transcript of the canvas on screen. The rest stay in the
-        // document so that paging is a class change, not a fetch.
-        selector(".artifact-transcript [data-service-id][data-active='false']") {
+        // Only the transcript and the canvas of the page on screen. The rest
+        // stay in the document so that paging is a class change, not a fetch.
+        selector(
+          ".artifact-transcript [data-service-id][data-active='false']",
+          ".artifact-object [data-service-id][data-active='false']"
+        ) {
           display(.none)
-        }
-        descendant(".artifact-spinner") {
-          display(.none)
-          position(.absolute)
-          inset(0)
-          zIndex(5)
-          alignItems(.center)
-          justifyContent(.center)
-          backgroundColor(backgroundColorBase)
         }
         descendant(".artifact-footer") {
           gap(spacing8)
@@ -406,21 +383,6 @@
           flexShrink(0)
           pseudoClass(.hover) { color(colorBase) }
         }
-
-        selector(".artifact-tile-surface") {
-          position(.absolute)
-          inset(0)
-          overflow(.visible)
-        }
-        selector(".artifact-tile-compositor") {
-          transformOrigin(px(0), px(0))
-          willChange(.transform)
-        }
-        selector(".artifact-tile-image[data-loaded='false']") { opacity(0) }
-        selector(".artifact-tile-image[data-loaded='true']") { opacity(1) }
-        selector("#artifact-spinner[data-visible='true']") { display(.flex) }
-        selector("#artifact-spinner[data-visible='false']") { display(.none) }
-        selector("#artifact-viewport[data-dragging='true']") { cursor(.grabbing) }
       }
     }
   }
@@ -472,14 +434,15 @@
       }
       for viewer in root.querySelectorAll(".artifact-view") {
         guard !stringEquals(viewer.dataset["artifact-hydrated"] ?? "false", "true") else { continue }
-        let testamentURL = viewer.dataset["testament-url"] ?? ""
-        // An empty viewer — a form with nothing chosen yet — has nothing to read.
-        guard !stringIsEmpty(testamentURL) else { continue }
+        let manifestURL = viewer.dataset["manifest-url"] ?? ""
+        // An empty viewer — a form with nothing chosen yet — has nothing to
+        // read: canvases and no manifest to page them by.
+        guard !stringIsEmpty(manifestURL) || viewer.querySelector(".artifact-object") == nil else { continue }
         viewer.setAttribute(data("artifact-hydrated"), "true")
         hydration.readers.append(
           ArtifactReader(
             root: viewer,
-            testamentURL: testamentURL,
+            manifestURL: manifestURL,
             startCanvas: parseInt(viewer.dataset["start-canvas"] ?? ""),
             startService: viewer.dataset["start-service"] ?? ""
           ))
@@ -487,58 +450,56 @@
     }
   }
 
-  /// One viewer, reading one testament. An instance, not a namespace: a
-  /// page may hold several viewers, and a second one used to take over the
+  /// One viewer, reading one object. An instance, not a namespace: a page
+  /// may hold several viewers, and a second one used to take over the
   /// first's state — its canvases appended to the first's list and its pages
   /// turned by the first's arrows.
+  ///
+  /// It keeps the pages: which is on screen, the pager, the transcript and
+  /// the canvas that go with it. Each canvas reads its own image
+  /// (`CanvasReader`), made the first time it is shown.
   private final class ArtifactReader: @unchecked Sendable {
-    private var viewport: DOM.Element?
-
     private var pageInput: DOM.Element?
     private var pageTotal: DOM.Element?
     private var canvasLabelEl: DOM.Element?
     private var prevBtn: DOM.Element?
     private var nextBtn: DOM.Element?
 
+    /// The pages, by the image service each reads, with their sizes and
+    /// labels where a manifest gives them.
     private var serviceIDs: [String] = []
     private var imageWidths: [Int] = []
     private var imageHeights: [Int] = []
     private var canvasLabels: [String] = []
     private var canvasIndex: Int = 0
 
-    private var zoom: Double = 1.0
-    private var panX: Double = 0
-    private var panY: Double = 0
-
-    private var isDragging = false
-    private var dragStartX: Double = 0
-    private var dragStartY: Double = 0
-    private var dragPanX: Double = 0
-    private var dragPanY: Double = 0
-
-    private var viewportW: Double = 0
-    private var viewportH: Double = 0
-
-    private var testamentURL: String = ""
+    private var manifestURL: String = ""
     /// The canvas the page asked for, which outranks the one this reader was
     /// last on: a link to a page of the object means that page.
     private var startCanvas: Int?
     private var startService: String = ""
     private var transcriptPanes: [DOM.Element] = []
+    /// The canvas slot, when the viewer has one, and the canvases read so far.
+    private var object: DOM.Element?
+    private var canvases: [CanvasReader] = []
+    private var shownCanvas: CanvasReader?
 
-    private func storageKey() -> String { "gnorium:artifact-canvas:\(testamentURL)" }
-    private func saveCanvasIndex() { localStorage.setItem(storageKey(), "\(canvasIndex)") }
+    private func storageKey() -> String { "gnorium:artifact-canvas:\(manifestURL)" }
+    /// Where the reader was last on this manifest; a transcript paged without
+    /// one opens at its start.
+    private func saveCanvasIndex() {
+      guard !stringIsEmpty(manifestURL) else { return }
+      localStorage.setItem(storageKey(), "\(canvasIndex)")
+    }
     private func savedCanvasIndex() -> Int {
-      parseInt(localStorage.getItem(storageKey()) ?? "") ?? 0
+      guard !stringIsEmpty(manifestURL) else { return 0 }
+      return parseInt(localStorage.getItem(storageKey()) ?? "") ?? 0
     }
 
     /// The window and document listeners, so a reader whose viewer has left
     /// the page can let go of them.
-    private var mouseMoveListener: Int32 = -1
-    private var mouseUpListener: Int32 = -1
     private var keyDownListener: Int32 = -1
     private var fullscreenListener: Int32 = -1
-    private var compositor: TileCompositor?
     private let root: DOM.Element
 
     /// Whether the viewer is still on the page. A form that swaps its body
@@ -548,25 +509,23 @@
     /// Let go of everything outside the viewer. The viewer's own listeners
     /// went with it; the window's and the document's did not.
     func detach() {
-      window.removeEventListener(.mousemove, mouseMoveListener)
-      window.removeEventListener(.mouseup, mouseUpListener)
       window.removeEventListener(.keydown, keyDownListener)
       document.removeEventListener(.fullscreenchange, fullscreenListener)
-      compositor?.detach()
+      for canvas in canvases { canvas.detach() }
     }
 
     init(
       root: DOM.Element,
-      testamentURL: String,
+      manifestURL: String,
       startCanvas: Int? = nil,
       startService: String = ""
     ) {
       self.root = root
+      self.manifestURL = manifestURL
       self.startCanvas = startCanvas
       self.startService = startService
       transcriptPanes = root.querySelectorAll(".artifact-transcript [data-service-id]")
-      let vp = root.querySelector("#artifact-viewport")
-      viewport = vp
+      object = root.querySelector(".artifact-object")
       pageInput = root.querySelector("#artifact-page-input")
       pageTotal = root.querySelector("#artifact-page-total")
       canvasLabelEl = root.querySelector("#artifact-canvas-label")
@@ -577,30 +536,13 @@
       nextBtn =
         root.querySelector("#artifact-next") ?? root.querySelector(".pagination-next")
 
-      if let vp, let spinner = root.querySelector("#artifact-spinner") {
-        compositor = TileCompositor(viewport: vp, spinner: spinner)
-      }
-
-      // Recenter + reload tiles whenever the viewport resizes (sidebar toggle, window resize, etc.)
-      // Guard against spurious ResizeObserver callbacks triggered by scroll in some browsers
-      vp?.observeResize { [self] w, h in
-        guard w > 0, h > 0 else { return }
-        guard w != viewportW || h != viewportH else { return }
-        viewportW = w
-        viewportH = h
-        guard canvasIndex < imageWidths.count else { return }
-        let iw = Double(imageWidths[canvasIndex]) * zoom
-        let ih = Double(imageHeights[canvasIndex]) * zoom
-        panX = (viewportW - iw) / 2
-        panY = (viewportH - ih) / 2
-        clampPan()
-        updateTransform()
-      }
-
-      self.testamentURL = testamentURL
-      setupGestures()
+      setupControls()
       setupLayers()
-      loadManifest(url: testamentURL)
+      if stringIsEmpty(manifestURL) {
+        pageTranscript()
+      } else {
+        loadManifest(url: manifestURL)
+      }
     }
 
     /// The code switch changes the transcript, not the image viewport.  Keep
@@ -657,12 +599,26 @@
       root.fetch(url) { [self] jsonStr in
         guard let jsonStr else { return }
         parseManifest(jsonStr)
-        let asked = canvasIndex(ofService: startService) ?? startCanvas ?? savedCanvasIndex()
-        let opening = max(0, min(asked, serviceIDs.count - 1))
-        canvasIndex = opening
-        updateUI()
-        loadCanvas(opening)
+        open()
       }
+    }
+
+    /// No manifest: the pages are the transcript's own, in its order.
+    private func pageTranscript() {
+      for pane in transcriptPanes {
+        serviceIDs.append(pane.dataset["service-id"] ?? "")
+        imageWidths.append(0)
+        imageHeights.append(0)
+        canvasLabels.append("")
+      }
+      open()
+    }
+
+    /// The page asked for, else the one this reader was last on.
+    private func open() {
+      guard !serviceIDs.isEmpty else { return }
+      let asked = canvasIndex(ofService: startService) ?? startCanvas ?? savedCanvasIndex()
+      loadCanvas(max(0, min(asked, serviceIDs.count - 1)))
     }
 
     private func parseManifest(_ json: String) {
@@ -687,72 +643,49 @@
       canvasIndex = idx
       saveCanvasIndex()
       updateUI()
-      let w = imageWidths[idx]
-      let h = imageHeights[idx]
-      fitToViewport(imageW: Double(w), imageH: Double(h))
-      compositor?.showSpinner()
-      compositor?.setCanvas(serviceID: serviceIDs[idx], width: w, height: h)
-      compositor?.update(panX: panX, panY: panY, zoom: zoom, viewportW: viewportW, viewportH: viewportH)
-      preloadWindow(around: idx)
+      showCanvas(idx)
     }
 
-    private func preloadWindow(around idx: Int) {
-      // Prioritize nearest canvases: +1, -1, +2, -2, ... so browser fetches most-likely-next first
-      // Preload at DPR=1 so images are cached and appear instantly on navigation
-      var urls: [String] = []
-      for dist in 1...20 {
-        let fwd = idx + dist
-        let bwd = idx - dist
-        if fwd < serviceIDs.count {
-          urls.append(artifactImageURL(serviceID: serviceIDs[fwd], width: imageWidths[fwd], height: imageHeights[fwd], dprOverride: 1.0))
-        }
-        if bwd >= 0 {
-          urls.append(artifactImageURL(serviceID: serviceIDs[bwd], width: imageWidths[bwd], height: imageHeights[bwd], dprOverride: 1.0))
-        }
+    /// The canvas of the page on screen, read; the one before it put away;
+    /// the ones either side fetched ahead. The rest fetch nothing until they
+    /// are paged to.
+    private func showCanvas(_ idx: Int) {
+      guard object != nil, imageWidths[idx] > 0, imageHeights[idx] > 0 else { return }
+      let service = serviceIDs[idx]
+      let canvas = canvasReader(ofService: service)
+      for element in object?.querySelectorAll("[data-service-id]") ?? [] {
+        let active = stringEquals(element.dataset["service-id"] ?? "", service)
+        element.setAttribute(data("active"), active ? "true" : "false")
       }
-      preloadImages(urls: urls)
-    }
-
-    private var minZoom: Double = 0.01
-
-    private func fitToViewport(imageW: Double, imageH: Double) {
-      guard let vp = viewport, let rect = vp.getBoundingClientRect() else { return }
-      viewportW = rect.width > 0 ? rect.width : 900
-      viewportH = rect.height > 0 ? rect.height : 500
-      let scaleW = viewportW / imageW
-      let scaleH = viewportH / imageH
-      minZoom = min(scaleW, scaleH)
-      zoom = minZoom
-      panX = (viewportW - imageW * zoom) / 2
-      panY = (viewportH - imageH * zoom) / 2
-    }
-
-    private func clampPan() {
-      guard canvasIndex < imageWidths.count else { return }
-      let iw = Double(imageWidths[canvasIndex]) * zoom
-      let ih = Double(imageHeights[canvasIndex]) * zoom
-      // If image is smaller than viewport in a dimension: center it, no panning allowed
-      // If image is larger: clamp so no empty gap appears at any edge
-      if iw <= viewportW {
-        panX = (viewportW - iw) / 2
-      } else {
-        panX = min(0, max(viewportW - iw, panX))
-      }
-      if ih <= viewportH {
-        panY = (viewportH - ih) / 2
-      } else {
-        panY = min(0, max(viewportH - ih, panY))
+      if let shown = shownCanvas, shown !== canvas { shown.hide() }
+      shownCanvas = canvas
+      canvas.show(width: imageWidths[idx], height: imageHeights[idx])
+      for neighbor in [idx + 1, idx - 1] where neighbor >= 0 && neighbor < serviceIDs.count {
+        CanvasReader.preload(
+          serviceID: serviceIDs[neighbor], width: imageWidths[neighbor], zoom: canvas.fittedZoom)
       }
     }
 
-    private func snapToHorizontalCenter() {
-      guard canvasIndex < imageWidths.count else { return }
-      let iw = Double(imageWidths[canvasIndex]) * zoom
-      panX = (viewportW - iw) / 2
-    }
-
-    private func updateTransform() {
-      compositor?.update(panX: panX, panY: panY, zoom: zoom, viewportW: viewportW, viewportH: viewportH)
+    /// The reader of a canvas, made the first time it is shown: over the
+    /// slot's canvas for that image service, else one drawn for it.
+    private func canvasReader(ofService service: String) -> CanvasReader {
+      for canvas in canvases where stringEquals(canvas.serviceID, service) {
+        return canvas
+      }
+      var element: DOM.Element?
+      for candidate in object?.querySelectorAll(".canvas-view") ?? []
+      where stringEquals(candidate.dataset["service-id"] ?? "", service) {
+        element = candidate
+        break
+      }
+      if element == nil {
+        let drawn = CanvasReader.make(serviceID: service)
+        object?.appendChild(drawn)
+        element = drawn
+      }
+      let canvas = CanvasReader(root: element ?? CanvasReader.make(serviceID: service))
+      canvases.append(canvas)
+      return canvas
     }
 
     private func updateUI() {
@@ -823,59 +756,7 @@
       loadCanvas(idx)
     }
 
-    private func artifactImageURL(serviceID: String, width: Int, height: Int, dprOverride: Double? = nil) -> String {
-      let base = stringEndsWith(serviceID, "/") ? stringSubstring(serviceID, from: 0, to: serviceID.utf8.count - 1) : serviceID
-      let dpr = dprOverride ?? (window.devicePixelRatio > 0 ? window.devicePixelRatio : 2.0)
-      let displayedW = Double(width) * zoom
-      let reqW = min(width, max(64, Int(displayedW * dpr)))
-      return "\(base)/full/\(reqW),/0/default.\(compositor?.format ?? TileCompositor.defaultFormat)"
-    }
-
-    private func setupGestures() {
-      guard let vp = viewport else { return }
-
-      vp.addEventListener(.mousedown) { [self] e in
-        e.preventDefault()
-        isDragging = true
-        dragStartX = e.clientX
-        dragStartY = e.clientY
-        dragPanX = panX
-        dragPanY = panY
-        vp.setAttribute(data("dragging"), "true")
-      }
-
-      mouseMoveListener = window.addEventListener(.mousemove) { [self] e in
-        guard isDragging else { return }
-        panX = dragPanX + (e.clientX - dragStartX)
-        panY = dragPanY + (e.clientY - dragStartY)
-        clampPan()
-        updateTransform()
-      }
-
-      mouseUpListener = window.addEventListener(.mouseup) { [self] _ in
-        isDragging = false
-        vp.setAttribute(data("dragging"), "false")
-        if zoom <= minZoom + 0.001 {
-          snapToHorizontalCenter()
-          updateTransform()
-        }
-      }
-
-      vp.addEventListener(.wheel) { [self] e in
-        e.preventDefault()
-        // Proportional to deltaY magnitude, capped so mouse wheel isn't too fast
-        let delta = max(-40.0, min(40.0, e.deltaY))
-        let dz = 1.0 - delta * 0.005
-        let cx = e.clientX - (viewport?.getBoundingClientRect()?.x ?? 0)
-        let cy = e.clientY - (viewport?.getBoundingClientRect()?.y ?? 0)
-        let newZoom = max(minZoom, min(8.0, zoom * dz))
-        panX = cx - (cx - panX) * (newZoom / zoom)
-        panY = cy - (cy - panY) * (newZoom / zoom)
-        zoom = newZoom
-        clampPan()
-        updateTransform()
-      }
-
+    private func setupControls() {
       prevBtn?.addEventListener(.click) { [self] _ in navigate(-1) }
       nextBtn?.addEventListener(.click) { [self] _ in navigate(1) }
 
@@ -888,9 +769,7 @@
       }
 
       fullscreenListener = document.addEventListener(.fullscreenchange) { [self] _ in
-        guard self.canvasIndex < self.imageWidths.count else { return }
-        self.fitToViewport(imageW: Double(self.imageWidths[self.canvasIndex]), imageH: Double(self.imageHeights[self.canvasIndex]))
-        compositor?.update(panX: self.panX, panY: self.panY, zoom: self.zoom, viewportW: self.viewportW, viewportH: self.viewportH)
+        self.shownCanvas?.refit()
       }
 
       pageInput?.addEventListener(.keydown) { [self] e in
@@ -921,7 +800,7 @@
       }
     }
 
-    /// Where an image service sits in this manifest, if it is in it at all.
+    /// Where an image service sits among the pages, if it is there at all.
     private func canvasIndex(ofService service: String) -> Int? {
       guard !stringIsEmpty(service) else { return nil }
       for (index, id) in serviceIDs.enumerated() where stringEquals(id, service) {
@@ -955,7 +834,7 @@
         }
       }
       // Whoever drew the transcript may have work to do when it changes — syntax
-      // colouring a page of markup, say, which is worth doing for the page on
+      // coloring a page of markup, say, which is worth doing for the page on
       // screen and wasteful for the nine hundred behind it.
       root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
     }

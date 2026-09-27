@@ -5,8 +5,8 @@
   import WebAPIs
   import WebTypes
 
-  /// The tiles of one viewer. One per reader, like the reader: the image
-  /// on screen, its tiers and its pending load belong to one viewport.
+  /// The tiles of one canvas. One per canvas, like its reader: the image,
+  /// its tiers and its pending load belong to one viewport.
   final class TileCompositor: @unchecked Sendable {
     static let tileSize: Int = 512
 
@@ -49,9 +49,9 @@
       spinnerEl = spinner
       let svgNamespace = "http://www.w3.org/2000/svg"
       let svg = document.createElementNS(svgNamespace, "svg")
-      svg.setAttribute(.class, "artifact-tile-surface")
+      svg.setAttribute(.class, "canvas-view-tile-surface")
       let c = document.createElementNS(svgNamespace, "g")
-      c.setAttribute(.class, "artifact-tile-compositor")
+      c.setAttribute(.class, "canvas-view-tile-compositor")
       svg.appendChild(c)
       viewport.insertBefore(svg, spinner)
       surface = svg
@@ -76,17 +76,7 @@
     }
 
     private static func probeFormat(base: String, completion: @escaping @Sendable (String) -> Void) {
-      // Extract host from base URL to key the cache
-      var host = base
-      if let slashSlashIdx = stringIndexOf(base, "//") {
-        let afterSlash = slashSlashIdx + 2
-        let remaining = stringSubstring(base, from: afterSlash, to: base.utf8.count)
-        if let nextSlash = stringIndexOf(remaining, "/") {
-          host = stringSubstring(remaining, from: 0, to: nextSlash)
-        } else {
-          host = remaining
-        }
-      }
+      let host = host(of: base)
       // Check cache
       var i = 0
       while i + 1 < formatCache.count {
@@ -109,6 +99,14 @@
       }
     }
 
+    /// The host of a service URL, which keys the format cache.
+    private static func host(of base: String) -> String {
+      guard let slashSlashIdx = stringIndexOf(base, "//") else { return base }
+      let remaining = stringSubstring(base, from: slashSlashIdx + 2, to: base.utf8.count)
+      guard let nextSlash = stringIndexOf(remaining, "/") else { return remaining }
+      return stringSubstring(remaining, from: 0, to: nextSlash)
+    }
+
     func update(panX: Double, panY: Double, zoom: Double, viewportW: Double, viewportH: Double) {
       // Transform is applied immediately — smooth pan/zoom feel
       container?.setAttribute("transform", "translate(\(doubleToString(panX)) \(doubleToString(panY))) scale(\(doubleToString(zoom)))")
@@ -127,6 +125,28 @@
     /// Stop a tile load that is still waiting to fire: its viewer is gone.
     func detach() {
       cancelDebounce()
+    }
+
+    /// Every tile let go, the low-resolution copy too: the canvas is put
+    /// away. Shown again, it starts over from `setCanvas`.
+    func clear() {
+      cancelDebounce()
+      clearAllTiles()
+      backdropImg = nil
+      currentTier = -1
+      spinnerEl?.setAttribute(data("visible"), "false")
+    }
+
+    /// The format a service's host was found to serve, or the default before
+    /// any canvas of it has been probed.
+    static func format(forService base: String) -> String {
+      let host = host(of: base)
+      var i = 0
+      while i + 1 < formatCache.count {
+        if stringEquals(formatCache[i], host) { return formatCache[i + 1] }
+        i += 2
+      }
+      return defaultFormat
     }
 
     // MARK: - Private
@@ -156,7 +176,7 @@
       let base = baseURL(serviceID)
       let url = "\(base)/full/256,/0/default.\(imageFormat)"
       let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
-      img.setAttribute(.class, "artifact-tile-image")
+      img.setAttribute(.class, "canvas-view-tile-image")
       img.setAttribute(.draggable, "false")
       img.setAttribute("x", "0")
       img.setAttribute("y", "0")
@@ -272,7 +292,7 @@
 
     private func addTile(x: Int, y: Int, w: Int, h: Int, url: String) -> DOM.Element {
       let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
-      img.setAttribute(.class, "artifact-tile-image")
+      img.setAttribute(.class, "canvas-view-tile-image")
       img.setAttribute(.draggable, "false")
       // 1px overdraw on each edge eliminates sub-pixel rendering seams between adjacent tiles
       img.setAttribute("x", intToString(x))
