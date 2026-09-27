@@ -114,6 +114,7 @@
               }
             }
             .class("artifact-title-block")
+            .data("edge-fade", "expand")
           } else {
             span().id("artifact-title").class("artifact-title-empty")
           }
@@ -186,6 +187,7 @@
           span {}
             .id("artifact-canvas-label")
             .class("artifact-canvas-label")
+            .data("edge-fade", "expand")
 
           div().id("artifact-zoom-controls")
             .class("artifact-zoom-controls")
@@ -232,10 +234,8 @@
           lineHeight(1.4)
           flex(1)
           minWidth(0)
-          overflow(.hidden)
-          textOverflow(.ellipsis)
-          whiteSpace(.nowrap)
         }
+        fadeOverflow(".artifact-title-block")
         descendant(".artifact-title-primary") {
           fontWeight(fontWeightSemiBold)
           color(colorBase)
@@ -385,10 +385,8 @@
           fontSize(fontSizeXSmall12)
           color(colorSubtle)
           flex(1)
-          overflow(.hidden)
-          textOverflow(.ellipsis)
-          whiteSpace(.nowrap)
         }
+        fadeOverflow("& .artifact-canvas-label")
         descendant(".artifact-zoom-controls") {
           display(.flex)
           alignItems(.center)
