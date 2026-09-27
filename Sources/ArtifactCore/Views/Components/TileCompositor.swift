@@ -30,6 +30,9 @@
     private var spinnerEl: DOM.Element?
 
     private var serviceID: String = ""
+    /// Whether a canvas is shown: a probe that answers after it was put away
+    /// draws nothing.
+    private var showing = false
     private var imageW: Int = 0
     private var imageH: Int = 0
 
@@ -60,6 +63,7 @@
 
     func setCanvas(serviceID: String, width: Int, height: Int) {
       self.serviceID = serviceID
+      showing = true
       imageW = width
       imageH = height
       currentTier = -1
@@ -71,6 +75,7 @@
       surface?.setAttribute("viewBox", "0 0 \(intToString(width)) \(intToString(height))")
       Self.probeFormat(base: baseURL(serviceID)) { [self] fmt in
         imageFormat = fmt
+        guard showing, stringEquals(self.serviceID, serviceID) else { return }
         loadBackdrop()
       }
     }
@@ -130,6 +135,7 @@
     /// Every tile let go, the low-resolution copy too: the canvas is put
     /// away. Shown again, it starts over from `setCanvas`.
     func clear() {
+      showing = false
       cancelDebounce()
       clearAllTiles()
       backdropImg = nil
@@ -157,6 +163,7 @@
 
     private func flushTileLoad() {
       debounceTimer = -1
+      guard showing else { return }
       let dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 2.0
       let zoom = pendingZoom
       let tier = zoomTier(zoom)
