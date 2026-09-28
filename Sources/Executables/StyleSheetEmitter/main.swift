@@ -13,7 +13,7 @@ struct StyleSheetEmitter {
       publicDir = "Public"
     }
     StaticStyleSheetEmitter.begin(publicDirectory: publicDir)
-    // ArtifactCore catalogue — add representative instances as needed.
+    // ArtifactCore catalog — add representative instances as needed.
     // Example: _ = ArtifactView(...).build()
     let paths = StaticStyleSheetEmitter.finish()
     guard !paths.isEmpty else { throw E.missing }
