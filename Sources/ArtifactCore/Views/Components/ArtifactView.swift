@@ -49,6 +49,12 @@
     /// `data-service-id`: shown, like the transcript, only while its canvas
     /// is on screen, and read only then.
     let canvas: [DOM.Node]
+    /// Controls the host adds to the header, before the page nav (a Find
+    /// button).
+    let actions: [DOM.Node]
+    /// A row the host adds under the header's own, the width of the viewer
+    /// (a find bar), shown as the host decides.
+    let bar: [DOM.Node]
 
     public init(
       manifestURL: String = "",
@@ -60,7 +66,9 @@
       codeSwitch: Bool = false,
       codeSwitchInfo: String? = nil,
       @HTMLBuilder transcript: () -> [DOM.Node] = { [] },
-      @HTMLBuilder canvas: () -> [DOM.Node] = { [] }
+      @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
+      @HTMLBuilder actions: () -> [DOM.Node] = { [] },
+      @HTMLBuilder bar: () -> [DOM.Node] = { [] }
     ) {
       self.manifestURL = manifestURL
       self.title = title
@@ -72,6 +80,8 @@
       self.codeSwitchInfo = codeSwitchInfo
       self.transcript = transcript()
       self.canvas = canvas()
+      self.actions = actions()
+      self.bar = bar()
     }
 
     private var authorsLine: String {
@@ -141,6 +151,11 @@
             span().id("artifact-title").class("artifact-title-empty")
           }
 
+          if !actions.isEmpty {
+            div { actions }
+              .class("artifact-header-actions")
+          }
+
           // Page nav — top right (edge prev/next stay on the viewer)
           PaginationView(
             currentPage: 1,
@@ -159,6 +174,11 @@
             inputAriaLabel: "Page number",
             class: "artifact-page-nav"
           )
+
+          if !bar.isEmpty {
+            div { bar }
+              .class("artifact-header-bar")
+          }
         }
         .class("artifact-header")
 
@@ -235,6 +255,8 @@
           backgroundColor(backgroundColorBase)
         }
         selector(".artifact-header") {
+          // The host's bar takes a row of its own under the header's.
+          flexWrap(.wrap)
           gap(spacing12)
           padding(spacing8, spacing16)
           borderBlockEnd(borderWidthBase, .solid, borderColorBase)
@@ -255,6 +277,16 @@
         descendant(".artifact-title-subtitle") { color(colorSubtle) }
         descendant(".artifact-title-empty") {
           flex(1)
+          minWidth(0)
+        }
+        descendant(".artifact-header-actions") {
+          display(.flex)
+          alignItems(.center)
+          gap(spacing8)
+          flexShrink(0)
+        }
+        descendant(".artifact-header-bar") {
+          flexBasis(perc(100))
           minWidth(0)
         }
         descendant(".artifact-page-nav") {
@@ -538,6 +570,11 @@
 
       setupControls()
       setupLayers()
+      // A host turns the reader to a page by its image service (a find
+      // bar's match): an `artifact-show-service` event on the viewer.
+      _ = root.addEventListener("artifact-show-service") { [self] (event: Event) in
+        if let index = self.canvasIndex(ofService: event.detail) { self.loadCanvas(index) }
+      }
       if stringIsEmpty(manifestURL) {
         pageTranscript()
       } else {
@@ -595,11 +632,20 @@
       }
     }
 
+    /// A manifest that cannot be read pages as none is there: by the
+    /// transcript's own pages.
     private func loadManifest(url: String) {
       root.fetch(url) { [self] jsonStr in
-        guard let jsonStr else { return }
+        guard let jsonStr else {
+          pageTranscript()
+          return
+        }
         parseManifest(jsonStr)
-        open()
+        if serviceIDs.isEmpty {
+          pageTranscript()
+        } else {
+          open()
+        }
       }
     }
 
