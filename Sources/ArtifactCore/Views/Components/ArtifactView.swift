@@ -45,10 +45,6 @@
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
     /// say — an editor that takes its edits in the code says so here.
     let codeSwitchInfo: String?
-    /// Whether the footer carries a switch to the transcript's word-for-word
-    /// gloss, its layer `data-transcript-layer="interlinear"`: shown in the
-    /// transcript's place while it is on, before any other layer.
-    let interlinearSwitch: Bool
     /// The object's images, one per canvas, each naming its image service in
     /// `data-service-id`: shown, like the transcript, only while its canvas
     /// is on screen, and read only then.
@@ -63,7 +59,6 @@
       startService: String? = nil,
       codeSwitch: Bool = false,
       codeSwitchInfo: String? = nil,
-      interlinearSwitch: Bool = false,
       @HTMLBuilder transcript: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] }
     ) {
@@ -75,7 +70,6 @@
       self.startService = startService
       self.codeSwitch = codeSwitch
       self.codeSwitchInfo = codeSwitchInfo
-      self.interlinearSwitch = interlinearSwitch
       self.transcript = transcript()
       self.canvas = canvas()
     }
@@ -130,21 +124,6 @@
                 IconView(icon: { size in [InfoIconView(width: size, height: size)] }, size: .small)
               }
             }
-          }
-          if interlinearSwitch, !transcript.isEmpty {
-            ToggleButtonView(
-              label: "Interlinear",
-              icon: nil as HTML.HTMLSpanElement?,
-              modelValue: false,
-              weight: .static,
-              buttonColor: .gray,
-              fullWidth: false,
-              ariaLabel: "Each word of this transcript over its gloss",
-              indicateSelection: true,
-              size: .mini,
-              class: "artifact-interlinear-toggle",
-              labelFontWeight: fontWeightNormal
-            )
           }
           if let t = title, !t.isEmpty {
             span {
@@ -578,12 +557,6 @@
     /// as it stands.
     private func setupLayers() {
       let code = root.querySelector(".artifact-code-toggle")
-      let interlinear = root.querySelector(".artifact-interlinear-toggle")
-      interlinearVisible = stringEquals(interlinear?.getAttribute("aria-pressed") ?? "false", "true")
-      _ = interlinear?.addEventListener("toggle-button-update") { [self] (event: Event) in
-        self.interlinearVisible = stringEquals(event.detail, "true")
-        self.showLayers()
-      }
       if case .some = root.querySelector(".artifact-transcript [data-transcript-layer='translation']") {
         translatable = true
       }
@@ -602,18 +575,15 @@
     }
 
     private var codeVisible = false
-    private var interlinearVisible = false
     private var translationVisible = false
     /// Whether the transcript has a translated layer to show at all.
     private var translatable = false
 
-    /// The one layer of the transcript that shows: the word-for-word gloss
-    /// while the viewer's Interlinear switch is on, else the translated one
-    /// while the page's language switch is on, else the code while Raw is on,
-    /// else the transcript.
+    /// The one layer of the transcript that shows: the translated one while the
+    /// page's language switch is on, else the code while Raw is on, else
+    /// the transcript.
     private func showLayers() {
-      let layer = interlinearVisible
-        ? "interlinear" : translatable && translationVisible ? "translation" : codeVisible ? "code" : "rendered"
+      let layer = translatable && translationVisible ? "translation" : codeVisible ? "code" : "rendered"
       for text in root.querySelectorAll(".artifact-transcript [data-transcript-layer='rendered']") {
         if stringEquals(layer, "rendered") { text.style.display(.block) } else { text.style.display(.none) }
       }
@@ -622,9 +592,6 @@
       }
       for translated in root.querySelectorAll(".artifact-transcript [data-transcript-layer='translation']") {
         if stringEquals(layer, "translation") { translated.style.display(.flex) } else { translated.style.display(.none) }
-      }
-      for glossed in root.querySelectorAll(".artifact-transcript [data-transcript-layer='interlinear']") {
-        if stringEquals(layer, "interlinear") { glossed.style.display(.flex) } else { glossed.style.display(.none) }
       }
     }
 
