@@ -49,11 +49,20 @@
     /// `data-service-id`: shown, like the transcript, only while its canvas
     /// is on screen, and read only then.
     let canvas: [DOM.Node]
+    /// Whether the header carries a switch that shows the canvas slot, the
+    /// page images, beside the transcript (user, 2026-09-29). Off by default:
+    /// the transcript takes the whole width and no page image is fetched.
+    /// The choice holds for the browser session (`sessionStorage`), across
+    /// pages of the reader and the site's pages alike, and every reader on
+    /// the page follows it. Without the switch the canvas always shows.
+    let canvasSwitch: Bool
     /// Controls the host adds to the header, before the page nav (a Find
     /// button).
     let actions: [DOM.Node]
     /// A row the host adds under the header's own, the width of the viewer
-    /// (a find bar), shown as the host decides.
+    /// (a find bar), shown while the host marks the row open
+    /// (`data-open="true"` on `.artifact-header-bar`). Closed, it takes no
+    /// room: an empty row still took the header's gap under the controls.
     let bar: [DOM.Node]
 
     public init(
@@ -65,6 +74,7 @@
       startService: String? = nil,
       codeSwitch: Bool = false,
       codeSwitchInfo: String? = nil,
+      canvasSwitch: Bool = false,
       @HTMLBuilder transcript: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
       @HTMLBuilder actions: () -> [DOM.Node] = { [] },
@@ -78,6 +88,7 @@
       self.startService = startService
       self.codeSwitch = codeSwitch
       self.codeSwitchInfo = codeSwitchInfo
+      self.canvasSwitch = canvasSwitch
       self.transcript = transcript()
       self.canvas = canvas()
       self.actions = actions()
@@ -103,6 +114,10 @@
     private var headerSubtitle: String {
       authorsLine.isEmpty ? "" : "by \(authorsLine)"
     }
+
+    /// Whether the header shows the page-images switch: only when there are
+    /// page images to show.
+    private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty }
 
     public func build() -> DOM.Node {
       // A canvas the reader draws itself, for a canvas the slot lacks, is
@@ -151,9 +166,26 @@
             span().id("artifact-title").class("artifact-title-empty")
           }
 
-          if !actions.isEmpty {
-            div { actions }
-              .class("artifact-header-actions")
+          if !actions.isEmpty || switchesCanvas {
+            div {
+              actions
+              // The page images, beside the host's controls and nearest
+              // the pager.
+              if switchesCanvas {
+                ToggleButtonView(
+                  label: "Page images",
+                  icon: IconView(icon: { s in ImageIconView(width: s, height: s) }, size: .small),
+                  modelValue: false,
+                  weight: .subtle,
+                  buttonColor: .gray,
+                  iconOnly: true,
+                  ariaLabel: "Page images",
+                  size: .mini,
+                  class: "artifact-canvas-toggle"
+                )
+              }
+            }
+            .class("artifact-header-actions")
           }
 
           // Page nav — top right (edge prev/next stay on the viewer)
@@ -178,6 +210,7 @@
           if !bar.isEmpty {
             div { bar }
               .class("artifact-header-bar")
+              .data("open", false)
           }
         }
         .class("artifact-header")
@@ -237,6 +270,9 @@
       .data("start-canvas", startCanvas.map { "\($0)" } ?? "")
       .data("start-service", startService ?? "")
       .data("style", style.rawValue)
+      // Hidden until the reader knows the session's choice, so that a reader
+      // left off never shows an empty column first.
+      .data("canvas-shown", !switchesCanvas)
       .style {
         selector("&") {
           display(.flex)
@@ -288,6 +324,9 @@
         descendant(".artifact-header-bar") {
           flexBasis(perc(100))
           minWidth(0)
+        }
+        descendant(".artifact-header-bar[data-open='false']") {
+          display(.none)
         }
         descendant(".artifact-page-nav") {
           flexShrink(0)
@@ -341,6 +380,15 @@
             borderInlineEnd(.none).important()
             borderBlockEnd(borderWidthBase, .solid, borderColorSubtle).important()
           }
+        }
+        // The page images switched off: the transcript alone, the whole
+        // width, with no divider beside or under it.
+        selector("&[data-canvas-shown='false'] .artifact-object") {
+          display(.none)
+        }
+        selector("&[data-canvas-shown='false'] .artifact-transcript") {
+          borderInlineEnd(.none).important()
+          borderBlockEnd(.none).important()
         }
         // The switch is in the header and the layers are in the pane, so the
         // rule that ties them lives on the viewer, where both are in scope.
@@ -452,6 +500,18 @@
 
     public init() {}
 
+    /// Where the page-images switch keeps its state: for the browser
+    /// session, so it holds across the reader's pages and the site's, and is
+    /// off again in a new session. Storage refused reads as off.
+    static let canvasShownKey = "gnorium:artifact-page-images"
+
+    /// The page images shown or put away in every reader on the page, as
+    /// one reader's switch was pressed, and the choice kept for the session.
+    static func showCanvases(_ shown: Bool) {
+      sessionStorage.setItem(canvasShownKey, shown ? "true" : "false")
+      for reader in instance?.readers ?? [] { reader.setCanvasShown(shown) }
+    }
+
     /// The viewers under `root`, which may be a fragment swapped in after the
     /// page's own pass. A viewer already reading is left alone, and a reader
     /// whose viewer has left the document lets go of the window it listened
@@ -515,6 +575,10 @@
     private var object: DOM.Element?
     private var canvases: [CanvasReader] = []
     private var shownCanvas: CanvasReader?
+    /// The page-images switch, when the viewer has one, and whether the
+    /// canvas shows: always without the switch.
+    private var canvasToggle: DOM.Element?
+    private var canvasShown = true
 
     private func storageKey() -> String { "gnorium:artifact-canvas:\(manifestURL)" }
     /// Where the reader was last on this manifest; a transcript paged without
@@ -570,6 +634,7 @@
 
       setupControls()
       setupLayers()
+      setupCanvasSwitch()
       // A host turns the reader to a page by its image service (a find
       // bar's match): an `artifact-show-service` event on the viewer.
       _ = root.addEventListener("artifact-show-service") { [self] (event: Event) in
@@ -609,6 +674,40 @@
         self.translationVisible = stringEquals(event.detail, "true")
         self.showLayers()
       }
+    }
+
+    /// The page images, off unless this session turned them on.
+    private func setupCanvasSwitch() {
+      guard let toggle = root.querySelector(".artifact-canvas-toggle") else { return }
+      canvasToggle = toggle
+      canvasShown = stringEquals(sessionStorage.getItem(ArtifactHydration.canvasShownKey) ?? "false", "true")
+      reflectCanvasShown()
+      _ = toggle.addEventListener("toggle-button-update") { (event: Event) in
+        ArtifactHydration.showCanvases(stringEquals(event.detail, "true"))
+      }
+    }
+
+    /// The page images shown, the page on screen's canvas read; or put
+    /// away, its tiles let go.
+    func setCanvasShown(_ shown: Bool) {
+      guard let _ = canvasToggle, shown != canvasShown else { return }
+      canvasShown = shown
+      reflectCanvasShown()
+      if shown {
+        if canvasIndex < serviceIDs.count { showCanvas(canvasIndex) }
+      } else {
+        shownCanvas?.hide()
+        shownCanvas = nil
+      }
+    }
+
+    /// The viewer's column and the switch, as the state is: the switch's
+    /// wrapper (which its styles read) and its button (which assistive
+    /// technology reads).
+    private func reflectCanvasShown() {
+      root.setAttribute(data("canvas-shown"), canvasShown ? "true" : "false")
+      canvasToggle?.setAttribute("aria-pressed", canvasShown ? "true" : "false")
+      canvasToggle?.querySelector("button")?.setAttribute("aria-pressed", canvasShown ? "true" : "false")
     }
 
     private var codeVisible = false
@@ -696,7 +795,7 @@
     /// the ones either side fetched ahead. The rest fetch nothing until they
     /// are paged to.
     private func showCanvas(_ idx: Int) {
-      guard object != nil, imageWidths[idx] > 0, imageHeights[idx] > 0 else { return }
+      guard canvasShown, object != nil, imageWidths[idx] > 0, imageHeights[idx] > 0 else { return }
       let service = serviceIDs[idx]
       let canvas = canvasReader(ofService: service)
       for element in object?.querySelectorAll("[data-service-id]") ?? [] {
