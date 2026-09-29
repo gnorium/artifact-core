@@ -127,6 +127,9 @@
       return div {
         // ── Header ──────────────────────────────────────────────────────────
         header {
+          // One row of controls, never wrapped: where a narrow reader cannot
+          // hold them all, the row scrolls sideways (user, 2026-09-30).
+          div {
           // The switch between the transcript and the code it was made from.
           // First in the row, so it sits at the top left beside the transcript it
           // changes: the title block grows to fill and would push it right.
@@ -170,14 +173,17 @@
             div {
               actions
               // The semblance, beside the host's controls and nearest the
-              // pager: a left chevron alone, the evidence pane opening from
-              // the end side (user, 2026-09-30).
+              // pager: a chevron alone, pointing where the evidence pane
+              // opens: to the end side beside the text, up when the panes
+              // stack on a phone (user, 2026-09-30). Sized and weighted as
+              // the pager's own mini chevrons (plain, 24, a 12 icon), so the
+              // header reads as one row of mini controls.
               if switchesCanvas {
                 ToggleButtonView(
                   label: "Semblance",
-                  icon: IconView(icon: { s in PreviousIconView(width: s, height: s) }, size: .small),
+                  icon: IconView(icon: { s in PreviousIconView(width: s, height: s) }, size: .xSmall),
                   modelValue: false,
-                  weight: .subtle,
+                  weight: .plain,
                   buttonColor: .gray,
                   iconOnly: true,
                   ariaLabel: "Semblance",
@@ -207,6 +213,8 @@
             inputAriaLabel: "Page number",
             class: "artifact-page-nav"
           )
+          }
+          .class("artifact-header-row")
 
           if !bar.isEmpty {
             div { bar }
@@ -292,12 +300,32 @@
           backgroundColor(backgroundColorBase)
         }
         selector(".artifact-header") {
-          // The host's bar takes a row of its own under the header's.
-          flexWrap(.wrap)
+          // The controls' row, and the host's bar in a row of its own under
+          // it.
+          flexDirection(.column)
+          alignItems(.stretch)
           gap(spacing12)
-          padding(spacing8, spacing16)
+          // Half the inset here and half on each row, so the row's
+          // scrollport takes in the room the pager's mini chevrons reach
+          // into past its box (they sit a step outside it) and a control's
+          // focus ring, which it would otherwise cut off.
+          padding(spacing4, spacing8)
           borderBlockEnd(borderWidthBase, .solid, borderColorBase)
           minHeight(px(36))
+        }
+        // One row, never wrapped: past its width it scrolls sideways under
+        // a swipe, with no scrollbar drawn (the tabs' pattern), and never
+        // the page.
+        descendant(".artifact-header-row") {
+          display(.flex)
+          alignItems(.center)
+          gap(spacing12)
+          minWidth(0)
+          padding(spacing4, spacing8)
+          overflowX(.auto)
+          overflowY(.hidden)
+          scrollbarWidth(.none)
+          pseudoElement(.webkitScrollbar) { display(.none).important() }
         }
         selector(".artifact-title-block") {
           fontFamily(typographyFontSans)
@@ -323,14 +351,28 @@
           flexShrink(0)
         }
         descendant(".artifact-header-bar") {
-          flexBasis(perc(100))
           minWidth(0)
+          padding(spacing0, spacing8, spacing4)
         }
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
         }
         descendant(".artifact-page-nav") {
           flexShrink(0)
+        }
+        // Where the panes stack (the viewer container's own breakpoint), the
+        // semblance opens under the text: the chevron points up. The icon
+        // itself mirrors in a right-to-left page (then pointing right), so
+        // there it turns the other way to point up too.
+        descendant(".artifact-canvas-toggle .button-icon") {
+          media(maxWidth(maxWidthBreakpointMobile)) {
+            transform(rotate(deg(90))).important()
+          }
+        }
+        selector("& .artifact-canvas-toggle .button-icon:dir(rtl)") {
+          media(maxWidth(maxWidthBreakpointMobile)) {
+            transform(rotate(deg(-90))).important()
+          }
         }
         // Beside the switch it explains, no nearer than the switch sits to
         // the title: the header's own gap.
