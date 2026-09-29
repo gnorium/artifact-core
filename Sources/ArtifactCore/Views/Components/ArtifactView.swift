@@ -169,17 +169,18 @@
           if !actions.isEmpty || switchesCanvas {
             div {
               actions
-              // The page images, beside the host's controls and nearest
-              // the pager.
+              // The semblance, beside the host's controls and nearest the
+              // pager: a left chevron alone, the evidence pane opening from
+              // the end side (user, 2026-09-30).
               if switchesCanvas {
                 ToggleButtonView(
-                  label: "Page images",
-                  icon: IconView(icon: { s in ImageIconView(width: s, height: s) }, size: .small),
+                  label: "Semblance",
+                  icon: IconView(icon: { s in PreviousIconView(width: s, height: s) }, size: .small),
                   modelValue: false,
                   weight: .subtle,
                   buttonColor: .gray,
                   iconOnly: true,
-                  ariaLabel: "Page images",
+                  ariaLabel: "Semblance",
                   size: .mini,
                   class: "artifact-canvas-toggle"
                 )
