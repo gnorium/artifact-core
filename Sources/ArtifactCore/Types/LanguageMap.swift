@@ -1,7 +1,7 @@
 import EmbeddedSwiftUtilities
 
 public struct LanguageMap: Sendable {
-  // Array instead of [String: [String]] — Dictionary<String, _> requires
+  // Array instead of [String: [String]]—Dictionary<String, _> requires
   // String.hashValue, which pulls in Unicode normalization tables unavailable
   // in embedded Swift WASM. Entry counts here are always small (a handful of
   // languages), so a linear scan with stringEquals is the safe substitute.

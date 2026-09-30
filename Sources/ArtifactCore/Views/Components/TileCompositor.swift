@@ -12,12 +12,12 @@
 
     /// What a reader asks for before the probe has answered.
     static let defaultFormat = "jpg"
-    // Image format: "webp" if IIIF server supports it, "jpg" otherwise — probed via info.json
+    // Image format: "webp" if IIIF server supports it, "jpg" otherwise—probed via info.json
     private var imageFormat: String = TileCompositor.defaultFormat
     // Cache probe result per service host so we only fetch info.json once per server
     private nonisolated(unsafe) static var formatCache: [String] = []  // even=host, odd=format
 
-    // Backdrop: permanent low-res full image always visible — never cleared on zoom
+    // Backdrop: permanent low-res full image always visible—never cleared on zoom
     private var backdropImg: DOM.Element?
 
     // Tile key: zoomTier * 10_000_000 + ty * 10_000 + tx
@@ -36,7 +36,7 @@
     private var imageW: Int = 0
     private var imageH: Int = 0
 
-    // Debounce state — tile loads fire 150ms after last wheel/pan event
+    // Debounce state—tile loads fire 150ms after last wheel/pan event
     private var debounceTimer: Int32 = -1
     private var pendingPanX: Double = 0
     private var pendingPanY: Double = 0
@@ -113,7 +113,7 @@
     }
 
     func update(panX: Double, panY: Double, zoom: Double, viewportW: Double, viewportH: Double) {
-      // Transform is applied immediately — smooth pan/zoom feel
+      // Transform is applied immediately—smooth pan/zoom feel
       container?.setAttribute("transform", "translate(\(doubleToString(panX)) \(doubleToString(panY))) scale(\(doubleToString(zoom)))")
       guard imageW > 0, imageH > 0 else { return }
 
@@ -177,7 +177,7 @@
       }
     }
 
-    // Low-res backdrop: full image at 256px — loads in ~200ms, always present
+    // Low-res backdrop: full image at 256px—loads in ~200ms, always present
     private func loadBackdrop() {
       guard imageW > 0 else { return }
       let base = baseURL(serviceID)
@@ -209,7 +209,7 @@
       let key = tier * 10_000_000 + 5_000_000
       guard tiles[key] == nil else { return }
       let base = baseURL(serviceID)
-      // Exact size — no power-of-2 snap; single URL per zoom level, no cache-sharing benefit
+      // Exact size—no power-of-2 snap; single URL per zoom level, no cache-sharing benefit
       let reqW = min(imageW, max(64, Int(Double(imageW) * zoom * dpr)))
       let url = "\(base)/full/\(reqW),/0/default.\(imageFormat)"
       let img = addTile(x: 0, y: 0, w: imageW, h: imageH, url: url)
@@ -266,7 +266,7 @@
     /// These tiles are SVG `<image>` elements, which have no `complete` to
     /// poll: that property belongs to `HTMLImageElement`. Polling one asked the
     /// bridge a question it could only answer "no" to, so the spinner ran every
-    /// frame for the life of the page and never hid — over an image that had
+    /// frame for the life of the page and never hid—over an image that had
     /// been on screen since the first second. The element says when it is
     /// ready, so listen to it; a tile that errors also counts as settled, or a
     /// dead URL is an object that never finishes loading.
@@ -279,7 +279,7 @@
       _ = img.addEventListener(.error) { _ in onReady() }
     }
 
-    // Remove all tiles not belonging to `tier` (backdrop is untouched — not in tiles dict)
+    // Remove all tiles not belonging to `tier` (backdrop is untouched—not in tiles dict)
     private func clearTilesExcept(tier: Int) {
       var toRemove: [Int] = []
       for (key, el) in tiles {
@@ -306,7 +306,7 @@
       img.setAttribute("y", intToString(y))
       img.setAttribute("width", intToString(w + 1))
       img.setAttribute("height", intToString(h + 1))
-      // Hidden until loaded — backdrop shows through.
+      // Hidden until loaded—backdrop shows through.
       img.setAttribute(data("loaded"), "false")
       img.setAttribute("href", url)
       _ = img.addEventListener(.load) { _ in img.setAttribute(data("loaded"), "true") }

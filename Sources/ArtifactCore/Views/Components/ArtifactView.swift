@@ -24,7 +24,7 @@
     let authors: [String]
     let style: CSSStyle
     /// Which canvas the viewer opens on, when the page knows better than the
-    /// reader's last visit — a deep link to one page of the object.
+    /// reader's last visit—a deep link to one page of the object.
     ///
     /// ``startService`` names it by image service, which is what a deep link
     /// should carry: a page number only means the same page if the manifest is
@@ -38,12 +38,12 @@
     /// screen, so the transcript pages with the object.
     let transcript: [DOM.Node]
     /// Whether the footer carries a switch from the transcript to the code it
-    /// was made from — markup, in the usual case. The transcript marks its two
+    /// was made from—markup, in the usual case. The transcript marks its two
     /// layers with `data-transcript-layer`, `"rendered"` and `"code"`, and the
     /// switch swaps them in place.
     let codeSwitch: Bool
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
-    /// say — an editor that takes its edits in the code says so here.
+    /// say—an editor that takes its edits in the code says so here.
     let codeSwitchInfo: String?
     /// The object's images, one per canvas, each naming its image service in
     /// `data-service-id`: shown, like the transcript, only while its canvas
@@ -195,7 +195,7 @@
             .class("artifact-header-actions")
           }
 
-          // Page nav — top right (edge prev/next stay on the viewer)
+          // Page nav—top right (edge prev/next stay on the viewer)
           PaginationView(
             currentPage: 1,
             totalPages: 1,
@@ -230,7 +230,7 @@
           //
           // The transcript is what the page is for: it arrives with the document,
           // it carries the figures cut from the facsimile inline, and it is
-          // what a reader reads. The object corroborates it — you look across
+          // what a reader reads. The object corroborates it—you look across
           // when you doubt a word. Putting the image first made the thing being
           // checked come before the thing being read, and on a narrow screen it
           // pushed the transcript below the fold entirely.
@@ -417,11 +417,11 @@
           // comes first: to its right when the two are side by side, under it
           // when they stack. It used to be a leading border, from when the
           // object led and the transcript sat to its right.
-          borderInlineEnd(borderWidthBase, .solid, borderColorSubtle)
+          borderInlineEnd(borderWidthBase, .solid, borderColorBase)
           backgroundColor(backgroundColorBase)
           media(maxWidth(maxWidthBreakpointMobile)) {
             borderInlineEnd(.none).important()
-            borderBlockEnd(borderWidthBase, .solid, borderColorSubtle).important()
+            borderBlockEnd(borderWidthBase, .solid, borderColorBase).important()
           }
         }
         // The page images switched off: the transcript alone, the whole
@@ -440,7 +440,7 @@
         }
         // Flex, not block: a layer holding one element also holds the
         // whitespace around it in the markup, and a block container turns that
-        // into a line box above and below — a gap that looks like padding
+        // into a line box above and below—a gap that looks like padding
         // nobody asked for. A flex container drops whitespace-only children.
         selector("&:has(.artifact-code-toggle[aria-pressed='true']) .artifact-transcript [data-transcript-layer='code']") {
           display(.flex)
@@ -558,7 +558,7 @@
     /// The viewers under `root`, which may be a fragment swapped in after the
     /// page's own pass. A viewer already reading is left alone, and a reader
     /// whose viewer has left the document lets go of the window it listened
-    /// to — its arrow keys would otherwise turn the pages of nothing.
+    /// to—its arrow keys would otherwise turn the pages of nothing.
     public static func hydrate(in root: DOM.Element) {
       let hydration = instance ?? ArtifactHydration()
       instance = hydration
@@ -570,7 +570,7 @@
       for viewer in root.querySelectorAll(".artifact-view") {
         guard !stringEquals(viewer.dataset["artifact-hydrated"] ?? "false", "true") else { continue }
         let manifestURL = viewer.dataset["manifest-url"] ?? ""
-        // An empty viewer — a form with nothing chosen yet — has nothing to
+        // An empty viewer—a form with nothing chosen yet—has nothing to
         // read: canvases and no manifest to page them by.
         guard !stringIsEmpty(manifestURL) || viewer.querySelector(".artifact-object") == nil else { continue }
         viewer.setAttribute(data("artifact-hydrated"), "true")
@@ -587,7 +587,7 @@
 
   /// One viewer, reading one object. An instance, not a namespace: a page
   /// may hold several viewers, and a second one used to take over the
-  /// first's state — its canvases appended to the first's list and its pages
+  /// first's state—its canvases appended to the first's list and its pages
   /// turned by the first's arrows.
   ///
   /// It keeps the pages: which is on screen, the pager, the transcript and
@@ -893,7 +893,7 @@
       showTranscript(for: canvasIndex)
       // The property AND the class. The pager greys itself with
       // `pagination-disabled`, so setting only the property left a working
-      // button that looked dead — which is worse than a dead one.
+      // button that looked dead—which is worse than a dead one.
       setPageTurn(prevBtn, disabled: canvasIndex <= 0)
       setPageTurn(nextBtn, disabled: canvasIndex >= total - 1)
     }
@@ -901,7 +901,7 @@
     /// A page turn's enabled state, on the property and in the class.
     ///
     /// The pager greys itself with `pagination-disabled`, so setting only the
-    /// property left a working button that looked dead — worse than a dead one,
+    /// property left a working button that looked dead—worse than a dead one,
     /// because nobody presses it.
     private func setPageTurn(_ button: DOM.Element?, disabled: Bool) {
       guard let button else { return }
@@ -937,7 +937,7 @@
       if page > total { page = total }
       let idx = page - 1
       if idx == canvasIndex {
-        // Already on this page — still normalize display (e.g. leading zeros, overshoot clamp)
+        // Already on this page—still normalize display (e.g. leading zeros, overshoot clamp)
         (input as? HTML.HTMLInputElement)?.value = "\(page)"
         return
       }
@@ -1021,7 +1021,7 @@
           pane.setAttribute(data("active"), position == index ? "true" : "false")
         }
       }
-      // Whoever drew the transcript may have work to do when it changes — syntax
+      // Whoever drew the transcript may have work to do when it changes—syntax
       // coloring a page of markup, say, which is worth doing for the page on
       // screen and wasteful for the nine hundred behind it.
       root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
