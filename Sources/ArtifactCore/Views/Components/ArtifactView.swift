@@ -148,8 +148,9 @@
               labelFontWeight: fontWeightNormal
             )
             if let info = codeSwitchInfo {
+              // Beside the mini switch's 12px "Raw": its size minus 4px.
               TooltipView(tooltip: info, class: "artifact-code-info") {
-                IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconXSmall)
+                IconView(icon: { size in [InfoIconView(size: size)] }, size: size8)
               }
             }
           }
