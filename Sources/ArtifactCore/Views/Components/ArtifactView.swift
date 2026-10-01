@@ -149,7 +149,7 @@
             )
             if let info = codeSwitchInfo {
               TooltipView(tooltip: info, class: "artifact-code-info") {
-                IconView(icon: { size in [InfoIconView(size: size)] }, size: .xSmall)
+                IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconXSmall)
               }
             }
           }
@@ -181,7 +181,7 @@
               if switchesCanvas {
                 ToggleButtonView(
                   label: "Semblance",
-                  icon: IconView(icon: { s in PreviousIconView(size: s) }, size: .xSmall),
+                  icon: IconView(icon: { s in PreviousIconView(size: s) }, size: sizeIconXSmall),
                   modelValue: false,
                   weight: .plain,
                   buttonColor: .gray,
@@ -267,7 +267,7 @@
             .class("artifact-zoom-controls")
 
           button {
-            IconView(icon: { size in [FullscreenIconView(size: size)] }, size: .small)
+            IconView(icon: { size in [FullscreenIconView(size: size)] }, size: sizeIconSmall)
           }
           .id("artifact-fullscreen-btn")
           .class("artifact-fullscreen-button")
