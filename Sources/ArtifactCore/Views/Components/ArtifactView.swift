@@ -18,8 +18,12 @@
   /// the slot lacks is drawn by the reader when it is paged to. Without a
   /// transcript the viewer is the object alone, every canvas drawn so.
   public struct ArtifactView: HTMLContent {
-    /// The IIIF manifest whose canvases are paged; empty pages the
-    /// transcript.
+    /// Where the canvases to page are read; empty pages the transcript.
+    /// The answer is JSON in the viewer's own shape, not a IIIF manifest:
+    /// `{"label":…,"canvases":[{"id":…,"w":…,"h":…,"l":…}]}`, each canvas by
+    /// its image service, its size and its label—the host's server reads
+    /// the manifest and answers so. `{"canvases":[],"error":"…"}` says why
+    /// there are none.
     let manifestURL: String
     let title: String?
     let authors: [String]
@@ -785,6 +789,8 @@
     /// Read or not, the viewer says so: an `artifact-manifest-load` event on
     /// it, its detail the number of canvases read ("0" for a manifest that
     /// could not be read), so a host can show the viewer or say why not.
+    /// When the answer says why there are none, an `artifact-manifest-error`
+    /// event, its detail the reason, comes first.
     private func loadManifest(url: String) {
       root.fetch(url) { [self] jsonStr in
         guard let jsonStr else {
@@ -793,6 +799,9 @@
           return
         }
         parseManifest(jsonStr)
+        if serviceIDs.isEmpty, let reason = extractJSONString(jsonStr, key: "error") {
+          root.dispatchEvent(CustomEvent(type: "artifact-manifest-error", detail: reason))
+        }
         root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "\(serviceIDs.count)"))
         if serviceIDs.isEmpty {
           pageTranscript()
@@ -821,7 +830,7 @@
     }
 
     private func parseManifest(_ json: String) {
-      // Compact format from element_fetch: {"label":"...","canvases":[{"id":"...","w":N,"h":N},...]}
+      // The viewer's shape: {"label":"...","canvases":[{"id":"...","w":N,"h":N,"l":"..."},...]}
       // Title is server-rendered; we skip overwriting it from the manifest label.
       let parts = stringSplit(json, separator: "\"canvases\":")
       guard parts.count > 1 else { return }
