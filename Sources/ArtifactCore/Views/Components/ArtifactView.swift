@@ -15,7 +15,8 @@
   /// transcript; with it, each canvas (a ``CanvasView``, or a view wrapping
   /// one) is shown beside the transcript while its page is on screen, and
   /// only the canvas on screen reads its image. A canvas the manifest has and
-  /// the slot lacks is drawn by the reader when it is paged to.
+  /// the slot lacks is drawn by the reader when it is paged to. Without a
+  /// transcript the viewer is the object alone, every canvas drawn so.
   public struct ArtifactView: HTMLContent {
     /// The IIIF manifest whose canvases are paged; empty pages the
     /// transcript.
@@ -246,8 +247,11 @@
             .class("artifact-transcript")
           }
 
-          // The object: the canvas of the page on screen.
-          if !canvas.isEmpty {
+          // The object: the canvas of the page on screen. A viewer with no
+          // transcript is the object alone, its slot drawn empty for the
+          // reader to fill with the manifest's canvases—a testament not yet
+          // read, say, whose pages exist only as images.
+          if !canvas.isEmpty || transcript.isEmpty {
             div {
               canvas
             }
@@ -777,13 +781,19 @@
 
     /// A manifest that cannot be read pages as none is there: by the
     /// transcript's own pages.
+    ///
+    /// Read or not, the viewer says so: an `artifact-manifest-load` event on
+    /// it, its detail the number of canvases read ("0" for a manifest that
+    /// could not be read), so a host can show the viewer or say why not.
     private func loadManifest(url: String) {
       root.fetch(url) { [self] jsonStr in
         guard let jsonStr else {
+          root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "0"))
           pageTranscript()
           return
         }
         parseManifest(jsonStr)
+        root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "\(serviceIDs.count)"))
         if serviceIDs.isEmpty {
           pageTranscript()
         } else {
@@ -984,6 +994,9 @@
       }
 
       keyDownListener = window.addEventListener(.keydown) { [self] e in
+        // An arrow typed in a field moves its caret, never the pages: a
+        // form may hold a viewer among its fields.
+        if let _ = e.target?.closest("input, textarea, select, [contenteditable='true']") { return }
         if stringEquals(e.key, "ArrowLeft") { navigate(-1) }
         if stringEquals(e.key, "ArrowRight") { navigate(1) }
       }
