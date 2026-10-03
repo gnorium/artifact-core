@@ -178,16 +178,11 @@
           if !actions.isEmpty || switchesCanvas {
             div {
               actions
-              // The semblance, beside the host's controls and nearest the
-              // pager: a chevron alone, pointing where the evidence pane
-              // opens: to the end side beside the text, up when the panes
-              // stack on a phone (user, 2026-09-30). Sized and weighted as
-              // the pager's own mini chevrons (plain, 24, a 12 icon), so the
-              // header reads as one row of mini controls.
+              // An image switch is distinct from the adjacent page-navigation arrows.
               if switchesCanvas {
                 ToggleButtonView(
                   label: "Semblance",
-                  icon: IconView(icon: { s in PreviousIconView(size: s) }, size: sizeIconXSmall),
+                  icon: IconView(icon: { s in ImageIconView(size: s) }, size: sizeIconXSmall),
                   modelValue: false,
                   weight: .plain,
                   buttonColor: .gray,
@@ -368,20 +363,6 @@
         }
         descendant(".artifact-page-nav") {
           flexShrink(0)
-        }
-        // Where the panes stack (the viewer container's own breakpoint), the
-        // semblance opens under the text: the chevron points up. The icon
-        // itself mirrors in a right-to-left page (then pointing right), so
-        // there it turns the other way to point up too.
-        descendant(".artifact-canvas-toggle .button-icon") {
-          media(maxWidth(maxWidthBreakpointMobile)) {
-            transform(rotate(deg(90))).important()
-          }
-        }
-        selector("& .artifact-canvas-toggle .button-icon:dir(rtl)") {
-          media(maxWidth(maxWidthBreakpointMobile)) {
-            transform(rotate(deg(-90))).important()
-          }
         }
         // Beside the switch it explains, no nearer than the switch sits to
         // the title: the header's own gap.
