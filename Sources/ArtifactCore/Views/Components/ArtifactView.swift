@@ -354,9 +354,10 @@
           gap(spacing8)
           flexShrink(0)
         }
+        // The row above it again: mini controls, 4 above and under them.
         descendant(".artifact-header-bar") {
           minWidth(0)
-          padding(spacing0, spacing8, spacing4)
+          padding(spacing4, spacing8)
         }
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
