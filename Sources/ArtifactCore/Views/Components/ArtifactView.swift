@@ -673,6 +673,11 @@
       _ = root.addEventListener("artifact-show-service") { [self] (event: Event) in
         if let index = self.canvasIndex(ofService: event.detail) { self.loadCanvas(index) }
       }
+      // Or by its place in the sequence (0-based), as a roster of the
+      // semblances names it: `artifact-show-canvas`.
+      _ = root.addEventListener("artifact-show-canvas") { [self] (event: Event) in
+        if let index = Int(event.detail) { self.loadCanvas(index) }
+      }
       if stringIsEmpty(manifestURL) {
         pageTranscript()
       } else {
@@ -1009,8 +1014,14 @@
     /// transcript that skips a canvas still lands on the right one; a pane that
     /// names nothing the manifest has simply never shows.
     private func showTranscript(for index: Int) {
-      guard !transcriptPanes.isEmpty else { return }
       let service = index < serviceIDs.count ? serviceIDs[index] : ""
+      // The page turned whether or not a transcript reads it: a host that
+      // follows the pager (a roster of the semblances, a prompt preview)
+      // hears of it either way.
+      guard !transcriptPanes.isEmpty else {
+        root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
+        return
+      }
       var matched = false
       for pane in transcriptPanes {
         let id = pane.dataset["service-id"] ?? ""
