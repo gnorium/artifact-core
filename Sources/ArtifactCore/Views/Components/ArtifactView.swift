@@ -753,19 +753,24 @@
     /// Whether the transcript has a translated layer to show at all.
     private var translatable = false
 
-    /// The one layer of the transcript that shows: the translated one while the
-    /// page's language switch is on, else the code while Raw is on, else
-    /// the transcript.
+    /// The one layer of each page that shows, by two switches (user,
+    /// 2026-10-07): the language switch picks the transcript or its
+    /// translation, Raw picks either's text or its code. A page with no
+    /// translation shows nothing under either: emptiness, never a dash.
     private func showLayers() {
-      let layer = translatable && translationVisible ? "translation" : codeVisible ? "code" : "rendered"
-      for text in root.querySelectorAll(".artifact-transcript [data-transcript-layer='rendered']") {
-        if stringEquals(layer, "rendered") { text.style.display(.block) } else { text.style.display(.none) }
-      }
-      for code in root.querySelectorAll(".artifact-transcript [data-transcript-layer='code']") {
-        if stringEquals(layer, "code") { code.style.display(.flex) } else { code.style.display(.none) }
-      }
-      for translated in root.querySelectorAll(".artifact-transcript [data-transcript-layer='translation']") {
-        if stringEquals(layer, "translation") { translated.style.display(.flex) } else { translated.style.display(.none) }
+      let translated = translatable && translationVisible
+      for pane in root.querySelectorAll(".artifact-transcript .tei-transcript") {
+        let layer = translated ? (codeVisible ? "translation-code" : "translation") : (codeVisible ? "code" : "rendered")
+        for element in pane.querySelectorAll("[data-transcript-layer]") {
+          let name = element.getAttribute(data("transcript-layer")) ?? ""
+          if !stringEquals(name, layer) {
+            element.style.display(.none)
+          } else if stringEquals(name, "rendered") {
+            element.style.display(.block)
+          } else {
+            element.style.display(.flex)
+          }
+        }
       }
     }
 
