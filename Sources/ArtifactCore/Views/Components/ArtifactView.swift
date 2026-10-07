@@ -153,9 +153,9 @@
               labelFontWeight: fontWeightNormal
             )
             if let info = codeSwitchInfo {
-              // Beside the mini switch's 12px "Raw": its size minus 4px.
+              // 12, as the header's other mini icons (user, 2026-10-08).
               TooltipView(tooltip: info, class: "artifact-code-info") {
-                IconView(icon: { size in [InfoIconView(size: size)] }, size: size8)
+                IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconXSmall)
               }
             }
           }
@@ -218,7 +218,12 @@
           .class("artifact-header-row")
 
           if !bar.isEmpty {
-            div { bar }
+            // The shell's height moves; its inset is the panel's, as an
+            // alert's is, so closed it is truly nothing.
+            div {
+              div { bar }
+                .class("artifact-header-bar-panel")
+            }
               .class("artifact-header-bar")
               .data("open", false)
           }
@@ -308,7 +313,9 @@
           // it.
           flexDirection(.column)
           alignItems(.stretch)
-          gap(spacing12)
+          // No gap: the bar carries the 12 above it as its own inset, so
+          // closed to no height it takes no room, and its opening animates
+          // its height alone (`TestamentFindHydration`).
           // Half the inset here and half on each row, so the row's
           // scrollport takes in the room the pager's mini chevrons reach
           // into past its box (they sit a step outside it) and a control's
@@ -354,10 +361,16 @@
           gap(spacing8)
           flexShrink(0)
         }
-        // The row above it again: mini controls, 4 above and under them.
+        // The row above it again: mini controls, 4 above and under them,
+        // 12 under the row (the header's gap, held here). The inset is the
+        // panel's, never the shell's: a shell's height counts its padding,
+        // so animated to 0 it stopped at 20 and stalled there, then grew.
         descendant(".artifact-header-bar") {
           minWidth(0)
-          padding(spacing4, spacing8)
+        }
+        descendant(".artifact-header-bar-panel") {
+          minWidth(0)
+          padding(spacing16, spacing8, spacing4)
         }
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
