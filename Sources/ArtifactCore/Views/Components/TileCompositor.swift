@@ -52,9 +52,9 @@
       spinnerEl = spinner
       let svgNamespace = "http://www.w3.org/2000/svg"
       let svg = document.createElementNS(svgNamespace, "svg")
-      svg.setAttribute(.class, "canvas-view-tile-surface")
+      svg.setAttribute(.class, "canvas-tile-surface")
       let c = document.createElementNS(svgNamespace, "g")
-      c.setAttribute(.class, "canvas-view-tile-compositor")
+      c.setAttribute(.class, "canvas-tile-compositor")
       svg.appendChild(c)
       viewport.insertBefore(svg, spinner)
       surface = svg
@@ -183,7 +183,7 @@
       let base = baseURL(serviceID)
       let url = "\(base)/full/256,/0/default.\(imageFormat)"
       let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
-      img.setAttribute(.class, "canvas-view-tile-image")
+      img.setAttribute(.class, "canvas-tile-image")
       img.setAttribute(.draggable, "false")
       img.setAttribute("x", "0")
       img.setAttribute("y", "0")
@@ -299,7 +299,7 @@
 
     private func addTile(x: Int, y: Int, w: Int, h: Int, url: String) -> DOM.Element {
       let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
-      img.setAttribute(.class, "canvas-view-tile-image")
+      img.setAttribute(.class, "canvas-tile-image")
       img.setAttribute(.draggable, "false")
       // 1px overdraw on each edge eliminates sub-pixel rendering seams between adjacent tiles
       img.setAttribute("x", intToString(x))

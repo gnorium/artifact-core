@@ -33,10 +33,10 @@
           div {
             RotatingSectorView(ariaHidden: true)
           }
-          .class("canvas-view-spinner")
+          .class("canvas-spinner")
           .data("visible", "false")
         }
-        .class("canvas-view-viewport")
+        .class("canvas-viewport")
         .data("dragging", "false")
       }
       .class("canvas-view")
@@ -54,7 +54,7 @@
         }
         // Explicit flex(1) and a zero minimum height make flex size it to
         // the room it has, not to the image.
-        descendant(".canvas-view-viewport") {
+        descendant(".canvas-viewport") {
           width(perc(100))
           flex(1)
           minHeight(0)
@@ -63,8 +63,8 @@
           cursor(.grab)
           userSelect(.none)
         }
-        descendant(".canvas-view-viewport[data-dragging='true']") { cursor(.grabbing) }
-        descendant(".canvas-view-spinner") {
+        descendant(".canvas-viewport[data-dragging='true']") { cursor(.grabbing) }
+        descendant(".canvas-spinner") {
           display(.none)
           position(.absolute)
           inset(0)
@@ -73,18 +73,18 @@
           justifyContent(.center)
           backgroundColor(backgroundColorBase)
         }
-        descendant(".canvas-view-spinner[data-visible='true']") { display(.flex) }
-        descendant(".canvas-view-tile-surface") {
+        descendant(".canvas-spinner[data-visible='true']") { display(.flex) }
+        descendant(".canvas-tile-surface") {
           position(.absolute)
           inset(0)
           overflow(.visible)
         }
-        descendant(".canvas-view-tile-compositor") {
+        descendant(".canvas-tile-compositor") {
           transformOrigin(px(0), px(0))
           willChange(.transform)
         }
-        descendant(".canvas-view-tile-image[data-loaded='false']") { opacity(0) }
-        descendant(".canvas-view-tile-image[data-loaded='true']") { opacity(1) }
+        descendant(".canvas-tile-image[data-loaded='false']") { opacity(0) }
+        descendant(".canvas-tile-image[data-loaded='true']") { opacity(1) }
       }
     }
   }
@@ -126,9 +126,9 @@
     init(root: DOM.Element) {
       self.root = root
       serviceID = root.dataset["service-id"] ?? ""
-      let vp = root.querySelector(".canvas-view-viewport")
+      let vp = root.querySelector(".canvas-viewport")
       viewport = vp
-      if let vp, let spinner = root.querySelector(".canvas-view-spinner") {
+      if let vp, let spinner = root.querySelector(".canvas-spinner") {
         compositor = TileCompositor(viewport: vp, spinner: spinner)
       }
       // Recenter whenever the viewport resizes (a sidebar toggled, the window
@@ -156,10 +156,10 @@
       canvas.setAttribute(data("service-id"), serviceID)
       canvas.setAttribute(data("active"), "false")
       let viewport = document.createElement(.div)
-      viewport.className = "canvas-view-viewport"
+      viewport.className = "canvas-viewport"
       viewport.setAttribute(data("dragging"), "false")
       let spinner = document.createElement(.div)
-      spinner.className = "canvas-view-spinner"
+      spinner.className = "canvas-spinner"
       spinner.setAttribute(data("visible"), "false")
       spinner.appendChild(RotatingSectorFactory.createElement())
       viewport.appendChild(spinner)

@@ -451,7 +451,7 @@
           maxWidth(perc(100))
           overflow(.visible)
         }
-        descendant(".artifact-transcript [data-transcript-layer='code'] .code-view-code") {
+        descendant(".artifact-transcript [data-transcript-layer='code'] .code-code") {
           // A long XML token is paint overflow, not the intrinsic width of
           // the accordion row. The outer transcript pane provides its horizontal
           // scrollbar.
