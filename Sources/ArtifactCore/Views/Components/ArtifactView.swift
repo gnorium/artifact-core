@@ -148,14 +148,15 @@
               fullWidth: false,
               ariaLabel: "Code of this transcript",
               indicateSelection: true,
-              size: .mini,
+              size: .small,
               class: "artifact-code-toggle",
               labelFontWeight: fontWeightNormal
             )
             if let info = codeSwitchInfo {
-              // 12, as the header's other mini icons (user, 2026-10-08).
+              // 14, as the header's other small icons (user, 2026-10-08).
               TooltipView(tooltip: info, class: "artifact-code-info") {
-                IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconXSmall)
+                IconView(
+                  icon: { size in [InfoIconView(size: size)] }, size: ButtonView.ButtonSize.small.iconSize)
               }
             }
           }
@@ -182,13 +183,14 @@
               if switchesCanvas {
                 ToggleButtonView(
                   label: "Semblance",
-                  icon: IconView(icon: { s in ImageIconView(size: s) }, size: sizeIconXSmall),
+                  icon: IconView(
+                    icon: { s in ImageIconView(size: s) }, size: ButtonView.ButtonSize.small.iconSize),
                   modelValue: false,
                   weight: .plain,
                   buttonColor: .gray,
                   iconOnly: true,
                   ariaLabel: "Semblance",
-                  size: .mini,
+                  size: .small,
                   class: "artifact-canvas-toggle"
                 )
               }
@@ -200,7 +202,7 @@
           PaginationView(
             currentPage: 1,
             totalPages: 1,
-            size: .mini,
+            size: .small,
             // The page turns live here, with the number they change. Overlaid
             // on the object they sat halfway down a tall image, far from the
             // transcript, and read as controls for the picture rather than the
@@ -276,7 +278,8 @@
             .class("artifact-zoom-controls")
 
           button {
-            IconView(icon: { size in [FullscreenIconView(size: size)] }, size: sizeIconSmall)
+            IconView(
+              icon: { size in [FullscreenIconView(size: size)] }, size: ButtonView.ButtonSize.small.iconSize)
           }
           .id("artifact-fullscreen-btn")
           .class("artifact-fullscreen-button")
@@ -316,13 +319,14 @@
           // No gap: the bar carries the 12 above it as its own inset, so
           // closed to no height it takes no room, and its opening animates
           // its height alone (`TestamentFindHydration`).
-          // Half the inset here and half on each row, so the row's
-          // scrollport takes in the room the pager's mini chevrons reach
-          // into past its box (they sit a step outside it) and a control's
-          // focus ring, which it would otherwise cut off.
-          padding(spacing4, spacing8)
+          // The bar is 40 and its controls small, 32 (user, 2026-10-08):
+          // the 4 above and under them is the row's own, so its scrollport
+          // takes in the room the pager's chevrons reach into past its box
+          // (they sit a step outside it) and a control's focus ring, which
+          // it would otherwise cut off.
+          padding(0, spacing8)
           borderBlockEnd(borderWidthBase, .solid, borderColorBase)
-          minHeight(px(36))
+          minHeight(minSizeInteractiveTouch)
         }
         // One row, never wrapped: past its width it scrolls sideways under
         // a swipe, with no scrollbar drawn (the tabs' pattern), and never
@@ -338,10 +342,11 @@
           scrollbarWidth(.none)
           pseudoElement(.webkitScrollbar) { display(.none).important() }
         }
+        // The row's text at its controls' size: 16, as the pager's number.
         selector(".artifact-title-block") {
           fontFamily(typographyFontSans)
-          fontSize(fontSizeXSmall12)
-          lineHeight(1.4)
+          fontSize(fontSizeMedium16)
+          lineHeight(lineHeightSmall22)
           flex(1)
           minWidth(0)
         }
@@ -361,8 +366,8 @@
           gap(spacing8)
           flexShrink(0)
         }
-        // The row above it again: mini controls, 4 above and under them,
-        // 12 under the row (the header's gap, held here). The inset is the
+        // The row above it again: small controls, 4 above and under them,
+        // 12 under the row (its 4 and the panel's 8). The inset is the
         // panel's, never the shell's: a shell's height counts its padding,
         // so animated to 0 it stopped at 20 and stalled there, then grew.
         descendant(".artifact-header-bar") {
@@ -370,7 +375,7 @@
         }
         descendant(".artifact-header-bar-panel") {
           minWidth(0)
-          padding(spacing16, spacing8, spacing4)
+          padding(spacing8, spacing8, spacing4)
         }
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
@@ -480,13 +485,16 @@
         ) {
           display(.none)
         }
+        // 40, as the header: small controls, 4 above and under them.
         descendant(".artifact-footer") {
           gap(spacing8)
-          padding(spacing8, spacing16)
+          padding(spacing4, spacing16)
+          minHeight(minSizeInteractiveTouch)
+          boxSizing(.borderBox)
           borderBlockStart(borderWidthBase, .solid, borderColorBase)
         }
         descendant(".artifact-canvas-label") {
-          fontSize(fontSizeXSmall12)
+          fontSize(fontSizeMedium16)
           color(colorSubtle)
           flex(1)
         }
@@ -500,8 +508,8 @@
           display(.flex)
           alignItems(.center)
           justifyContent(.center)
-          width(px(20))
-          height(px(20))
+          width(ButtonView.ButtonSize.small.minSize)
+          height(ButtonView.ButtonSize.small.minSize)
           borderRadius(borderRadiusBase)
           border(.none)
           backgroundColor(.transparent)
