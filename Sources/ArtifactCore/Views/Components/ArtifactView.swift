@@ -25,6 +25,8 @@
     /// the manifest and answers so. `{"canvases":[],"error":"…"}` says why
     /// there are none.
     let manifestURL: String
+    /// The work's title, in the header, its authors after it ("by A and B",
+    /// subtle). Nil or empty: the manifest's label, once it is read.
     let title: String?
     let authors: [String]
     let style: CSSStyle
@@ -160,21 +162,21 @@
               }
             }
           }
-          if let t = title, !t.isEmpty {
-            span {
-              span { t }
-                .id("artifact-title")
-                .class("artifact-title-primary")
-              if !headerSubtitle.isEmpty {
-                span { " \(headerSubtitle)" }
-                  .class("artifact-title-subtitle")
-              }
+          // Faded where it runs past the row, and shown whole in a sheet
+          // over the viewer from its fade, at every width (user,
+          // 2026-10-08): wrapped in place, a phone's row made it a column a
+          // word wide that covered the reader.
+          span {
+            span { title ?? "" }
+              .id("artifact-title")
+              .class("artifact-title-primary")
+            if !headerSubtitle.isEmpty {
+              span { " \(headerSubtitle)" }
+                .class("artifact-title-subtitle")
             }
-            .class("artifact-title-block")
-            .data("edge-fade", "expand")
-          } else {
-            span().id("artifact-title").class("artifact-title-empty")
           }
+          .class("artifact-title-block")
+          .data("edge-fade", "sheet")
 
           if !actions.isEmpty || switchesCanvas {
             div {
@@ -232,6 +234,8 @@
             }
             .id("artifact-transcript")
             .class("artifact-transcript")
+            // A gloss opened in it covers it alone.
+            .data("sheet-host", true)
           }
 
           // The object: the canvas of the page on screen. A viewer with no
@@ -283,8 +287,13 @@
           .class("artifact-fullscreen-button")
         }
         .class("artifact-footer")
+
+        // The header's title shown whole, over the viewer: the viewer is
+        // the sheet's host.
+        EdgeFadeSheetView()
       }
       .class("artifact-view")
+      .data("sheet-host", true)
       .data("manifest-url", manifestURL)
       .data("start-canvas", startCanvas.map { "\($0)" } ?? "")
       .data("start-service", startService ?? "")
@@ -353,10 +362,6 @@
           color(colorBase)
         }
         descendant(".artifact-title-subtitle") { color(colorSubtle) }
-        descendant(".artifact-title-empty") {
-          flex(1)
-          minWidth(0)
-        }
         descendant(".artifact-header-actions") {
           display(.flex)
           alignItems(.center)
@@ -845,7 +850,8 @@
 
     private func parseManifest(_ json: String) {
       // The viewer's shape: {"label":"...","canvases":[{"id":"...","w":N,"h":N,"l":"..."},...]}
-      // Title is server-rendered; we skip overwriting it from the manifest label.
+      // The title is the work's, from its record's fields, drawn by the
+      // server; the manifest's free-text label never stands in for it.
       let parts = stringSplit(json, separator: "\"canvases\":")
       guard parts.count > 1 else { return }
       let entries = stringSplit(parts[1], separator: "},{")
@@ -922,14 +928,25 @@
       var n = total
       while n >= 10 { n /= 10; digits += 1 }
       pageInput?.setAttribute("size", intToString(digits))
-      let label = canvasIndex < canvasLabels.count ? canvasLabels[canvasIndex] : ""
-      canvasLabelEl?.textContent = label
+      canvasLabelEl?.textContent = label(of: canvasIndex)
       showTranscript(for: canvasIndex)
       // The property AND the class. The pager greys itself with
       // `pagination-disabled`, so setting only the property left a working
       // button that looked dead—which is worse than a dead one.
       setPageTurn(prevBtn, disabled: canvasIndex <= 0)
       setPageTurn(nextBtn, disabled: canvasIndex >= total - 1)
+    }
+
+    /// What the footer names a page: the transcript's own label for it
+    /// (its `pb`'s `n`, `data-label`), else the manifest's canvas label.
+    private func label(of index: Int) -> String {
+      guard index < serviceIDs.count else { return "" }
+      let service = serviceIDs[index]
+      for pane in transcriptPanes where stringEquals(pane.dataset["service-id"] ?? "", service) {
+        let own = pane.dataset["label"] ?? ""
+        if !stringIsEmpty(stringTrim(own)) { return own }
+      }
+      return index < canvasLabels.count ? canvasLabels[index] : ""
     }
 
     /// A page turn's enabled state, on the property and in the class.
