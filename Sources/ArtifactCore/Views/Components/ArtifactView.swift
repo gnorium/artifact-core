@@ -467,13 +467,11 @@
           maxWidth(perc(100))
           overflow(.visible)
         }
-        descendant(".artifact-transcript [data-transcript-layer='code'] .code-code") {
-          // A long XML token is paint overflow, not the intrinsic width of
-          // the accordion row. The outer transcript pane provides its horizontal
-          // scrollbar.
-          flexShrink(1)
-          minWidth(0)
-        }
+        // The code itself keeps the width of its longest line (CodeView's
+        // own): the block above holds the row at the pane's width, so the
+        // line overflows into the pane's scroller rather than widening the
+        // row, and the text's box still spans its text—what a selection
+        // dragged past the pane's edge extends into.
         // Only the transcript and the canvas of the page on screen. The rest
         // stay in the document so that paging is a class change, not a fetch.
         selector(
