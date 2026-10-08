@@ -6,8 +6,8 @@
   import WebComponents
   import WebTypes
 
-  /// An object read page by page: a pager, a transcript of each page and,
-  /// in its canvas slot, the object's images.
+  /// An object read page by page: a pager in its footer, a transcript of
+  /// each page and, in its canvas slot, the object's images.
   ///
   /// The pages are the manifest's canvases when the viewer is given one
   /// (their order, labels and sizes), else the transcript's own pages. The
@@ -61,7 +61,7 @@
     /// pages of the reader and the site's pages alike, and every reader on
     /// the page follows it. Without the switch the canvas always shows.
     let canvasSwitch: Bool
-    /// Controls the host adds to the header, before the page nav (a Find
+    /// Controls the host adds to the header, after the title (a Find
     /// button).
     let actions: [DOM.Node]
     /// A row the host adds under the header's own, the width of the viewer
@@ -197,25 +197,6 @@
             }
             .class("artifact-header-actions")
           }
-
-          // Page nav—top right (edge prev/next stay on the viewer)
-          PaginationView(
-            currentPage: 1,
-            totalPages: 1,
-            size: .small,
-            // The page turns live here, with the number they change. Overlaid
-            // on the object they sat halfway down a tall image, far from the
-            // transcript, and read as controls for the picture rather than the
-            // page.
-            showControls: true,
-            kind: "artifact",
-            inputID: "artifact-page-input",
-            totalID: "artifact-page-total",
-            totalDisplay: "—",
-            ariaLabel: "Pages",
-            inputAriaLabel: "Page number",
-            class: "artifact-page-nav"
-          )
           }
           .class("artifact-header-row")
 
@@ -277,6 +258,23 @@
           div().id("artifact-zoom-controls")
             .class("artifact-zoom-controls")
 
+          // The page nav, beside fullscreen at the footer's end (user,
+          // 2026-10-08): in the header it pushed the row past a phone's
+          // width, and the page turns sit with the page's own label here.
+          PaginationView(
+            currentPage: 1,
+            totalPages: 1,
+            size: .small,
+            showControls: true,
+            kind: "artifact",
+            inputID: "artifact-page-input",
+            totalID: "artifact-page-total",
+            totalDisplay: "—",
+            ariaLabel: "Pages",
+            inputAriaLabel: "Page number",
+            class: "artifact-page-nav"
+          )
+
           button {
             IconView(
               icon: { size in [FullscreenIconView(size: size)] }, size: ButtonView.ButtonSize.small.iconSize)
@@ -321,9 +319,8 @@
           // its height alone (`TestamentFindHydration`).
           // The bar is 40 and its controls small, 32 (user, 2026-10-08):
           // the 4 above and under them is the row's own, so its scrollport
-          // takes in the room the pager's chevrons reach into past its box
-          // (they sit a step outside it) and a control's focus ring, which
-          // it would otherwise cut off.
+          // takes in a control's focus ring, which it would otherwise cut
+          // off.
           padding(0, spacing8)
           borderBlockEnd(borderWidthBase, .solid, borderColorBase)
           minHeight(minSizeInteractiveTouch)
@@ -485,8 +482,13 @@
         ) {
           display(.none)
         }
-        // 40, as the header: small controls, 4 above and under them.
+        // 40, as the header: small controls, 4 above and under them. The
+        // pager and fullscreen at the row's end, the start in RTL.
+        // Never squeezed by the viewer's column: a header grown tall (a
+        // long title opened) takes the transcript's room, never the pager's.
         descendant(".artifact-footer") {
+          flexShrink(0)
+          justifyContent(.flexEnd)
           gap(spacing8)
           padding(spacing4, spacing16)
           minHeight(minSizeInteractiveTouch)
@@ -497,6 +499,7 @@
           fontSize(fontSizeMedium16)
           color(colorSubtle)
           flex(1)
+          minWidth(0)
         }
         fadeOverflow("& .artifact-canvas-label")
         descendant(".artifact-zoom-controls") {
