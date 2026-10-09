@@ -808,8 +808,12 @@
       if !imaged, let toggle = canvasToggle {
         toggle.style.display(.none)
         canvasToggle = nil
-        canvasShown = true
-        root.setAttribute(data("canvas-shown"), "true")
+        // With no switch, the images show only where there is no transcript
+        // to read instead: a reader with a transcript keeps them off, as its
+        // default has it, so a selection dragged past the pane's edge finds
+        // no image pane to run into.
+        canvasShown = transcriptPanes.isEmpty
+        root.setAttribute(data("canvas-shown"), canvasShown ? "true" : "false")
       }
       guard !serviceIDs.isEmpty else { return }
       let asked = canvasIndex(ofService: startService) ?? startCanvas ?? savedCanvasIndex()
