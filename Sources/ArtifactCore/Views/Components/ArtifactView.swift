@@ -42,12 +42,12 @@
     let transcript: [DOM.Node]
     /// Whether the footer carries a switch from the transcript to the code it
     /// was made from—markup, in the usual case. The transcript marks its two
-    /// layers with `data-transcript-layer`, `"rendered"` and `"code"`, and the
+    /// layers with `data-transcript-layer`, `"rendered"` and `"raw"`, and the
     /// switch swaps them in place.
-    let codeSwitch: Bool
+    let rawSwitch: Bool
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
     /// say—an editor that takes its edits in the code says so here.
-    let codeSwitchInfo: String?
+    let rawSwitchInfo: String?
     /// The object's images, one per canvas, each naming its image service in
     /// `data-service-id`: shown, like the transcript, only while its canvas
     /// is on screen, and read only then.
@@ -81,8 +81,8 @@
       style: CSSStyle = .default,
       startCanvas: Int? = nil,
       startService: String? = nil,
-      codeSwitch: Bool = false,
-      codeSwitchInfo: String? = nil,
+      rawSwitch: Bool = false,
+      rawSwitchInfo: String? = nil,
       canvasSwitch: Bool = false,
       pageCount: Int? = nil,
       @HTMLBuilder transcript: () -> [DOM.Node] = { [] },
@@ -94,8 +94,8 @@
       self.style = style
       self.startCanvas = startCanvas
       self.startService = startService
-      self.codeSwitch = codeSwitch
-      self.codeSwitchInfo = codeSwitchInfo
+      self.rawSwitch = rawSwitch
+      self.rawSwitchInfo = rawSwitchInfo
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.transcript = transcript()
@@ -110,10 +110,10 @@
 
     /// Whether the header has anything to hold. It carries no title (user,
     /// 2026-10-09): on a biblio page the work is already the page's heading
-    /// or its node's description, and an utterance's reader is credited
+    /// or its node's description, and a quotation's reader is credited
     /// under it. With no controls the viewer has no header at all.
     private var hasHeader: Bool {
-      (codeSwitch && !transcript.isEmpty) || !actions.isEmpty || switchesCanvas || !bar.isEmpty
+      (rawSwitch && !transcript.isEmpty) || !actions.isEmpty || switchesCanvas || !bar.isEmpty
     }
 
     public func build() -> DOM.Node {
@@ -131,7 +131,7 @@
             // The switch between the transcript and the code it was made from.
             // First in the row, so it sits at the top left beside the transcript it
             // changes; the host's controls take the rest of the row, at its end.
-            if codeSwitch, !transcript.isEmpty {
+            if rawSwitch, !transcript.isEmpty {
               ToggleButtonView(
                 label: "Raw",
                 icon: nil as HTML.HTMLSpanElement?,
@@ -139,17 +139,17 @@
                 weight: .static,
                 buttonColor: .gray,
                 fullWidth: false,
-                ariaLabel: "Code of this transcript",
+                ariaLabel: "Raw markup of this transcript",
                 indicateSelection: true,
                 size: .small,
-                class: "artifact-code-toggle",
+                class: "artifact-raw-toggle",
                 labelFontWeight: fontWeightNormal
               )
-              if let info = codeSwitchInfo {
+              if let info = rawSwitchInfo {
                 // An icon on its own, on par with the row's 16px text, takes
                 // the text's size, as the header's other icons (user,
                 // 2026-10-09); a size minus 4 is for an icon beside a label.
-                TooltipView(tooltip: info, class: "artifact-code-info") {
+                TooltipView(tooltip: info, class: "artifact-raw-info") {
                   IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconSmall)
                 }
               }
@@ -160,14 +160,14 @@
                 // An image switch is distinct from the adjacent page-navigation arrows.
                 if switchesCanvas {
                   ToggleButtonView(
-                    label: "Semblance",
+                    label: "Canvas",
                     icon: IconView(
                       icon: { s in ImageIconView(size: s) }, size: sizeIconSmall),
                     modelValue: false,
                     weight: .plain,
                     buttonColor: .gray,
                     iconOnly: true,
-                    ariaLabel: "Semblance",
+                    ariaLabel: "Canvas",
                     size: .small,
                     class: "artifact-canvas-toggle"
                   )
@@ -343,7 +343,7 @@
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
         }
-        selector("& .artifact-page-nav", "& .artifact-code-toggle") {
+        selector("& .artifact-page-nav", "& .artifact-raw-toggle") {
           flexShrink(0)
         }
         // Its total unknown, the pager waits unseen rather than read "of —".
@@ -351,7 +351,7 @@
           visibility(.hidden)
         }
         // Beside the switch it explains, the header's own gap from it.
-        descendant(".artifact-code-info") {
+        descendant(".artifact-raw-info") {
           flexShrink(0)
           display(.inlineFlex)
           alignItems(.center)
@@ -410,14 +410,14 @@
         }
         // The switch is in the header and the layers are in the pane, so the
         // rule that ties them lives on the viewer, where both are in scope.
-        selector("&:has(.artifact-code-toggle[aria-pressed='true']) .artifact-transcript [data-transcript-layer='rendered']") {
+        selector("&:has(.artifact-raw-toggle[aria-pressed='true']) .artifact-transcript [data-transcript-layer='rendered']") {
           display(.none)
         }
         // Flex, not block: a layer holding one element also holds the
         // whitespace around it in the markup, and a block container turns that
         // into a line box above and below—a gap that looks like padding
         // nobody asked for. A flex container drops whitespace-only children.
-        selector("&:has(.artifact-code-toggle[aria-pressed='true']) .artifact-transcript [data-transcript-layer='code']") {
+        selector("&:has(.artifact-raw-toggle[aria-pressed='true']) .artifact-transcript [data-transcript-layer='raw']") {
           display(.flex)
           flexDirection(.column)
           width(perc(100))
@@ -430,7 +430,7 @@
         // Raw XML is intentionally preformatted and can contain very long
         // lines. Let it contribute overflow to `.artifact-transcript`, which is
         // the single scroll owner for the entire transcript half.
-        descendant(".artifact-transcript [data-transcript-layer='code'] .code-view") {
+        descendant(".artifact-transcript [data-transcript-layer='raw'] .code-view") {
           width(perc(100))
           minWidth(0)
           maxWidth(perc(100))
@@ -661,7 +661,7 @@
         if let index = self.canvasIndex(ofService: event.detail) { self.loadCanvas(index) }
       }
       // Or by its place in the sequence (0-based), as a roster of the
-      // semblances names it: `artifact-show-canvas`.
+      // canvases names it: `artifact-show-canvas`.
       _ = root.addEventListener("artifact-show-canvas") { [self] (event: Event) in
         if let index = Int(event.detail) { self.loadCanvas(index) }
       }
@@ -683,16 +683,16 @@
     /// A viewer fetched in after the switch was pressed reads the attribute
     /// as it stands.
     private func setupLayers() {
-      let code = root.querySelector(".artifact-code-toggle")
+      let raw = root.querySelector(".artifact-raw-toggle")
       if case .some = root.querySelector(".artifact-transcript [data-transcript-layer='translation']") {
         translatable = true
       }
-      codeVisible = stringEquals(code?.getAttribute("aria-pressed") ?? "false", "true")
+      rawVisible = stringEquals(raw?.getAttribute("aria-pressed") ?? "false", "true")
       translationVisible = stringEquals(
         root.closest("[data-transcript-translated]")?.getAttribute(data("transcript-translated")) ?? "false", "true")
       showLayers()
-      _ = code?.addEventListener("toggle-button-update") { [self] (event: Event) in
-        self.codeVisible = stringEquals(event.detail, "true")
+      _ = raw?.addEventListener("toggle-button-update") { [self] (event: Event) in
+        self.rawVisible = stringEquals(event.detail, "true")
         self.showLayers()
       }
       _ = root.addEventListener("transcript-translated") { [self] (event: Event) in
@@ -735,7 +735,7 @@
       canvasToggle?.querySelector("button")?.setAttribute("aria-pressed", canvasShown ? "true" : "false")
     }
 
-    private var codeVisible = false
+    private var rawVisible = false
     private var translationVisible = false
     /// Whether the transcript has a translated layer to show at all.
     private var translatable = false
@@ -747,7 +747,7 @@
     private func showLayers() {
       let translated = translatable && translationVisible
       for pane in root.querySelectorAll(".artifact-transcript .tei-transcript") {
-        let layer = translated ? (codeVisible ? "translation-code" : "translation") : (codeVisible ? "code" : "rendered")
+        let layer = translated ? (rawVisible ? "translation-raw" : "translation") : (rawVisible ? "raw" : "rendered")
         for element in pane.querySelectorAll("[data-transcript-layer]") {
           let name = element.getAttribute(data("transcript-layer")) ?? ""
           if !stringEquals(name, layer) {
@@ -1028,7 +1028,7 @@
     private func showTranscript(for index: Int) {
       let service = index < serviceIDs.count ? serviceIDs[index] : ""
       // The page turned whether or not a transcript reads it: a host that
-      // follows the pager (a roster of the semblances, a prompt preview)
+      // follows the pager (a roster of the canvases, a prompt preview)
       // hears of it either way.
       guard !transcriptPanes.isEmpty else {
         root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
