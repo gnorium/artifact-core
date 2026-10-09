@@ -108,13 +108,13 @@
     /// page images to show.
     private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty && !transcript.isEmpty }
 
-    /// Whether the header has anything to hold. It carries no title (user,
-    /// 2026-10-09): on a biblio page the work is already the page's heading
-    /// or its node's description, and a quotation's reader is credited
-    /// under it. With no controls the viewer has no header at all.
-    private var hasHeader: Bool {
-      (rawSwitch && !transcript.isEmpty) || !actions.isEmpty || switchesCanvas || !bar.isEmpty
-    }
+    /// The header carries no title (user, 2026-10-09): on a biblio page
+    /// the work is already the page's heading or its node's description,
+    /// and a quotation's reader is credited under it. It names the page
+    /// on screen at its start (user, 2026-10-10: the canvas label moved
+    /// up from the footer, Raw down to the footer's start, so Raw sits at
+    /// the bottom left of every box), and the host's controls take its
+    /// end.
 
     public func build() -> DOM.Node {
       // A canvas the reader draws itself, for a canvas the slot lacks, is
@@ -123,74 +123,53 @@
 
       return div {
         // ── Header ──────────────────────────────────────────────────────────
-        if hasHeader {
-          header {
-            // One row of controls, never wrapped: where a narrow reader cannot
-            // hold them all, the row scrolls sideways (user, 2026-09-30).
+        header {
+          // One row of controls, never wrapped: where a narrow reader cannot
+          // hold them all, the row scrolls sideways (user, 2026-09-30).
+          div {
+          // The page on screen, by its canvas's label, at the row's start
+          // (user, 2026-10-10); the host's controls take the rest of the
+          // row, at its end.
+          span {}
+            .id("artifact-canvas-label")
+            .class("artifact-canvas-label")
+            .data("edge-fade", "expand")
+          if !actions.isEmpty || switchesCanvas {
             div {
-            // The switch between the transcript and the code it was made from.
-            // First in the row, so it sits at the top left beside the transcript it
-            // changes; the host's controls take the rest of the row, at its end.
-            if rawSwitch, !transcript.isEmpty {
-              ToggleButtonView(
-                label: "Raw",
-                icon: nil as HTML.HTMLSpanElement?,
-                modelValue: false,
-                weight: .static,
-                buttonColor: .gray,
-                fullWidth: false,
-                ariaLabel: "Raw markup of this transcript",
-                indicateSelection: true,
-                size: .small,
-                class: "artifact-raw-toggle",
-                labelFontWeight: fontWeightNormal
-              )
-              if let info = rawSwitchInfo {
-                // An icon on its own, on par with the row's 16px text, takes
-                // the text's size, as the header's other icons (user,
-                // 2026-10-09); a size minus 4 is for an icon beside a label.
-                TooltipView(tooltip: info, class: "artifact-raw-info") {
-                  IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconSmall)
-                }
+              actions
+              // An image switch is distinct from the adjacent page-navigation arrows.
+              if switchesCanvas {
+                ToggleButtonView(
+                  label: "Canvas",
+                  icon: IconView(
+                    icon: { s in ImageIconView(size: s) }, size: sizeIconSmall),
+                  modelValue: false,
+                  weight: .plain,
+                  buttonColor: .gray,
+                  iconOnly: true,
+                  ariaLabel: "Canvas",
+                  size: .small,
+                  class: "artifact-canvas-toggle"
+                )
               }
             }
-            if !actions.isEmpty || switchesCanvas {
-              div {
-                actions
-                // An image switch is distinct from the adjacent page-navigation arrows.
-                if switchesCanvas {
-                  ToggleButtonView(
-                    label: "Canvas",
-                    icon: IconView(
-                      icon: { s in ImageIconView(size: s) }, size: sizeIconSmall),
-                    modelValue: false,
-                    weight: .plain,
-                    buttonColor: .gray,
-                    iconOnly: true,
-                    ariaLabel: "Canvas",
-                    size: .small,
-                    class: "artifact-canvas-toggle"
-                  )
-                }
-              }
-              .class("artifact-header-actions")
-            }
-            }
-            .class("artifact-header-row")
-
-            if !bar.isEmpty {
-              // The shell's height moves; its inset is the panel's, as an
-              // alert's is, so closed it is truly nothing.
-              div {
-                div { bar }
-                  .class("artifact-header-bar-panel")
-              }
-                .class("artifact-header-bar")
-                .data("open", false)
-            }
+            .class("artifact-header-actions")
           }
-          .class("artifact-header")
+          }
+          .class("artifact-header-row")
+
+          if !bar.isEmpty {
+            // The shell's height moves; its inset is the panel's, as an
+            // alert's is, so closed it is truly nothing.
+            div {
+              div { bar }
+                .class("artifact-header-bar-panel")
+            }
+              .class("artifact-header-bar")
+              .data("open", false)
+          }
         }
+        .class("artifact-header")
 
         // ── Viewer body with prev/next overlaid on edges ─────────────────────
         div {
@@ -231,14 +210,39 @@
 
         // ── Footer ───────────────────────────────────────────────────────────
         footer {
-          span {}
-            .id("artifact-canvas-label")
-            .class("artifact-canvas-label")
-            .data("edge-fade", "expand")
+          // The switch between the transcript and the code it was made from,
+          // at the footer's start: the bottom left of the box, as Raw sits
+          // on every box (user, 2026-10-10).
+          div {
+            if rawSwitch, !transcript.isEmpty {
+              ToggleButtonView(
+                label: "Raw",
+                icon: nil as HTML.HTMLSpanElement?,
+                modelValue: false,
+                weight: .static,
+                buttonColor: .gray,
+                fullWidth: false,
+                ariaLabel: "Raw markup of this transcript",
+                indicateSelection: true,
+                size: .small,
+                class: "artifact-raw-toggle",
+                labelFontWeight: fontWeightNormal
+              )
+              if let info = rawSwitchInfo {
+                // An icon on its own, on par with the row's 16px text, takes
+                // the text's size, as the bars' other icons (user,
+                // 2026-10-09); a size minus 4 is for an icon beside a label.
+                TooltipView(tooltip: info, class: "artifact-raw-info") {
+                  IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconSmall)
+                }
+              }
+            }
+          }
+          .class("artifact-footer-start")
 
           // The page nav, beside fullscreen at the footer's end (user,
           // 2026-10-08): in the header it pushed the row past a phone's
-          // width, and the page turns sit with the page's own label here.
+          // width.
           PaginationView(
             currentPage: min((startCanvas ?? 0) + 1, pageCount ?? 1),
             totalPages: pageCount ?? 1,
@@ -321,7 +325,7 @@
           pseudoElement(.webkitScrollbar) { display(.none).important() }
         }
         // The host's controls take the rest of the row, at its end (the
-        // start in RTL), Raw alone at the row's start.
+        // start in RTL), the page's label alone at the row's start.
         descendant(".artifact-header-actions") {
           display(.flex)
           flexGrow(1)
@@ -350,11 +354,19 @@
         selector("&[data-pages-known='false'] .artifact-page-nav") {
           visibility(.hidden)
         }
-        // Beside the switch it explains, the header's own gap from it.
+        // Beside the switch it explains, the footer's own gap from it.
         descendant(".artifact-raw-info") {
           flexShrink(0)
           display(.inlineFlex)
           alignItems(.center)
+        }
+        // Raw at the footer's start, the pager and fullscreen at its end.
+        descendant(".artifact-footer-start") {
+          display(.flex)
+          flex(1)
+          alignItems(.center)
+          gap(spacing8)
+          minWidth(0)
         }
         descendant(".artifact-viewer-container") {
           flex(1)
