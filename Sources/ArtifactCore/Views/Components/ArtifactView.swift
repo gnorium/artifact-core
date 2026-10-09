@@ -387,7 +387,11 @@
           minWidth(0)
           minHeight(0)
           overflow(.auto)
-          padding(spacing16)
+          // No padding of its own (user, 2026-10-10): the transcript view
+          // carries the text's inset, so a state ring drawn on the pane
+          // (TestamentView) sits on the pane's own edges, with the canvas
+          // shown and put away alike.
+          padding(0)
           // The divider sits on the transcript's far edge, because the transcript
           // comes first: to its right when the two are side by side, under it
           // when they stack. It used to be a leading border, from when the
