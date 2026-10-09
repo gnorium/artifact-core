@@ -25,10 +25,6 @@
     /// the manifest and answers so. `{"canvases":[],"error":"…"}` says why
     /// there are none.
     let manifestURL: String
-    /// The work's title, the header's one line: the title alone, no voice
-    /// names, which are no part of it (user, 2026-10-09). The manifest's
-    /// free-text label never stands in for it.
-    let title: String?
     let style: CSSStyle
     /// Which canvas the viewer opens on, when the page knows better than the
     /// reader's last visit—a deep link to one page of the object.
@@ -63,37 +59,41 @@
     /// pages of the reader and the site's pages alike, and every reader on
     /// the page follows it. Without the switch the canvas always shows.
     let canvasSwitch: Bool
-    /// Controls the host adds to the header, after the title (a Find
-    /// button).
+    /// Controls the host adds to the header, at its end (a Find button).
     let actions: [DOM.Node]
     /// A row the host adds under the header's own, the width of the viewer
     /// (a find bar), shown while the host marks the row open
     /// (`data-open="true"` on `.artifact-header-bar`). Closed, it takes no
     /// room: an empty row still took the header's gap under the controls.
     let bar: [DOM.Node]
+    /// How many pages the transcript has, when the host knows: the pager
+    /// counts them from the start, before a manifest is read (which may
+    /// count its canvases instead). Nil: unknown until the reader counts
+    /// them, and the pager is hidden until then—never "of —".
+    let pageCount: Int?
 
     public init(
       manifestURL: String = "",
-      title: String? = nil,
       style: CSSStyle = .default,
       startCanvas: Int? = nil,
       startService: String? = nil,
       codeSwitch: Bool = false,
       codeSwitchInfo: String? = nil,
       canvasSwitch: Bool = false,
+      pageCount: Int? = nil,
       @HTMLBuilder transcript: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
       @HTMLBuilder actions: () -> [DOM.Node] = { [] },
       @HTMLBuilder bar: () -> [DOM.Node] = { [] }
     ) {
       self.manifestURL = manifestURL
-      self.title = title
       self.style = style
       self.startCanvas = startCanvas
       self.startService = startService
       self.codeSwitch = codeSwitch
       self.codeSwitchInfo = codeSwitchInfo
       self.canvasSwitch = canvasSwitch
+      self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.transcript = transcript()
       self.canvas = canvas()
       self.actions = actions()
@@ -104,6 +104,14 @@
     /// page images to show.
     private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty }
 
+    /// Whether the header has anything to hold. It carries no title (user,
+    /// 2026-10-09): on a biblio page the work is already the page's heading
+    /// or its node's description, and an utterance's reader is credited
+    /// under it. With no controls the viewer has no header at all.
+    private var hasHeader: Bool {
+      (codeSwitch && !transcript.isEmpty) || !actions.isEmpty || switchesCanvas || !bar.isEmpty
+    }
+
     public func build() -> DOM.Node {
       // A canvas the reader draws itself, for a canvas the slot lacks, is
       // styled by the canvas's own sheet, which the page must link.
@@ -111,83 +119,74 @@
 
       return div {
         // ── Header ──────────────────────────────────────────────────────────
-        header {
-          // One row of controls, never wrapped: where a narrow reader cannot
-          // hold them all, the row scrolls sideways (user, 2026-09-30).
-          div {
-          // The switch between the transcript and the code it was made from.
-          // First in the row, so it sits at the top left beside the transcript it
-          // changes: the title block grows to fill and would push it right.
-          if codeSwitch, !transcript.isEmpty {
-            ToggleButtonView(
-              label: "Raw",
-              icon: nil as HTML.HTMLSpanElement?,
-              modelValue: false,
-              weight: .static,
-              buttonColor: .gray,
-              fullWidth: false,
-              ariaLabel: "Code of this transcript",
-              indicateSelection: true,
-              size: .small,
-              class: "artifact-code-toggle",
-              labelFontWeight: fontWeightNormal
-            )
-            if let info = codeSwitchInfo {
-              // 14, as the header's other small icons (user, 2026-10-08).
-              TooltipView(tooltip: info, class: "artifact-code-info") {
-                IconView(
-                  icon: { size in [InfoIconView(size: size)] }, size: ButtonView.ButtonSize.small.iconSize)
+        if hasHeader {
+          header {
+            // One row of controls, never wrapped: where a narrow reader cannot
+            // hold them all, the row scrolls sideways (user, 2026-09-30).
+            div {
+            // The switch between the transcript and the code it was made from.
+            // First in the row, so it sits at the top left beside the transcript it
+            // changes; the host's controls take the rest of the row, at its end.
+            if codeSwitch, !transcript.isEmpty {
+              ToggleButtonView(
+                label: "Raw",
+                icon: nil as HTML.HTMLSpanElement?,
+                modelValue: false,
+                weight: .static,
+                buttonColor: .gray,
+                fullWidth: false,
+                ariaLabel: "Code of this transcript",
+                indicateSelection: true,
+                size: .small,
+                class: "artifact-code-toggle",
+                labelFontWeight: fontWeightNormal
+              )
+              if let info = codeSwitchInfo {
+                // An icon on its own, on par with the row's 16px text, takes
+                // the text's size, as the header's other icons (user,
+                // 2026-10-09); a size minus 4 is for an icon beside a label.
+                TooltipView(tooltip: info, class: "artifact-code-info") {
+                  IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconSmall)
+                }
               }
             }
-          }
-          // Faded where it runs past the row, and shown whole in a sheet
-          // over the viewer from its fade, at every width (user,
-          // 2026-10-08): wrapped in place, a phone's row made it a column a
-          // word wide that covered the reader.
-          span {
-            span { title ?? "" }
-              .id("artifact-title")
-              .class("artifact-title-primary")
-          }
-          .class("artifact-title-block")
-          .data("edge-fade", "sheet")
-
-          if !actions.isEmpty || switchesCanvas {
-            div {
-              actions
-              // An image switch is distinct from the adjacent page-navigation arrows.
-              if switchesCanvas {
-                ToggleButtonView(
-                  label: "Semblance",
-                  icon: IconView(
-                    icon: { s in ImageIconView(size: s) }, size: ButtonView.ButtonSize.small.iconSize),
-                  modelValue: false,
-                  weight: .plain,
-                  buttonColor: .gray,
-                  iconOnly: true,
-                  ariaLabel: "Semblance",
-                  size: .small,
-                  class: "artifact-canvas-toggle"
-                )
+            if !actions.isEmpty || switchesCanvas {
+              div {
+                actions
+                // An image switch is distinct from the adjacent page-navigation arrows.
+                if switchesCanvas {
+                  ToggleButtonView(
+                    label: "Semblance",
+                    icon: IconView(
+                      icon: { s in ImageIconView(size: s) }, size: sizeIconSmall),
+                    modelValue: false,
+                    weight: .plain,
+                    buttonColor: .gray,
+                    iconOnly: true,
+                    ariaLabel: "Semblance",
+                    size: .small,
+                    class: "artifact-canvas-toggle"
+                  )
+                }
               }
+              .class("artifact-header-actions")
             }
-            .class("artifact-header-actions")
-          }
-          }
-          .class("artifact-header-row")
+            }
+            .class("artifact-header-row")
 
-          if !bar.isEmpty {
-            // The shell's height moves; its inset is the panel's, as an
-            // alert's is, so closed it is truly nothing.
-            div {
-              div { bar }
-                .class("artifact-header-bar-panel")
+            if !bar.isEmpty {
+              // The shell's height moves; its inset is the panel's, as an
+              // alert's is, so closed it is truly nothing.
+              div {
+                div { bar }
+                  .class("artifact-header-bar-panel")
+              }
+                .class("artifact-header-bar")
+                .data("open", false)
             }
-              .class("artifact-header-bar")
-              .data("open", false)
           }
+          .class("artifact-header")
         }
-        .class("artifact-header")
 
         // ── Viewer body with prev/next overlaid on edges ─────────────────────
         div {
@@ -233,21 +232,18 @@
             .class("artifact-canvas-label")
             .data("edge-fade", "expand")
 
-          div().id("artifact-zoom-controls")
-            .class("artifact-zoom-controls")
-
           // The page nav, beside fullscreen at the footer's end (user,
           // 2026-10-08): in the header it pushed the row past a phone's
           // width, and the page turns sit with the page's own label here.
           PaginationView(
-            currentPage: 1,
-            totalPages: 1,
+            currentPage: min((startCanvas ?? 0) + 1, pageCount ?? 1),
+            totalPages: pageCount ?? 1,
             size: .small,
             showControls: true,
             kind: "artifact",
             inputID: "artifact-page-input",
             totalID: "artifact-page-total",
-            totalDisplay: "—",
+            totalDisplay: pageCount.map { "\($0)" } ?? "—",
             ariaLabel: "Pages",
             inputAriaLabel: "Page number",
             class: "artifact-page-nav"
@@ -255,19 +251,14 @@
 
           button {
             IconView(
-              icon: { size in [FullscreenIconView(size: size)] }, size: ButtonView.ButtonSize.small.iconSize)
+              icon: { size in [FullscreenIconView(size: size)] }, size: sizeIconSmall)
           }
           .id("artifact-fullscreen-btn")
           .class("artifact-fullscreen-button")
         }
         .class("artifact-footer")
-
-        // The header's title shown whole, over the viewer: the viewer is
-        // the sheet's host.
-        EdgeFadeSheetView()
       }
       .class("artifact-view")
-      .data("sheet-host", true)
       .data("manifest-url", manifestURL)
       .data("start-canvas", startCanvas.map { "\($0)" } ?? "")
       .data("start-service", startService ?? "")
@@ -275,6 +266,9 @@
       // Hidden until the reader knows the session's choice, so that a reader
       // left off never shows an empty column first.
       .data("canvas-shown", !switchesCanvas)
+      // Whether the pager knows its total; the reader says so once it has
+      // counted the pages.
+      .data("pages-known", pageCount != nil)
       .style {
         selector("&") {
           display(.flex)
@@ -322,24 +316,14 @@
           scrollbarWidth(.none)
           pseudoElement(.webkitScrollbar) { display(.none).important() }
         }
-        // The row's text at its controls' size: 16, as the pager's number.
-        selector(".artifact-title-block") {
-          fontFamily(typographyFontSans)
-          fontSize(fontSizeMedium16)
-          lineHeight(lineHeightSmall22)
-          flex(1)
-          minWidth(0)
-        }
-        fadeOverflow(".artifact-title-block")
-        descendant(".artifact-title-primary") {
-          fontWeight(fontWeightSemiBold)
-          color(colorBase)
-        }
+        // The host's controls take the rest of the row, at its end (the
+        // start in RTL), Raw alone at the row's start.
         descendant(".artifact-header-actions") {
           display(.flex)
+          flexGrow(1)
           alignItems(.center)
+          justifyContent(.flexEnd)
           gap(spacing8)
-          flexShrink(0)
         }
         // The row above it again: small controls, 4 above and under them,
         // 12 under the row (its 4 and the panel's 8). The inset is the
@@ -355,11 +339,14 @@
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
         }
-        descendant(".artifact-page-nav") {
+        selector("& .artifact-page-nav", "& .artifact-code-toggle") {
           flexShrink(0)
         }
-        // Beside the switch it explains, no nearer than the switch sits to
-        // the title: the header's own gap.
+        // Its total unknown, the pager waits unseen rather than read "of —".
+        selector("&[data-pages-known='false'] .artifact-page-nav") {
+          visibility(.hidden)
+        }
+        // Beside the switch it explains, the header's own gap from it.
         descendant(".artifact-code-info") {
           flexShrink(0)
           display(.inlineFlex)
@@ -460,8 +447,8 @@
         }
         // 40, as the header: small controls, 4 above and under them. The
         // pager and fullscreen at the row's end, the start in RTL.
-        // Never squeezed by the viewer's column: a header grown tall (a
-        // long title opened) takes the transcript's room, never the pager's.
+        // Never squeezed by the viewer's column: a header grown tall (its
+        // find bar open) takes the transcript's room, never the pager's.
         descendant(".artifact-footer") {
           flexShrink(0)
           justifyContent(.flexEnd)
@@ -478,11 +465,6 @@
           minWidth(0)
         }
         fadeOverflow("& .artifact-canvas-label")
-        descendant(".artifact-zoom-controls") {
-          display(.flex)
-          alignItems(.center)
-          gap(spacing4)
-        }
         selector(".artifact-fullscreen-button") {
           display(.flex)
           alignItems(.center)
@@ -823,8 +805,8 @@
 
     private func parseManifest(_ json: String) {
       // The viewer's shape: {"label":"...","canvases":[{"id":"...","w":N,"h":N,"l":"..."},...]}
-      // The title is the work's, from its record's fields, drawn by the
-      // server; the manifest's free-text label never stands in for it.
+      // The manifest's free-text label is shown nowhere: the reader has no
+      // title (the page heads it).
       let parts = stringSplit(json, separator: "\"canvases\":")
       guard parts.count > 1 else { return }
       let entries = stringSplit(parts[1], separator: "},{")
@@ -897,6 +879,7 @@
       }
       pageInput?.setAttribute(.max, "\(total)")
       pageTotal?.textContent = "\(total)"
+      root.setAttribute(data("pages-known"), total > 0 ? "true" : "false")
       var digits = 1
       var n = total
       while n >= 10 { n /= 10; digits += 1 }
@@ -910,16 +893,14 @@
       setPageTurn(nextBtn, disabled: canvasIndex >= total - 1)
     }
 
-    /// What the footer names a page: the transcript's own label for it
-    /// (its `pb`'s `n`, `data-label`), else the manifest's canvas label.
+    /// What the footer names a page: the manifest's label for its canvas,
+    /// else its place in the sequence (1, 2, 3)—never the transcript's own
+    /// `pb n`, which the explication writes from the image and the
+    /// manifest outranks (user, 2026-10-09).
     private func label(of index: Int) -> String {
       guard index < serviceIDs.count else { return "" }
-      let service = serviceIDs[index]
-      for pane in transcriptPanes where stringEquals(pane.dataset["service-id"] ?? "", service) {
-        let own = pane.dataset["label"] ?? ""
-        if !stringIsEmpty(stringTrim(own)) { return own }
-      }
-      return index < canvasLabels.count ? canvasLabels[index] : ""
+      let given = index < canvasLabels.count ? stringTrim(canvasLabels[index]) : ""
+      return stringIsEmpty(given) ? intToString(index + 1) : given
     }
 
     /// A page turn's enabled state, on the property and in the class.
