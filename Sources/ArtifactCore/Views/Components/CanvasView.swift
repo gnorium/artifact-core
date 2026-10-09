@@ -31,7 +31,7 @@
         div {
           // Shown while the image loads, hidden once it has.
           div {
-            RotatingSectorView(ariaHidden: true)
+            RotatingRingSectorView(ariaHidden: true)
           }
           .class("canvas-spinner")
           .data("visible", "false")
@@ -161,7 +161,7 @@
       let spinner = document.createElement(.div)
       spinner.className = "canvas-spinner"
       spinner.setAttribute(data("visible"), "false")
-      spinner.appendChild(RotatingSectorFactory.createElement())
+      spinner.appendChild(RotatingRingSectorFactory.createElement())
       viewport.appendChild(spinner)
       canvas.appendChild(viewport)
       return canvas
