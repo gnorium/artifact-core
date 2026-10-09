@@ -25,13 +25,10 @@
     /// the manifest and answers so. `{"canvases":[],"error":"…"}` says why
     /// there are none.
     let manifestURL: String
-    /// The work's title, heading the header. The manifest's free-text label
-    /// never stands in for it.
+    /// The work's title, the header's one line: the title alone, no voice
+    /// names, which are no part of it (user, 2026-10-09). The manifest's
+    /// free-text label never stands in for it.
     let title: String?
-    /// The names of the work's voices—everyone who made it, whatever their
-    /// role—in order, on a line of their own under the title ("by A and B",
-    /// subtle). None: no line, never "by —".
-    let voiceNames: [String]
     let style: CSSStyle
     /// Which canvas the viewer opens on, when the page knows better than the
     /// reader's last visit—a deep link to one page of the object.
@@ -78,7 +75,6 @@
     public init(
       manifestURL: String = "",
       title: String? = nil,
-      voiceNames: [String] = [],
       style: CSSStyle = .default,
       startCanvas: Int? = nil,
       startService: String? = nil,
@@ -92,7 +88,6 @@
     ) {
       self.manifestURL = manifestURL
       self.title = title
-      self.voiceNames = voiceNames
       self.style = style
       self.startCanvas = startCanvas
       self.startService = startService
@@ -103,24 +98,6 @@
       self.canvas = canvas()
       self.actions = actions()
       self.bar = bar()
-    }
-
-    /// The voice names as English lists them, with the Oxford comma: "A",
-    /// "A and B", "A, B, and C"—as a record's address lists them.
-    private var voiceNamesLine: String {
-      let names = voiceNames.filter { !$0.isEmpty }
-      var result = ""
-      for (i, name) in names.enumerated() {
-        if i == 0 { result = name }
-        else if names.count == 2 { result += " and \(name)" }
-        else if i == names.count - 1 { result += ", and \(name)" }
-        else { result += ", \(name)" }
-      }
-      return result
-    }
-
-    private var headerSubtitle: String {
-      voiceNamesLine.isEmpty ? "" : "by \(voiceNamesLine)"
     }
 
     /// Whether the header shows the page-images switch: only when there are
@@ -166,20 +143,11 @@
           // Faded where it runs past the row, and shown whole in a sheet
           // over the viewer from its fade, at every width (user,
           // 2026-10-08): wrapped in place, a phone's row made it a column a
-          // word wide that covered the reader. The voice names are a line of
-          // their own under the title: after it on the same line, a long
-          // title faded them out of sight (user, 2026-10-09).
+          // word wide that covered the reader.
           span {
             span { title ?? "" }
               .id("artifact-title")
               .class("artifact-title-primary")
-            if !headerSubtitle.isEmpty {
-              // Its space keeps the title and the names apart in the
-              // text a sheet or a screen reader is given; a line's start
-              // drops it.
-              span { " \(headerSubtitle)" }
-                .class("artifact-title-subtitle")
-            }
           }
           .class("artifact-title-block")
           .data("edge-fade", "sheet")
@@ -363,17 +331,9 @@
           minWidth(0)
         }
         fadeOverflow(".artifact-title-block")
-        // A line each, the title's and the voice names', in the sheet too.
         descendant(".artifact-title-primary") {
-          display(.block)
           fontWeight(fontWeightSemiBold)
           color(colorBase)
-        }
-        descendant(".artifact-title-subtitle") {
-          display(.block)
-          fontSize(fontSizeSmall14)
-          lineHeight(lineHeightXSmall20)
-          color(colorSubtle)
         }
         descendant(".artifact-header-actions") {
           display(.flex)
