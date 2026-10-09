@@ -53,8 +53,12 @@
     /// is on screen, and read only then.
     let canvas: [DOM.Node]
     /// Whether the header carries a switch that shows the canvas slot, the
-    /// page images, beside the transcript (user, 2026-09-29). Off by default:
-    /// the transcript takes the whole width and no page image is fetched.
+    /// page images, beside the transcript (user, 2026-09-29): the host says
+    /// the object has page images (semblances); the reader takes the switch
+    /// away again where its manifest gives none (user, 2026-10-09: the
+    /// switch needs a semblance, never an ordinance). Off by default when
+    /// there is a transcript: it takes the whole width and no page image is
+    /// fetched; with none, the images show until it is turned off.
     /// The choice holds for the browser session (`sessionStorage`), across
     /// pages of the reader and the site's pages alike, and every reader on
     /// the page follows it. Without the switch the canvas always shows.
@@ -102,7 +106,7 @@
 
     /// Whether the header shows the page-images switch: only when there are
     /// page images to show.
-    private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty }
+    private var switchesCanvas: Bool { canvasSwitch && (!canvas.isEmpty || transcript.isEmpty) }
 
     /// Whether the header has anything to hold. It carries no title (user,
     /// 2026-10-09): on a biblio page the work is already the page's heading
@@ -701,7 +705,11 @@
     private func setupCanvasSwitch() {
       guard let toggle = root.querySelector(".artifact-canvas-toggle") else { return }
       canvasToggle = toggle
-      canvasShown = stringEquals(sessionStorage.getItem(ArtifactHydration.canvasShownKey) ?? "false", "true")
+      // With no transcript the images are all there is: shown until this
+      // reader's switch puts them away.
+      canvasShown =
+        transcriptPanes.isEmpty
+        || stringEquals(sessionStorage.getItem(ArtifactHydration.canvasShownKey) ?? "false", "true")
       reflectCanvasShown()
       _ = toggle.addEventListener("toggle-button-update") { (event: Event) in
         ArtifactHydration.showCanvases(stringEquals(event.detail, "true"))
@@ -798,6 +806,15 @@
 
     /// The page asked for, else the one this reader was last on.
     private func open() {
+      // The images switch needs an image to show (user, 2026-10-09).
+      var imaged = false
+      for width in imageWidths where width > 0 { imaged = true }
+      if !imaged, let toggle = canvasToggle {
+        toggle.style.display(.none)
+        canvasToggle = nil
+        canvasShown = true
+        root.setAttribute(data("canvas-shown"), "true")
+      }
       guard !serviceIDs.isEmpty else { return }
       let asked = canvasIndex(ofService: startService) ?? startCanvas ?? savedCanvasIndex()
       loadCanvas(max(0, min(asked, serviceIDs.count - 1)))
