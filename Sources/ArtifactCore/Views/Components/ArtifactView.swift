@@ -611,6 +611,9 @@
     private var object: DOM.Element?
     private var canvases: [CanvasReader] = []
     private var shownCanvas: CanvasReader?
+    /// The canvases a host lets the reader draw a crop box on
+    /// (`artifact-crop-mode`), by image service.
+    private var cropServices: [String] = []
     /// The page-images switch, when the viewer has one, and whether the
     /// canvas shows: always without the switch.
     private var canvasToggle: DOM.Element?
@@ -675,6 +678,21 @@
       // bar's match): an `artifact-show-service` event on the viewer.
       _ = root.addEventListener("artifact-show-service") { [self] (event: Event) in
         if let index = self.canvasIndex(ofService: event.detail) { self.loadCanvas(index) }
+      }
+      // A crop box (a call's, on an attached canvas): `artifact-crop-mode`
+      // names the services, one a line, a box may be drawn on (none: off);
+      // `artifact-crop-clear` takes the box off one service (empty: all).
+      // Each box drawn, moved or cleared is told as `artifact-crop-change`,
+      // "<service> x y w h" in the 0–1000 space, or "<service>" cleared.
+      _ = root.addEventListener("artifact-crop-mode") { [self] (event: Event) in
+        self.cropServices = stringSplit(event.detail, separator: "\n").filter { !stringIsEmpty($0) }
+        for canvas in self.canvases { canvas.setCropping(self.mayCrop(canvas.serviceID)) }
+      }
+      _ = root.addEventListener("artifact-crop-clear") { [self] (event: Event) in
+        for canvas in self.canvases
+        where stringIsEmpty(event.detail) || stringEquals(canvas.serviceID, event.detail) {
+          canvas.clearCrop()
+        }
       }
       // Or by its place in the sequence (0-based), as a roster of the
       // canvases names it: `artifact-show-canvas`.
@@ -900,8 +918,18 @@
         element = drawn
       }
       let canvas = CanvasReader(root: element ?? CanvasReader.make(serviceID: service))
+      let viewer = root
+      canvas.onCrop = { detail in
+        viewer.dispatchEvent(CustomEvent(type: "artifact-crop-change", detail: detail))
+      }
+      canvas.setCropping(mayCrop(service))
       canvases.append(canvas)
       return canvas
+    }
+
+    private func mayCrop(_ service: String) -> Bool {
+      for allowed in cropServices where stringEquals(allowed, service) { return true }
+      return false
     }
 
     private func updateUI() {
