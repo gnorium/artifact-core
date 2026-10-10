@@ -140,15 +140,15 @@
               // An image switch is distinct from the adjacent page-navigation arrows.
               if switchesCanvas {
                 ToggleButtonView(
-                  label: "Canvas",
+                  label: "Resemblance",
                   icon: IconView(
                     icon: { s in ImageIconView(size: s) }, size: sizeIconSmall),
                   modelValue: false,
                   weight: .plain,
                   buttonColor: .gray,
                   iconOnly: true,
-                  ariaLabel: "Canvas",
-                  size: .small,
+                  ariaLabel: "Resemblance",
+                  size: .medium,
                   class: "artifact-canvas-toggle"
                 )
               }
@@ -222,9 +222,9 @@
                 weight: .static,
                 buttonColor: .gray,
                 fullWidth: false,
-                ariaLabel: "Markup of this page",
+                ariaLabel: "Raw",
                 indicateSelection: true,
-                size: .small,
+                size: .medium,
                 class: "artifact-raw-toggle",
                 labelFontWeight: fontWeightNormal
               )
@@ -246,7 +246,7 @@
           PaginationView(
             currentPage: min((startCanvas ?? 0) + 1, pageCount ?? 1),
             totalPages: pageCount ?? 1,
-            size: .small,
+            size: .medium,
             showControls: true,
             kind: "artifact",
             inputID: "artifact-page-input",
@@ -302,10 +302,11 @@
           // No gap: the bar carries the 12 above it as its own inset, so
           // closed to no height it takes no room, and its opening animates
           // its height alone (`TestamentFindHydration`).
-          // The bar is 40 and its controls 32 (user, 2026-10-08): the 4 on
-          // every side of them is the row's own (user, 2026-10-10), so its
-          // scrollport takes in a control's focus ring, which it would
-          // otherwise cut off.
+          // The bar is 56 and its controls medium, 40 (user, 2026-10-10):
+          // the 8 on every side of them is the row's own, so its label and
+          // controls clear the box's rounded corners and its scrollport
+          // takes in a control's focus ring, which it would otherwise cut
+          // off.
           padding(0)
           borderBlockEnd(borderWidthBase, .solid, borderColorBase)
           minHeight(minSizeInteractiveTouch)
@@ -318,7 +319,7 @@
           alignItems(.center)
           gap(spacing12)
           minWidth(0)
-          padding(spacing4)
+          padding(spacing8)
           overflowX(.auto)
           overflowY(.hidden)
           scrollbarWidth(.none)
@@ -343,7 +344,7 @@
         }
         descendant(".artifact-header-bar-panel") {
           minWidth(0)
-          padding(spacing4)
+          padding(spacing8)
         }
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
@@ -466,7 +467,7 @@
         ) {
           display(.none)
         }
-        // 40, as the header: 32 controls, 4 on every side of them. The
+        // 56, as the header: 40 controls, 8 on every side of them. The
         // pager and fullscreen at the row's end, the start in RTL.
         // Never squeezed by the viewer's column: a header grown tall (its
         // find bar open) takes the markup's room, never the pager's.
@@ -474,7 +475,7 @@
           flexShrink(0)
           justifyContent(.flexEnd)
           gap(spacing8)
-          padding(spacing4)
+          padding(spacing8)
           minHeight(minSizeInteractiveTouch)
           boxSizing(.borderBox)
           borderBlockStart(borderWidthBase, .solid, borderColorBase)
@@ -490,8 +491,8 @@
           display(.flex)
           alignItems(.center)
           justifyContent(.center)
-          width(minSizeInteractivePointer)
-          height(minSizeInteractivePointer)
+          width(minSizeInteractiveTouch)
+          height(minSizeInteractiveTouch)
           borderRadius(borderRadiusBase)
           border(.none)
           backgroundColor(.transparent)
@@ -979,6 +980,10 @@
       return true
     }
 
+    /// Whether the manifest could not be read at all (no answer), as
+    /// against an answer that names no images.
+    private var manifestUnread = false
+
     /// The page images, off unless this session turned them on.
     private func setupCanvasSwitch() {
       guard let toggle = root.querySelector(".artifact-canvas-toggle") else { return }
@@ -1050,11 +1055,14 @@
     private func loadManifest(url: String) {
       root.fetch(url) { [self] jsonStr in
         guard let jsonStr else {
+          manifestUnread = true
           root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "0"))
           pageMarkup()
           return
         }
         parseManifest(jsonStr)
+        // Not read this time (too slow, too many reads): as no answer.
+        if serviceIDs.isEmpty, stringContains(jsonStr, "\"unread\":true") { manifestUnread = true }
         if serviceIDs.isEmpty, let reason = extractJSONString(jsonStr, key: "error") {
           root.dispatchEvent(CustomEvent(type: "artifact-manifest-error", detail: reason))
         }
@@ -1080,9 +1088,16 @@
 
     /// The page asked for, else the one this reader was last on.
     private func open() {
-      // The images switch needs an image to show (user, 2026-10-09).
+      // The images switch needs an image to show (user, 2026-10-09): one
+      // the manifest names, or, where the manifest could not be read at
+      // all, the image service a page names (user, 2026-10-10: a manifest
+      // read failing hid a switch the server drew, until a reload). Only a
+      // manifest that answers with no images takes the switch away.
       var imaged = false
       for width in imageWidths where width > 0 { imaged = true }
+      if manifestUnread {
+        for id in serviceIDs where !stringIsEmpty(id) { imaged = true }
+      }
       if !imaged, let toggle = canvasToggle {
         toggle.style.display(.none)
         canvasToggle = nil
