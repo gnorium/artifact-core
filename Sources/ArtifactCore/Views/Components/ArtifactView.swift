@@ -302,11 +302,11 @@
           // No gap: the bar carries the 12 above it as its own inset, so
           // closed to no height it takes no room, and its opening animates
           // its height alone (`TestamentFindHydration`).
-          // The bar is 40 and its controls small, 32 (user, 2026-10-08):
-          // the 4 above and under them is the row's own, so its scrollport
-          // takes in a control's focus ring, which it would otherwise cut
-          // off.
-          padding(0, spacing8)
+          // The bar is 40 and its controls 32 (user, 2026-10-08): the 4 on
+          // every side of them is the row's own (user, 2026-10-10), so its
+          // scrollport takes in a control's focus ring, which it would
+          // otherwise cut off.
+          padding(0)
           borderBlockEnd(borderWidthBase, .solid, borderColorBase)
           minHeight(minSizeInteractiveTouch)
         }
@@ -318,7 +318,7 @@
           alignItems(.center)
           gap(spacing12)
           minWidth(0)
-          padding(spacing4, spacing8)
+          padding(spacing4)
           overflowX(.auto)
           overflowY(.hidden)
           scrollbarWidth(.none)
@@ -333,16 +333,17 @@
           justifyContent(.flexEnd)
           gap(spacing8)
         }
-        // The row above it again: small controls, 4 above and under them,
-        // 12 under the row (its 4 and the panel's 8). The inset is the
-        // panel's, never the shell's: a shell's height counts its padding,
-        // so animated to 0 it stopped at 20 and stalled there, then grew.
+        // The row above it again: 32 controls, 4 on every side, 8 under
+        // the row (its 4 and the panel's 4). The inset is the panel's,
+        // never the shell's: a shell's height counts its padding, so
+        // animated to 0 it stopped at its padding and stalled there, then
+        // grew.
         descendant(".artifact-header-bar") {
           minWidth(0)
         }
         descendant(".artifact-header-bar-panel") {
           minWidth(0)
-          padding(spacing8, spacing8, spacing4)
+          padding(spacing4)
         }
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
@@ -465,7 +466,7 @@
         ) {
           display(.none)
         }
-        // 40, as the header: small controls, 4 above and under them. The
+        // 40, as the header: 32 controls, 4 on every side of them. The
         // pager and fullscreen at the row's end, the start in RTL.
         // Never squeezed by the viewer's column: a header grown tall (its
         // find bar open) takes the markup's room, never the pager's.
@@ -473,7 +474,7 @@
           flexShrink(0)
           justifyContent(.flexEnd)
           gap(spacing8)
-          padding(spacing4, spacing16)
+          padding(spacing4)
           minHeight(minSizeInteractiveTouch)
           boxSizing(.borderBox)
           borderBlockStart(borderWidthBase, .solid, borderColorBase)
@@ -489,8 +490,8 @@
           display(.flex)
           alignItems(.center)
           justifyContent(.center)
-          width(ButtonView.ButtonSize.small.minSize)
-          height(ButtonView.ButtonSize.small.minSize)
+          width(minSizeInteractivePointer)
+          height(minSizeInteractivePointer)
           borderRadius(borderRadiusBase)
           border(.none)
           backgroundColor(.transparent)
