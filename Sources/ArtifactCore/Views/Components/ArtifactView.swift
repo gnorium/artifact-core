@@ -646,6 +646,7 @@
     func detach() {
       window.removeEventListener(.keydown, keyDownListener)
       document.removeEventListener(.fullscreenchange, fullscreenListener)
+      if selectionListener >= 0 { document.removeEventListener("selectionchange", selectionListener) }
       for canvas in canvases { canvas.detach() }
     }
 
@@ -674,6 +675,7 @@
       setupControls()
       setupLayers()
       setupCanvasSwitch()
+      setupRegions()
       // A host turns the reader to a page by its image service (a find
       // bar's match): an `artifact-show-service` event on the viewer.
       _ = root.addEventListener("artifact-show-service") { [self] (event: Event) in
@@ -733,6 +735,247 @@
         self.translationVisible = stringEquals(event.detail, "true")
         self.showLayers()
       }
+    }
+
+    // MARK: - Regions
+
+    /// The region the page's markup names where the caret or the selection
+    /// is in its code (an editor's, or a read-only Raw's) and where the
+    /// pointer rests (a read-only Raw's), drawn on the canvas on screen: the
+    /// pointer's over the caret's. A canvas put away draws nothing and is
+    /// not opened for it.
+    ///
+    /// A bbox under the caret in an editor is edited on the canvas too: its
+    /// box's corners resize it and its body moves it (`CanvasReader`'s crop
+    /// box), and with the caret in its value the arrows nudge it by 1 (with
+    /// Shift, 10) and with Alt resize it; each change is written into the
+    /// bbox, one edit a drag or a key, as typing would be.
+    private var caretRegion: MarkupRegion?
+    private var hoverRegion: MarkupRegion?
+    /// The editor whose caret names `caretRegion`, when one does, and where
+    /// its caret stands (a byte of its text).
+    private var caretEditor: DOM.Element?
+    private var caretOffset = 0
+    /// A drag under way on the canvas, written into the bbox as it goes
+    /// (outside the editor's history): the text node, where the value
+    /// starts and how long it is now (UTF-16), and the value it began as.
+    private var dragNode: DOM.Text?
+    private var dragStart = 0
+    private var dragLength = 0
+    private var dragOriginal = ""
+    private var selectionListener: Int32 = -1
+
+    /// The code of the page on screen, under Raw: its editor, or its
+    /// read-only blocks (the page's and its translation's).
+    private static let rawCode = ".artifact-transcript .tei-transcript[data-active='true'] .tei-page-raw .code-code"
+
+    private func setupRegions() {
+      selectionListener = document.addEventListener("selectionchange") { [self] _ in self.followCaret() }
+      // Typing moves the caret, and changes what it is on even where it
+      // stays.
+      _ = root.addEventListener(.input) { [self] _ in self.followCaret() }
+      _ = root.addEventListener(.mousemove) { [self] e in self.followPointer(x: e.clientX, y: e.clientY) }
+      _ = root.addEventListener(.mouseleave) { [self] _ in self.setRegion(hover: nil) }
+      // Before the editor's own keys, which keep the arrows to themselves.
+      _ = root.addEventListener(
+        .keydown,
+        { [self] e in
+          if self.nudge(key: e.key, shift: e.shiftKey, alt: e.altKey) {
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        }, capture: true)
+    }
+
+    private func followCaret() {
+      // A drag writes the value as it goes; the drag is what it says.
+      if case .some = dragNode { return }
+      guard let selection = window.getSelection(), let node = selection.focusNode else {
+        setRegion(caret: nil, editor: nil)
+        return
+      }
+      for code in root.querySelectorAll(Self.rawCode) where code.contains(node) {
+        let caret = offset(in: code, node: node, offset: selection.focusOffset)
+        caretOffset = caret
+        setRegion(
+          caret: region(in: code, caret: caret), editor: code.hasAttribute("data-code-editing") ? code : nil)
+        return
+      }
+      setRegion(caret: nil, editor: nil)
+    }
+
+    private func followPointer(x: Double, y: Double) {
+      guard let position = document.caretPositionFromPoint(x, y), let node = position.offsetNode else {
+        setRegion(hover: nil)
+        return
+      }
+      for code in root.querySelectorAll(Self.rawCode) where !code.hasAttribute("data-code-editing") && code.contains(node) {
+        setRegion(hover: region(in: code, caret: offset(in: code, node: node, offset: position.offset)))
+        return
+      }
+      setRegion(hover: nil)
+    }
+
+    /// A point of the code as a byte of its text: the text before it
+    /// counted.
+    private func offset(in code: DOM.Element, node: DOM.Node, offset: Int) -> Int {
+      let before = document.createRange()
+      before.setStart(code, 0)
+      before.setEnd(node, offset)
+      return before.toString().utf8.count
+    }
+
+    /// What the code names at a byte of its text, read against the page's
+    /// zones.
+    private func region(in code: DOM.Element, caret: Int) -> MarkupRegion? {
+      let zones = code.closest(".tei-transcript")?.getAttribute(data("zones")) ?? ""
+      return MarkupRegion.at(Array(code.textContent.utf8), caret: caret, zones: zones)
+    }
+
+    private func setRegion(caret region: MarkupRegion?, editor: DOM.Element?) {
+      let sameEditor: Bool
+      if case .some(let a) = caretEditor, case .some(let b) = editor {
+        sameEditor = a.id == b.id
+      } else if case .none = caretEditor, case .none = editor {
+        sameEditor = true
+      } else {
+        sameEditor = false
+      }
+      caretEditor = editor
+      guard !sameEditor || !Self.same(caretRegion, region) else {
+        caretRegion = region
+        return
+      }
+      caretRegion = region
+      drawRegion()
+    }
+
+    private func setRegion(hover region: MarkupRegion?) {
+      guard !Self.same(hoverRegion, region) else { return }
+      hoverRegion = region
+      drawRegion()
+    }
+
+    private static func same(_ a: MarkupRegion?, _ b: MarkupRegion?) -> Bool {
+      if case .some(let a) = a, case .some(let b) = b { return a.isSame(as: b) }
+      if case .none = a, case .none = b { return true }
+      return false
+    }
+
+    private func drawRegion() {
+      guard let canvas = shownCanvas else { return }
+      if case .some(let region) = hoverRegion {
+        canvas.showRegion(x: region.x, y: region.y, width: region.width, height: region.height)
+      } else if case .some(let region) = caretRegion {
+        if case .some = caretEditor, region.editable {
+          canvas.editRegion(x: region.x, y: region.y, width: region.width, height: region.height)
+        } else {
+          canvas.showRegion(x: region.x, y: region.y, width: region.width, height: region.height)
+        }
+      } else {
+        canvas.clearRegion()
+      }
+    }
+
+    /// The bbox under the editor's caret, as its text now stands: the text
+    /// node holding its value, and the value's place there (UTF-16).
+    private func editedValue() -> (node: DOM.Text, start: Int, length: Int, region: MarkupRegion, value: String)? {
+      guard let code = caretEditor else { return nil }
+      let text = Array(code.textContent.utf8)
+      guard case .some(let region) = MarkupRegion.at(text, caret: caretOffset, zones: ""), region.editable else {
+        return nil
+      }
+      // Bytes to UTF-16 code units: a byte that starts a character is one,
+      // two for one of four bytes.
+      func units(_ upTo: Int) -> Int {
+        var count = 0
+        var index = 0
+        while index < upTo {
+          let byte = text[index]
+          if byte & 0xC0 != 0x80 { count += byte >= 0xF0 ? 2 : 1 }
+          index += 1
+        }
+        return count
+      }
+      let start = units(region.valueStart)
+      let end = units(region.valueEnd)
+      var before = 0
+      let walker = document.createTreeWalker(code, DOM.NodeFilter.SHOW_TEXT)
+      while let next = walker.nextNode() {
+        guard let node = next as? DOM.Text else { continue }
+        var length = 0
+        for byte in node.data.utf8 where byte & 0xC0 != 0x80 { length += byte >= 0xF0 ? 2 : 1 }
+        if start >= before && end <= before + length {
+          return (
+            node, start - before, end - start, region,
+            String(decoding: text[region.valueStart..<region.valueEnd], as: UTF8.self)
+          )
+        }
+        before += length
+      }
+      return nil
+    }
+
+    /// A value written over the bbox under the caret as one edit of the
+    /// editor (its undo takes it back), the caret left at its end, still in
+    /// the attribute.
+    private func write(_ value: String, node: DOM.Text, start: Int, length: Int) {
+      guard let code = caretEditor else { return }
+      code.focus(DOM.FocusOptions(preventScroll: true))
+      window.getSelection()?.setBaseAndExtent(node, start, node, start + length)
+      document.execCommand("insertText", value: value)
+    }
+
+    /// A drag on the canvas, written into the bbox: as it goes, straight
+    /// into the text; once it ends, the value it began as put back and the
+    /// last one written over it as one edit.
+    private func regionEdited(x: Int, y: Int, width: Int, height: Int, done: Bool) {
+      let value = MarkupRegion(x: x, y: y, width: width, height: height).bbox
+      if case .none = dragNode {
+        guard let edited = editedValue() else { return }
+        dragNode = edited.node
+        dragStart = edited.start
+        dragLength = edited.length
+        dragOriginal = edited.value
+      }
+      guard let node = dragNode else { return }
+      var length = 0
+      for byte in value.utf8 where byte & 0xC0 != 0x80 { length += byte >= 0xF0 ? 2 : 1 }
+      if !done {
+        node.replaceData(dragStart, dragLength, value)
+        dragLength = length
+        return
+      }
+      var originalLength = 0
+      for byte in dragOriginal.utf8 where byte & 0xC0 != 0x80 { originalLength += byte >= 0xF0 ? 2 : 1 }
+      node.replaceData(dragStart, dragLength, dragOriginal)
+      let start = dragStart
+      dragNode = nil
+      write(value, node: node, start: start, length: originalLength)
+    }
+
+    /// The arrows, with the caret in an editor's bbox value: 1 a press
+    /// (with Shift, 10), moving the box, or with Alt resizing it; kept
+    /// inside the image, at least 1 by 1.
+    private func nudge(key: String, shift: Bool, alt: Bool) -> Bool {
+      guard case .some = caretEditor, case .some(let shown) = caretRegion, shown.holds(caretOffset),
+        stringStartsWith(key, "Arrow"), let edited = editedValue()
+      else { return false }
+      let step = shift ? 10 : 1
+      let dx = stringEquals(key, "ArrowLeft") ? -step : stringEquals(key, "ArrowRight") ? step : 0
+      let dy = stringEquals(key, "ArrowUp") ? -step : stringEquals(key, "ArrowDown") ? step : 0
+      var box = edited.region
+      if alt {
+        box = MarkupRegion(
+          x: box.x, y: box.y, width: max(1, min(1000 - box.x, box.width + dx)),
+          height: max(1, min(1000 - box.y, box.height + dy)))
+      } else {
+        box = MarkupRegion(
+          x: max(0, min(1000 - box.width, box.x + dx)), y: max(0, min(1000 - box.height, box.y + dy)),
+          width: box.width, height: box.height)
+      }
+      write(box.bbox, node: edited.node, start: edited.start, length: edited.length)
+      return true
     }
 
     /// The page images, off unless this session turned them on.
@@ -874,6 +1117,10 @@
     }
     private func loadCanvas(_ idx: Int) {
       guard idx >= 0, idx < serviceIDs.count else { return }
+      // Another page's code names other regions.
+      caretRegion = nil
+      hoverRegion = nil
+      shownCanvas?.clearRegion()
       canvasIndex = idx
       saveCanvasIndex()
       updateUI()
@@ -894,6 +1141,7 @@
       if let shown = shownCanvas, shown !== canvas { shown.hide() }
       shownCanvas = canvas
       canvas.show(width: imageWidths[idx], height: imageHeights[idx])
+      drawRegion()
       for neighbor in [idx + 1, idx - 1] where neighbor >= 0 && neighbor < serviceIDs.count {
         CanvasReader.preload(
           serviceID: serviceIDs[neighbor], width: imageWidths[neighbor], zoom: canvas.fittedZoom)
@@ -921,6 +1169,9 @@
       let viewer = root
       canvas.onCrop = { detail in
         viewer.dispatchEvent(CustomEvent(type: "artifact-crop-change", detail: detail))
+      }
+      canvas.onRegionEdit = { [self] x, y, width, height, done in
+        self.regionEdited(x: x, y: y, width: width, height: height, done: done)
       }
       canvas.setCropping(mayCrop(service))
       canvases.append(canvas)

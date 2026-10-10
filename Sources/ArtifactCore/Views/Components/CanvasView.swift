@@ -85,17 +85,82 @@
         }
         // Drawing a crop box: a crosshair, not a hand.
         descendant(".canvas-viewport[data-cropping='true']") { cursor(.crosshair) }
-        // A crop box over the image: the house ring (1px border and 1px
+        // A crop box over the image, and the region the markup names where
+        // the caret or the pointer is: the house ring (1px border and 1px
         // outline, one color), the image seen through it.
-        descendant(".canvas-crop") {
+        selector("& .canvas-crop", "& .canvas-region") {
           position(.absolute)
-          zIndex(4)
           boxSizing(.borderBox)
           border(borderWidthBase, .solid, colorBlue)
           outline(borderWidthBase, .solid, colorBlue)
           pointerEvents(.none)
         }
-        descendant(".canvas-crop[hidden]") { display(.none) }
+        descendant(".canvas-crop") { zIndex(5) }
+        descendant(".canvas-region") { zIndex(4) }
+        // The 0–1000 space drawn over the image while a region is: lines
+        // every 100, 50, 10, 5 and 1, each finer level fainter and drawn
+        // only once its lines stand 4px apart on screen (its gradients set
+        // as the image is scaled), each 100 named along the top and the left
+        // edges. Above the dim, under the region's ring.
+        descendant(".canvas-grid") {
+          position(.absolute)
+          zIndex(3)
+          pointerEvents(.none)
+        }
+        // The pointer's place in the 0–1000 space, beside it.
+        descendant(".canvas-readout") {
+          position(.absolute)
+          zIndex(6)
+          pointerEvents(.none)
+        }
+        selector("& .canvas-grid-label", "& .canvas-readout") {
+          position(.absolute)
+          paddingInline(spacing2)
+          fontSize(fontSizeXSmall12)
+          lineHeight(lineHeightXSmall20)
+          color(colorSubtle)
+          backgroundColor(backgroundColorBackdropLight)
+          whiteSpace(.nowrap)
+        }
+        // Everything but the region dimmed, as an image editor marks a
+        // selection: a backdrop over the viewport, the region (and its ring)
+        // cut out of it.
+        descendant(".canvas-region-dim") {
+          position(.absolute)
+          inset(0)
+          zIndex(2)
+          backgroundColor(backgroundColorBackdropDark)
+          opacity(opacityMedium)
+          pointerEvents(.none)
+        }
+        // A box's corners, each a handle a drag resizes it by (the box's
+        // body moves it).
+        descendant(".canvas-crop-handle") {
+          position(.absolute)
+          width(spacing8)
+          height(spacing8)
+          boxSizing(.borderBox)
+          backgroundColor(backgroundColorBase)
+          border(borderWidthBase, .solid, colorBlue)
+          transform(translate(perc(-50), perc(-50)))
+        }
+        descendant(".canvas-crop-handle[data-corner='nw']") { left(px(0)); top(px(0)) }
+        descendant(".canvas-crop-handle[data-corner='ne']") { left(perc(100)); top(px(0)) }
+        descendant(".canvas-crop-handle[data-corner='sw']") { left(px(0)); top(perc(100)) }
+        descendant(".canvas-crop-handle[data-corner='se']") { left(perc(100)); top(perc(100)) }
+        descendant(".canvas-viewport[data-crop-hover='move']") { cursor(.move) }
+        selector("& .canvas-viewport[data-crop-hover='nw']", "& .canvas-viewport[data-crop-hover='se']") {
+          cursor(.nwseResize)
+        }
+        selector("& .canvas-viewport[data-crop-hover='ne']", "& .canvas-viewport[data-crop-hover='sw']") {
+          cursor(.neswResize)
+        }
+        selector(
+          "& .canvas-crop[hidden]", "& .canvas-region[hidden]", "& .canvas-region-dim[hidden]", "& .canvas-grid[hidden]",
+          "& .canvas-readout[hidden]"
+        ) {
+          display(.none)
+        }
         descendant(".canvas-tile-image[data-loaded='false']") { opacity(0) }
         descendant(".canvas-tile-image[data-loaded='true']") { opacity(1) }
       }
@@ -150,6 +215,33 @@
     /// Told "<service> x y w h" (0–1000) as the box is drawn, moved or
     /// resized, and "<service>" once it is cleared.
     var onCrop: ((String) -> Void)?
+
+    /// The region the page's markup names where the caret or the pointer
+    /// is, in the 0–1000 space (width 0: none), and its element over the
+    /// image.
+    private var regionX: Double = 0
+    private var regionY: Double = 0
+    private var regionW: Double = 0
+    private var regionH: Double = 0
+    private var regionBox: DOM.Element?
+    private var regionDim: DOM.Element?
+    private var grid: DOM.Element?
+    private var readout: DOM.Element?
+    /// The grid levels drawn, as last set ("" none), so a pan sets nothing.
+    private var gridLevels = ""
+    /// Whether the crop box is the region, edited where its markup is
+    /// written (a bbox in an editor): its drags are told as
+    /// `onRegionEdit`, live and once more when they end, never as `onCrop`.
+    private var editing = false
+    /// Told x y w h (0–1000, whole, inside the image) as an edited region
+    /// is moved or resized, `true` once the drag ends.
+    var onRegionEdit: ((Int, Int, Int, Int, Bool) -> Void)?
+    /// What a drag on the box does: draws a new one, moves it, or resizes
+    /// it from the corner it holds still (`anchorX`, `anchorY`).
+    private enum CropDrag { case draw, move, resize }
+    private var cropDrag = CropDrag.draw
+    private var anchorX: Double = 0
+    private var anchorY: Double = 0
 
     init(root: DOM.Element) {
       self.root = root
@@ -211,6 +303,7 @@
     func hide() {
       compositor?.clear()
       endDrag()
+      clearRegion()
     }
 
     /// Fitted again, the viewport having changed its size (fullscreen).
@@ -275,6 +368,216 @@
     private func updateTransform() {
       compositor?.update(panX: panX, panY: panY, zoom: zoom, viewportW: viewportW, viewportH: viewportH)
       drawCrop()
+      drawRegion()
+    }
+
+    // MARK: - Region
+
+    /// A region of the image (0–1000) drawn over it, as the image is
+    /// panned and zoomed, until it is cleared.
+    func showRegion(x: Int, y: Int, width: Int, height: Int) {
+      stopEditing()
+      regionX = Double(x)
+      regionY = Double(y)
+      regionW = Double(width)
+      regionH = Double(height)
+      drawRegion()
+    }
+
+    func clearRegion() {
+      stopEditing()
+      regionW = 0
+      regionH = 0
+      drawRegion()
+    }
+
+    /// A region edited on the canvas as well as in its markup: the crop
+    /// box drawn over it, its corners and body dragged. A canvas taking a
+    /// crop box for a call keeps it, and only shows the region.
+    func editRegion(x: Int, y: Int, width: Int, height: Int) {
+      guard !cropping else {
+        showRegion(x: x, y: y, width: width, height: height)
+        return
+      }
+      regionX = Double(x)
+      regionY = Double(y)
+      regionW = Double(width)
+      regionH = Double(height)
+      editing = true
+      // Mid-drag, the box is the drag's.
+      if mouseMoveListener < 0, imageW > 0, imageH > 0 {
+        cropX = regionX * Double(imageW) / 1000
+        cropY = regionY * Double(imageH) / 1000
+        cropW = regionW * Double(imageW) / 1000
+        cropH = regionH * Double(imageH) / 1000
+      }
+      drawCrop()
+      drawRegion()
+    }
+
+    private func stopEditing() {
+      guard editing else { return }
+      editing = false
+      if mouseMoveListener >= 0 { endDrag() }
+      cropW = 0
+      cropH = 0
+      viewport?.removeAttribute(data("crop-hover"))
+      drawCrop()
+    }
+
+    private func drawRegion() {
+      guard regionW > 0, regionH > 0, imageW > 0, imageH > 0 else {
+        regionBox?.setAttribute(.hidden, "")
+        regionDim?.setAttribute(.hidden, "")
+        grid?.setAttribute(.hidden, "")
+        readout?.setAttribute(.hidden, "")
+        return
+      }
+      if case .none = grid { grid = gridElement() }
+      if let grid {
+        place(grid, x: 0, y: 0, width: Double(imageW), height: Double(imageH))
+        drawGridLevels(grid)
+      }
+      if case .none = regionDim { regionDim = overlay("canvas-region-dim") }
+      if case .none = regionBox { regionBox = overlay("canvas-region") }
+      guard let box = regionBox else { return }
+      let scaleX = Double(imageW) / 1000
+      let scaleY = Double(imageH) / 1000
+      let x = regionX * scaleX
+      let y = regionY * scaleY
+      let w = regionW * scaleX
+      let h = regionH * scaleY
+      place(box, x: x, y: y, width: w, height: h)
+      // The backdrop with the region cut out, its ring (1px border inside,
+      // 1px outline outside) clear too.
+      guard let dim = regionDim else { return }
+      dim.removeAttribute(.hidden)
+      let left = pixels(panX + x * zoom - 1)
+      let top = pixels(panY + y * zoom - 1)
+      let right = pixels(panX + (x + w) * zoom + 1)
+      let bottom = pixels(panY + (y + h) * zoom + 1)
+      dim.style.setProperty(
+        "clip-path",
+        stringJoin(
+          [
+            "polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ", left, " ", top, ", ", right, " ", top, ", ",
+            right, " ", bottom, ", ", left, " ", bottom, ", ", left, " ", top, ")",
+          ], separator: ""))
+    }
+
+    /// The 0–1000 grid, laid out once in its own percentages: placed over
+    /// the image, it scales with it.
+    private func gridElement() -> DOM.Element? {
+      guard let grid = overlay("canvas-grid") else { return nil }
+      var value = 0
+      while value <= 1000 {
+        for axis in ["x", "y"] {
+          // The 0 corner is named once, on the top edge.
+          if value == 0, stringEquals(axis, "y") { continue }
+          let label = document.createElement(.div)
+          label.className = "canvas-grid-label"
+          label.setAttribute(data("axis"), axis)
+          label.textContent = intToString(value)
+          // Centered on its line, kept inside the image at the ends.
+          let shift = value == 0 ? "0%" : value == 1000 ? "-100%" : "-50%"
+          if stringEquals(axis, "x") {
+            label.style.setProperty("left", percent(value))
+            label.style.setProperty("top", "0")
+            label.style.setProperty("transform", stringJoin(["translateX(", shift, ")"], separator: ""))
+          } else {
+            label.style.setProperty("top", percent(value))
+            label.style.setProperty("left", "0")
+            label.style.setProperty("transform", stringJoin(["translateY(", shift, ")"], separator: ""))
+          }
+          grid.appendChild(label)
+        }
+        value += 100
+      }
+      return grid
+    }
+
+    /// The grid's levels, those whose lines stand at least 4px apart as
+    /// the image is shown: each a gradient a line wide, tiled at its
+    /// spacing, one an axis, the finer the fainter. Named on the grid
+    /// (`data-levels`, "100 50 10") for whoever reads it.
+    private func drawGridLevels(_ grid: DOM.Element) {
+      let shownW = Double(imageW) * zoom
+      let shownH = Double(imageH) * zoom
+      var layers: [String] = []
+      var sizes: [String] = []
+      var names: [String] = []
+      for (units, strength) in [(100, "40%"), (50, "28%"), (10, "20%"), (5, "14%"), (1, "10%")] {
+        let stepX = shownW * Double(units) / 1000
+        let stepY = shownH * Double(units) / 1000
+        guard stepX >= 4, stepY >= 4 else { break }
+        let color = stringJoin(["color-mix(in srgb, var(--color-base) ", strength, ", transparent)"], separator: "")
+        layers.append(stringJoin(["linear-gradient(to right, ", color, " 0 1px, transparent 1px)"], separator: ""))
+        sizes.append(stringJoin([pixels(stepX), " 100%"], separator: ""))
+        layers.append(stringJoin(["linear-gradient(to bottom, ", color, " 0 1px, transparent 1px)"], separator: ""))
+        sizes.append(stringJoin(["100% ", pixels(stepY)], separator: ""))
+        names.append(intToString(units))
+      }
+      let levels = stringJoin(names, separator: " ")
+      let key = stringJoin([levels, "|", doubleToString(shownW), "|", doubleToString(shownH)], separator: "")
+      guard !stringEquals(key, gridLevels) else { return }
+      gridLevels = key
+      grid.setAttribute(data("levels"), levels)
+      grid.style.setProperty("background-image", stringJoin(layers, separator: ", "))
+      grid.style.setProperty("background-size", stringJoin(sizes, separator: ", "))
+    }
+
+    /// The pointer's place in the 0–1000 space beside it, while a region
+    /// is drawn and the pointer is on the image.
+    private func showReadout(clientX: Double, clientY: Double) {
+      guard regionW > 0, regionH > 0, imageW > 0, imageH > 0, let rect = viewport?.getBoundingClientRect() else {
+        readout?.setAttribute(.hidden, "")
+        return
+      }
+      let x = (clientX - rect.x - panX) / zoom
+      let y = (clientY - rect.y - panY) / zoom
+      guard x >= 0, y >= 0, x <= Double(imageW), y <= Double(imageH) else {
+        readout?.setAttribute(.hidden, "")
+        return
+      }
+      if case .none = readout { readout = overlay("canvas-readout") }
+      guard let readout else { return }
+      readout.textContent = stringJoin(
+        [
+          intToString(Int((x / Double(imageW) * 1000).rounded())), ", ",
+          intToString(Int((y / Double(imageH) * 1000).rounded())),
+        ], separator: "")
+      readout.removeAttribute(.hidden)
+      readout.style.setProperty("left", pixels(clientX - rect.x + 12))
+      readout.style.setProperty("top", pixels(clientY - rect.y + 12))
+    }
+
+    private func percent(_ value: Int) -> String {
+      stringJoin([doubleToString(Double(value) / 10), "%"], separator: "")
+    }
+
+    private func pixels(_ value: Double) -> String {
+      stringJoin([doubleToString(value), "px"], separator: "")
+    }
+
+    /// A box over the image, hidden until it is placed.
+    private func overlay(_ className: String) -> DOM.Element? {
+      guard let vp = viewport else { return nil }
+      let box = document.createElement(.div)
+      box.className = className
+      box.setAttribute("aria-hidden", "true")
+      box.setAttribute(.hidden, "")
+      vp.appendChild(box)
+      return box
+    }
+
+    /// A box shown over a stretch of the image (in image pixels), as the
+    /// image is panned and zoomed.
+    private func place(_ box: DOM.Element, x: Double, y: Double, width: Double, height: Double) {
+      box.removeAttribute(.hidden)
+      box.style.setProperty("left", pixels(panX + x * zoom))
+      box.style.setProperty("top", pixels(panY + y * zoom))
+      box.style.setProperty("width", pixels(width * zoom))
+      box.style.setProperty("height", pixels(height * zoom))
     }
 
     // MARK: - Crop box
@@ -320,30 +623,24 @@
         separator: " "))
     }
 
-    /// The box's element, made the first time a box is drawn.
-    private func cropElement() -> DOM.Element? {
-      if let cropBox { return cropBox }
-      guard let vp = viewport else { return nil }
-      let box = document.createElement(.div)
-      box.className = "canvas-crop"
-      box.setAttribute("aria-hidden", "true")
-      box.setAttribute(.hidden, "")
-      vp.appendChild(box)
-      cropBox = box
-      return box
-    }
-
     private func drawCrop() {
       guard cropW > 0, cropH > 0, imageW > 0 else {
         cropBox?.setAttribute(.hidden, "")
         return
       }
-      guard let box = cropElement() else { return }
-      box.removeAttribute(.hidden)
-      box.style.setProperty("left", stringJoin([doubleToString(panX + cropX * zoom), "px"], separator: ""))
-      box.style.setProperty("top", stringJoin([doubleToString(panY + cropY * zoom), "px"], separator: ""))
-      box.style.setProperty("width", stringJoin([doubleToString(cropW * zoom), "px"], separator: ""))
-      box.style.setProperty("height", stringJoin([doubleToString(cropH * zoom), "px"], separator: ""))
+      // The box's element, made the first time a box is drawn, its corners
+      // handles.
+      if case .none = cropBox {
+        cropBox = overlay("canvas-crop")
+        for corner in ["nw", "ne", "sw", "se"] {
+          let handle = document.createElement(.div)
+          handle.className = "canvas-crop-handle"
+          handle.setAttribute(data("corner"), corner)
+          cropBox?.appendChild(handle)
+        }
+      }
+      guard let box = cropBox else { return }
+      place(box, x: cropX, y: cropY, width: cropW, height: cropH)
     }
 
     /// A point of the viewport in image pixels, kept on the image.
@@ -354,33 +651,93 @@
       return (max(0, min(Double(imageW), x)), max(0, min(Double(imageH), y)))
     }
 
-    private func beginCrop(clientX: Double, clientY: Double) {
+    /// Where a point of the viewport stands on the box: on a corner's
+    /// handle (within a handle's reach of it), inside, or off it.
+    private func cropPart(clientX: Double, clientY: Double) -> String {
+      guard cropW > 0, cropH > 0, let rect = viewport?.getBoundingClientRect() else { return "" }
+      let x = clientX - rect.x
+      let y = clientY - rect.y
+      let left = panX + cropX * zoom
+      let top = panY + cropY * zoom
+      let right = left + cropW * zoom
+      let bottom = top + cropH * zoom
+      let reach = 8.0
+      let nearLeft = abs(x - left) <= reach
+      let nearRight = abs(x - right) <= reach
+      let nearTop = abs(y - top) <= reach
+      let nearBottom = abs(y - bottom) <= reach
+      if nearTop && nearLeft { return "nw" }
+      if nearTop && nearRight { return "ne" }
+      if nearBottom && nearLeft { return "sw" }
+      if nearBottom && nearRight { return "se" }
+      if x > left && x < right && y > top && y < bottom { return "move" }
+      return ""
+    }
+
+    /// A drag on the box: a handle resizes it, its body moves it, and
+    /// anywhere else draws a new one.
+    private func beginCrop(clientX: Double, clientY: Double, part: String) {
       let start = imagePoint(clientX: clientX, clientY: clientY)
       cropStartX = start.x
       cropStartY = start.y
-      cropX = start.x
-      cropY = start.y
-      cropW = 0
-      cropH = 0
+      if stringEquals(part, "move") {
+        cropDrag = .move
+        anchorX = cropX
+        anchorY = cropY
+      } else if !stringIsEmpty(part) {
+        cropDrag = .resize
+        // The corner across from the one held stays put.
+        anchorX = stringEndsWith(part, "w") ? cropX + cropW : cropX
+        anchorY = stringStartsWith(part, "n") ? cropY + cropH : cropY
+      } else {
+        cropDrag = .draw
+        anchorX = start.x
+        anchorY = start.y
+        cropX = start.x
+        cropY = start.y
+        cropW = 0
+        cropH = 0
+      }
       viewport?.setAttribute(data("dragging"), "true")
       mouseMoveListener = window.addEventListener(.mousemove) { [self] e in
         let point = imagePoint(clientX: e.clientX, clientY: e.clientY)
-        cropX = min(cropStartX, point.x)
-        cropY = min(cropStartY, point.y)
-        cropW = abs(point.x - cropStartX)
-        cropH = abs(point.y - cropStartY)
+        switch cropDrag {
+        case .move:
+          cropX = max(0, min(Double(imageW) - cropW, anchorX + point.x - cropStartX))
+          cropY = max(0, min(Double(imageH) - cropH, anchorY + point.y - cropStartY))
+        case .resize, .draw:
+          cropX = min(anchorX, point.x)
+          cropY = min(anchorY, point.y)
+          cropW = abs(point.x - anchorX)
+          cropH = abs(point.y - anchorY)
+        }
         drawCrop()
+        if editing { reportRegion(done: false) }
       }
       mouseUpListener = window.addEventListener(.mouseup) { [self] _ in
         endDrag()
-        // A click, or a sliver under four screen pixels, draws no box.
-        if cropW * zoom < 4 || cropH * zoom < 4 {
+        if editing {
+          reportRegion(done: true)
+        } else if cropW * zoom < 4 || cropH * zoom < 4 {
+          // A click, or a sliver under four screen pixels, draws no box.
           clearCrop()
         } else {
           drawCrop()
           reportCrop()
         }
       }
+    }
+
+    /// The edited region as the box now stands (whole, inside the image, at
+    /// least 1 by 1), drawn and told.
+    private func reportRegion(done: Bool) {
+      let box = cropBox1000
+      regionX = Double(box.x)
+      regionY = Double(box.y)
+      regionW = Double(box.w)
+      regionH = Double(box.h)
+      drawRegion()
+      onRegionEdit?(box.x, box.y, box.w, box.h, done)
     }
 
     /// The keys, on the focused canvas while it takes a box: Enter draws
@@ -435,8 +792,17 @@
         endDrag()
         if cropping, imageW > 0, imageH > 0 {
           vp.focus()
-          beginCrop(clientX: e.clientX, clientY: e.clientY)
+          beginCrop(clientX: e.clientX, clientY: e.clientY, part: cropPart(clientX: e.clientX, clientY: e.clientY))
           return
+        }
+        // An edited region's box takes a drag on itself; anywhere else
+        // pans, and the focus stays in the editor.
+        if editing, imageW > 0, imageH > 0 {
+          let part = cropPart(clientX: e.clientX, clientY: e.clientY)
+          if !stringIsEmpty(part) {
+            beginCrop(clientX: e.clientX, clientY: e.clientY, part: part)
+            return
+          }
         }
         dragStartX = e.clientX
         dragStartY = e.clientY
@@ -458,6 +824,20 @@
           }
         }
       }
+
+      // The pointer over a box's corner or body says what a drag would do.
+      vp.addEventListener(.mousemove) { [self] e in
+        showReadout(clientX: e.clientX, clientY: e.clientY)
+        guard mouseMoveListener < 0, cropping || editing else { return }
+        let part = cropPart(clientX: e.clientX, clientY: e.clientY)
+        if stringIsEmpty(part) {
+          vp.removeAttribute(data("crop-hover"))
+        } else {
+          vp.setAttribute(data("crop-hover"), part)
+        }
+      }
+
+      vp.addEventListener(.mouseleave) { [self] _ in readout?.setAttribute(.hidden, "") }
 
       vp.addEventListener(.keydown) { [self] e in
         if cropKey(e.key, shift: e.shiftKey) {
