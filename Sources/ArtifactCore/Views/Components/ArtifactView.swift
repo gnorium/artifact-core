@@ -6,19 +6,19 @@
   import WebComponents
   import WebTypes
 
-  /// An object read page by page: a pager in its footer, a transcript of
+  /// An object read page by page: a pager in its footer, markup of
   /// each page and, in its canvas slot, the object's images.
   ///
   /// The pages are the manifest's canvases when the viewer is given one
-  /// (their order, labels and sizes), else the transcript's own pages. The
+  /// (their order, labels and sizes), else the markup's own pages. The
   /// canvas slot is an add-in: without it the viewer is a pager over the
-  /// transcript; with it, each canvas (a ``CanvasView``, or a view wrapping
-  /// one) is shown beside the transcript while its page is on screen, and
+  /// markup; with it, each canvas (a ``CanvasView``, or a view wrapping
+  /// one) is shown beside the markup while its page is on screen, and
   /// only the canvas on screen reads its image. A canvas the manifest has and
   /// the slot lacks is drawn by the reader when it is paged to. Without a
-  /// transcript the viewer is the object alone, every canvas drawn so.
+  /// markup the viewer is the object alone, every canvas drawn so.
   public struct ArtifactView: HTMLContent {
-    /// Where the canvases to page are read; empty pages the transcript.
+    /// Where the canvases to page are read; empty pages the markup.
     /// The answer is JSON in the viewer's own shape, not a IIIF manifest:
     /// `{"label":…,"canvases":[{"id":…,"w":…,"h":…,"l":…}]}`, each canvas by
     /// its image service, its size and its label—the host's server reads
@@ -35,29 +35,29 @@
     /// positional fallback.
     let startCanvas: Int?
     let startService: String?
-    /// A transcript of the object, shown beside it: a transcription, a
+    /// Markup of the object, shown beside it: a transcription, a
     /// translation, an apparatus. Any descendant carrying `data-service-id` is
     /// shown only while the canvas with that image service is the one on
-    /// screen, so the transcript pages with the object.
-    let transcript: [DOM.Node]
-    /// Whether the footer carries a switch from the transcript to the code it
-    /// was made from—markup, in the usual case. The transcript marks its two
-    /// layers with `data-transcript-layer`, `"rendered"` and `"raw"`, and the
+    /// screen, so the markup pages with the object.
+    let markup: [DOM.Node]
+    /// Whether the footer carries a switch from the markup to the code it
+    /// was made from—markup, in the usual case. The markup marks its two
+    /// layers with `data-layer`, `"rendering"` and `"markup"`, and the
     /// switch swaps them in place.
     let rawSwitch: Bool
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
     /// say—an editor that takes its edits in the code says so here.
     let rawSwitchInfo: String?
     /// The object's images, one per canvas, each naming its image service in
-    /// `data-service-id`: shown, like the transcript, only while its canvas
+    /// `data-service-id`: shown, like the markup, only while its canvas
     /// is on screen, and read only then.
     let canvas: [DOM.Node]
     /// Whether the header carries a switch that shows the canvas slot, the
-    /// page images, beside the transcript (user, 2026-09-29): only with both
-    /// a transcript and page images (user, 2026-10-09); with no transcript
+    /// page images, beside the markup (user, 2026-09-29): only with both
+    /// markup and page images (user, 2026-10-09); with no markup
     /// the images are all there is and always show, with no switch. The
     /// reader takes the switch away again where its manifest gives no image.
-    /// Off by default: the transcript takes the whole width and no page
+    /// Off by default: the markup takes the whole width and no page
     /// image is fetched.
     /// The choice holds for the browser session (`sessionStorage`), across
     /// pages of the reader and the site's pages alike, and every reader on
@@ -70,7 +70,7 @@
     /// (`data-open="true"` on `.artifact-header-bar`). Closed, it takes no
     /// room: an empty row still took the header's gap under the controls.
     let bar: [DOM.Node]
-    /// How many pages the transcript has, when the host knows: the pager
+    /// How many pages the markup has, when the host knows: the pager
     /// counts them from the start, before a manifest is read (which may
     /// count its canvases instead). Nil: unknown until the reader counts
     /// them, and the pager is hidden until then—never "of —".
@@ -85,7 +85,7 @@
       rawSwitchInfo: String? = nil,
       canvasSwitch: Bool = false,
       pageCount: Int? = nil,
-      @HTMLBuilder transcript: () -> [DOM.Node] = { [] },
+      @HTMLBuilder markup: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
       @HTMLBuilder actions: () -> [DOM.Node] = { [] },
       @HTMLBuilder bar: () -> [DOM.Node] = { [] }
@@ -98,7 +98,7 @@
       self.rawSwitchInfo = rawSwitchInfo
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
-      self.transcript = transcript()
+      self.markup = markup()
       self.canvas = canvas()
       self.actions = actions()
       self.bar = bar()
@@ -106,7 +106,7 @@
 
     /// Whether the header shows the page-images switch: only when there are
     /// page images to show.
-    private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty && !transcript.isEmpty }
+    private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty && !markup.isEmpty }
 
     /// The header carries no title (user, 2026-10-09): on a biblio page
     /// the work is already the page's heading or its node's description,
@@ -173,32 +173,32 @@
 
         // ── Viewer body with prev/next overlaid on edges ─────────────────────
         div {
-          // The transcript first, the object beside it.
+          // The markup first, the object beside it.
           //
-          // The transcript is what the page is for: it arrives with the document,
+          // The markup is what the page is for: it arrives with the document,
           // it carries the figures cut from the facsimile inline, and it is
           // what a reader reads. The object corroborates it—you look across
           // when you doubt a word. Putting the image first made the thing being
           // checked come before the thing being read, and on a narrow screen it
-          // pushed the transcript below the fold entirely.
-          // The transcript of the object, beside the object. It is a sibling of
+          // pushed the markup below the fold entirely.
+          // The markup of the object, beside the object. It is a sibling of
           // the object rather than a block under the viewer so that the two
           // page together and fullscreen carries both.
-          if !transcript.isEmpty {
+          if !markup.isEmpty {
             div {
-              transcript
+              markup
             }
-            .id("artifact-transcript")
-            .class("artifact-transcript")
+            .id("artifact-markup")
+            .class("artifact-markup")
             // A gloss opened in it covers it alone.
             .data("sheet-host", true)
           }
 
           // The object: the canvas of the page on screen. A viewer with no
-          // transcript is the object alone, its slot drawn empty for the
+          // markup is the object alone, its slot drawn empty for the
           // reader to fill with the manifest's canvases—a testament not yet
           // read, say, whose pages exist only as images.
-          if !canvas.isEmpty || transcript.isEmpty {
+          if !canvas.isEmpty || markup.isEmpty {
             div {
               canvas
             }
@@ -210,11 +210,11 @@
 
         // ── Footer ───────────────────────────────────────────────────────────
         footer {
-          // The switch between the transcript and the code it was made from,
+          // The switch between the markup and the code it was made from,
           // at the footer's start: the bottom left of the box, as Raw sits
           // on every box (user, 2026-10-10).
           div {
-            if rawSwitch, !transcript.isEmpty {
+            if rawSwitch, !markup.isEmpty {
               ToggleButtonView(
                 label: "Raw",
                 icon: nil as HTML.HTMLSpanElement?,
@@ -222,7 +222,7 @@
                 weight: .static,
                 buttonColor: .gray,
                 fullWidth: false,
-                ariaLabel: "Raw markup of this transcript",
+                ariaLabel: "Markup of this page",
                 indicateSelection: true,
                 size: .small,
                 class: "artifact-raw-toggle",
@@ -377,7 +377,7 @@
           maxWidth(perc(100))
           overflow(.hidden)
           // Side by side is a comparison; stacked is what fits. On a narrow
-          // screen the object takes the top half and its transcript the bottom,
+          // screen the object takes the top half and its markup the bottom,
           // rather than two columns too thin to read either.
           media(maxWidth(maxWidthBreakpointMobile)) {
             flexDirection(.column).important()
@@ -391,7 +391,7 @@
           minHeight(0)
           overflow(.hidden)
         }
-        descendant(".artifact-transcript") {
+        descendant(".artifact-markup") {
           // Half the surface, whichever way the two are laid out. Without the
           // zero minimums a flex item never shrinks past its content, and a
           // page of verse would take two thirds of the viewer.
@@ -399,15 +399,15 @@
           minWidth(0)
           minHeight(0)
           overflow(.auto)
-          // No padding of its own (user, 2026-10-10): the transcript view
+          // No padding of its own (user, 2026-10-10): the markup view
           // carries the text's inset, so a state ring drawn on the pane
           // (TestamentView) sits on the pane's own edges, with the canvas
           // shown and put away alike.
           padding(0)
-          // The divider sits on the transcript's far edge, because the transcript
+          // The divider sits on the markup's far edge, because the markup
           // comes first: to its right when the two are side by side, under it
           // when they stack. It used to be a leading border, from when the
-          // object led and the transcript sat to its right.
+          // object led and the markup sat to its right.
           borderInlineEnd(borderWidthBase, .solid, borderColorBase)
           backgroundColor(backgroundColorBase)
           media(maxWidth(maxWidthBreakpointMobile)) {
@@ -415,38 +415,38 @@
             borderBlockEnd(borderWidthBase, .solid, borderColorBase).important()
           }
         }
-        // The page images switched off: the transcript alone, the whole
+        // The page images switched off: the markup alone, the whole
         // width, with no divider beside or under it.
         selector("&[data-canvas-shown='false'] .artifact-object") {
           display(.none)
         }
-        selector("&[data-canvas-shown='false'] .artifact-transcript") {
+        selector("&[data-canvas-shown='false'] .artifact-markup") {
           borderInlineEnd(.none).important()
           borderBlockEnd(.none).important()
         }
         // The switch is in the header and the layers are in the pane, so the
         // rule that ties them lives on the viewer, where both are in scope.
-        selector("&:has(.artifact-raw-toggle[aria-pressed='true']) .artifact-transcript [data-transcript-layer='rendered']") {
+        selector("&:has(.artifact-raw-toggle[aria-pressed='true']) .artifact-markup [data-layer='rendering']") {
           display(.none)
         }
         // Flex, not block: a layer holding one element also holds the
         // whitespace around it in the markup, and a block container turns that
         // into a line box above and below—a gap that looks like padding
         // nobody asked for. A flex container drops whitespace-only children.
-        selector("&:has(.artifact-raw-toggle[aria-pressed='true']) .artifact-transcript [data-transcript-layer='raw']") {
+        selector("&:has(.artifact-raw-toggle[aria-pressed='true']) .artifact-markup [data-layer='markup']") {
           display(.flex)
           flexDirection(.column)
           width(perc(100))
           minWidth(0)
           maxWidth(perc(100))
-          // The transcript pane owns both scrollbars. Giving this layer an
+          // The markup pane owns both scrollbars. Giving this layer an
           // overflow value creates a second vertical scroller in Raw mode.
           overflow(.visible)
         }
         // Raw XML is intentionally preformatted and can contain very long
-        // lines. Let it contribute overflow to `.artifact-transcript`, which is
-        // the single scroll owner for the entire transcript half.
-        descendant(".artifact-transcript [data-transcript-layer='raw'] .code-view") {
+        // lines. Let it contribute overflow to `.artifact-markup`, which is
+        // the single scroll owner for the entire markup half.
+        descendant(".artifact-markup [data-layer='markup'] .code-view") {
           width(perc(100))
           minWidth(0)
           maxWidth(perc(100))
@@ -457,10 +457,10 @@
         // line overflows into the pane's scroller rather than widening the
         // row, and the text's box still spans its text—what a selection
         // dragged past the pane's edge extends into.
-        // Only the transcript and the canvas of the page on screen. The rest
+        // Only the markup and the canvas of the page on screen. The rest
         // stay in the document so that paging is a class change, not a fetch.
         selector(
-          ".artifact-transcript [data-service-id][data-active='false']",
+          ".artifact-markup [data-service-id][data-active='false']",
           ".artifact-object [data-service-id][data-active='false']"
         ) {
           display(.none)
@@ -468,7 +468,7 @@
         // 40, as the header: small controls, 4 above and under them. The
         // pager and fullscreen at the row's end, the start in RTL.
         // Never squeezed by the viewer's column: a header grown tall (its
-        // find bar open) takes the transcript's room, never the pager's.
+        // find bar open) takes the markup's room, never the pager's.
         descendant(".artifact-footer") {
           flexShrink(0)
           justifyContent(.flexEnd)
@@ -583,7 +583,7 @@
   /// first's state—its canvases appended to the first's list and its pages
   /// turned by the first's arrows.
   ///
-  /// It keeps the pages: which is on screen, the pager, the transcript and
+  /// It keeps the pages: which is on screen, the pager, the markup and
   /// the canvas that go with it. Each canvas reads its own image
   /// (`CanvasReader`), made the first time it is shown.
   private final class ArtifactReader: @unchecked Sendable {
@@ -606,7 +606,7 @@
     /// last on: a link to a page of the object means that page.
     private var startCanvas: Int?
     private var startService: String = ""
-    private var transcriptPanes: [DOM.Element] = []
+    private var markupPanes: [DOM.Element] = []
     /// The canvas slot, when the viewer has one, and the canvases read so far.
     private var object: DOM.Element?
     private var canvases: [CanvasReader] = []
@@ -620,7 +620,7 @@
     private var canvasShown = true
 
     private func storageKey() -> String { "gnorium:artifact-canvas:\(manifestURL)" }
-    /// Where the reader was last on this manifest; a transcript paged without
+    /// Where the reader was last on this manifest; markup paged without
     /// one opens at its start.
     private func saveCanvasIndex() {
       guard !stringIsEmpty(manifestURL) else { return }
@@ -660,7 +660,7 @@
       self.manifestURL = manifestURL
       self.startCanvas = startCanvas
       self.startService = startService
-      transcriptPanes = root.querySelectorAll(".artifact-transcript [data-service-id]")
+      markupPanes = root.querySelectorAll(".artifact-markup [data-service-id]")
       object = root.querySelector(".artifact-object")
       pageInput = root.querySelector("#artifact-page-input")
       pageTotal = root.querySelector("#artifact-page-total")
@@ -702,36 +702,36 @@
         if let index = Int(event.detail) { self.loadCanvas(index) }
       }
       if stringIsEmpty(manifestURL) {
-        pageTranscript()
+        pageMarkup()
       } else {
         loadManifest(url: manifestURL)
       }
     }
 
-    /// The code switch changes the transcript, not the image viewport.  Keep
+    /// The code switch changes the markup, not the image viewport.  Keep
     /// that state in the hydrated view instead of relying on `:has()`: that
     /// selector is not consistently reevaluated when `aria-pressed` changes
     /// in every browser context that hosts the reader.
     ///
-    /// A transcript with a translation follows its page's language switch too,
-    /// which is not the viewer's: the page sets `data-transcript-translated` on
-    /// an ancestor and tells each viewer with a `transcript-translated` event.
+    /// Markup with a translation follows its page's language switch too,
+    /// which is not the viewer's: the page sets `data-translated` on
+    /// an ancestor and tells each viewer with a `markup-translated` event.
     /// A viewer fetched in after the switch was pressed reads the attribute
     /// as it stands.
     private func setupLayers() {
       let raw = root.querySelector(".artifact-raw-toggle")
-      if case .some = root.querySelector(".artifact-transcript [data-transcript-layer='translation']") {
+      if case .some = root.querySelector(".artifact-markup [data-layer='translated-rendering']") {
         translatable = true
       }
       rawVisible = stringEquals(raw?.getAttribute("aria-pressed") ?? "false", "true")
       translationVisible = stringEquals(
-        root.closest("[data-transcript-translated]")?.getAttribute(data("transcript-translated")) ?? "false", "true")
+        root.closest("[data-translated]")?.getAttribute(data("translated")) ?? "false", "true")
       showLayers()
       _ = raw?.addEventListener("toggle-button-update") { [self] (event: Event) in
         self.rawVisible = stringEquals(event.detail, "true")
         self.showLayers()
       }
-      _ = root.addEventListener("transcript-translated") { [self] (event: Event) in
+      _ = root.addEventListener("markup-translated") { [self] (event: Event) in
         self.translationVisible = stringEquals(event.detail, "true")
         self.showLayers()
       }
@@ -767,7 +767,7 @@
 
     /// The code of the page on screen, under Raw: its editor, or its
     /// read-only blocks (the page's and its translation's).
-    private static let rawCode = ".artifact-transcript .tei-transcript[data-active='true'] .tei-page-raw .code-code"
+    private static let rawCode = ".artifact-markup .tei-page[data-active='true'] .tei-page-raw .code-code"
 
     private func setupRegions() {
       selectionListener = document.addEventListener("selectionchange") { [self] _ in self.followCaret() }
@@ -828,7 +828,7 @@
     /// What the code names at a byte of its text, read against the page's
     /// zones.
     private func region(in code: DOM.Element, caret: Int) -> MarkupRegion? {
-      let zones = code.closest(".tei-transcript")?.getAttribute(data("zones")) ?? ""
+      let zones = code.closest(".tei-page")?.getAttribute(data("zones")) ?? ""
       return MarkupRegion.at(Array(code.textContent.utf8), caret: caret, zones: zones)
     }
 
@@ -1014,22 +1014,22 @@
 
     private var rawVisible = false
     private var translationVisible = false
-    /// Whether the transcript has a translated layer to show at all.
+    /// Whether the markup has a translated layer to show at all.
     private var translatable = false
 
     /// The one layer of each page that shows, by two switches (user,
-    /// 2026-10-07): the language switch picks the transcript or its
+    /// 2026-10-07): the language switch picks the markup or its
     /// translation, Raw picks either's text or its code. A page with no
     /// translation shows nothing under either: emptiness, never a dash.
     private func showLayers() {
       let translated = translatable && translationVisible
-      for pane in root.querySelectorAll(".artifact-transcript .tei-transcript") {
-        let layer = translated ? (rawVisible ? "translation-raw" : "translation") : (rawVisible ? "raw" : "rendered")
-        for element in pane.querySelectorAll("[data-transcript-layer]") {
-          let name = element.getAttribute(data("transcript-layer")) ?? ""
+      for pane in root.querySelectorAll(".artifact-markup .tei-page") {
+        let layer = translated ? (rawVisible ? "translated-markup" : "translated-rendering") : (rawVisible ? "markup" : "rendering")
+        for element in pane.querySelectorAll("[data-layer]") {
+          let name = element.getAttribute(data("layer")) ?? ""
           if !stringEquals(name, layer) {
             element.style.display(.none)
-          } else if stringEquals(name, "rendered") {
+          } else if stringEquals(name, "rendering") {
             element.style.display(.block)
           } else {
             element.style.display(.flex)
@@ -1039,7 +1039,7 @@
     }
 
     /// A manifest that cannot be read pages as none is there: by the
-    /// transcript's own pages.
+    /// markup's own pages.
     ///
     /// Read or not, the viewer says so: an `artifact-manifest-load` event on
     /// it, its detail the number of canvases read ("0" for a manifest that
@@ -1050,7 +1050,7 @@
       root.fetch(url) { [self] jsonStr in
         guard let jsonStr else {
           root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "0"))
-          pageTranscript()
+          pageMarkup()
           return
         }
         parseManifest(jsonStr)
@@ -1059,16 +1059,16 @@
         }
         root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "\(serviceIDs.count)"))
         if serviceIDs.isEmpty {
-          pageTranscript()
+          pageMarkup()
         } else {
           open()
         }
       }
     }
 
-    /// No manifest: the pages are the transcript's own, in its order.
-    private func pageTranscript() {
-      for pane in transcriptPanes {
+    /// No manifest: the pages are the markup's own, in its order.
+    private func pageMarkup() {
+      for pane in markupPanes {
         serviceIDs.append(pane.dataset["service-id"] ?? "")
         imageWidths.append(0)
         imageHeights.append(0)
@@ -1085,11 +1085,11 @@
       if !imaged, let toggle = canvasToggle {
         toggle.style.display(.none)
         canvasToggle = nil
-        // With no switch, the images show only where there is no transcript
-        // to read instead: a reader with a transcript keeps them off, as its
+        // With no switch, the images show only where there is no markup
+        // to read instead: a reader with markup keeps them off, as its
         // default has it, so a selection dragged past the pane's edge finds
         // no image pane to run into.
-        canvasShown = transcriptPanes.isEmpty
+        canvasShown = markupPanes.isEmpty
         root.setAttribute(data("canvas-shown"), canvasShown ? "true" : "false")
       }
       guard !serviceIDs.isEmpty else { return }
@@ -1197,7 +1197,7 @@
       while n >= 10 { n /= 10; digits += 1 }
       pageInput?.setAttribute("size", intToString(digits))
       canvasLabelEl?.textContent = label(of: canvasIndex)
-      showTranscript(for: canvasIndex)
+      showMarkup(for: canvasIndex)
       // The property AND the class. The pager greys itself with
       // `pagination-disabled`, so setting only the property left a working
       // button that looked dead—which is worse than a dead one.
@@ -1206,7 +1206,7 @@
     }
 
     /// What the footer names a page: the manifest's label for its canvas,
-    /// else its place in the sequence (1, 2, 3)—never the transcript's own
+    /// else its place in the sequence (1, 2, 3)—never the markup's own
     /// `pb n`, which the explication writes from the image and the
     /// manifest outranks (user, 2026-10-09).
     private func label(of index: Int) -> String {
@@ -1317,24 +1317,24 @@
       return nil
     }
 
-    /// The transcript of the canvas on screen, and only that one.
+    /// The markup of the canvas on screen, and only that one.
     ///
     /// A pane names the image service it reads, not a page number, because the
     /// two orders are written by different hands: the manifest is the library's
-    /// and the transcript is the transcriber's. Matching on the service id means a
-    /// transcript that skips a canvas still lands on the right one; a pane that
+    /// and the markup is the transcriber's. Matching on the service id means a
+    /// markup that skips a canvas still lands on the right one; a pane that
     /// names nothing the manifest has simply never shows.
-    private func showTranscript(for index: Int) {
+    private func showMarkup(for index: Int) {
       let service = index < serviceIDs.count ? serviceIDs[index] : ""
-      // The page turned whether or not a transcript reads it: a host that
+      // The page turned whether or not markup reads it: a host that
       // follows the pager (a roster of the canvases, a prompt preview)
       // hears of it either way.
-      guard !transcriptPanes.isEmpty else {
+      guard !markupPanes.isEmpty else {
         root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
         return
       }
       var matched = false
-      for pane in transcriptPanes {
+      for pane in markupPanes {
         let id = pane.dataset["service-id"] ?? ""
         let isActive = !stringIsEmpty(service) && stringEquals(id, service)
         if isActive { matched = true }
@@ -1343,11 +1343,11 @@
       // No pane names this canvas: fall back to the transcriber's order, which
       // is right whenever the two sequences run together.
       if !matched {
-        for (position, pane) in transcriptPanes.enumerated() {
+        for (position, pane) in markupPanes.enumerated() {
           pane.setAttribute(data("active"), position == index ? "true" : "false")
         }
       }
-      // Whoever drew the transcript may have work to do when it changes—syntax
+      // Whoever drew the markup may have work to do when it changes—syntax
       // coloring a page of markup, say, which is worth doing for the page on
       // screen and wasteful for the nine hundred behind it.
       root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
