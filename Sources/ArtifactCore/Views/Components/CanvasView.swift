@@ -129,7 +129,7 @@
           position(.absolute)
           inset(0)
           zIndex(2)
-          backgroundColor(backgroundColorBackdropDark)
+          backgroundColor(backgroundColorBackdropDarkFixed)
           opacity(opacityMedium)
           pointerEvents(.none)
         }
