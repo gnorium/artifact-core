@@ -56,7 +56,8 @@
     /// page images, beside the markup (user, 2026-09-29): only with both
     /// markup and page images (user, 2026-10-09); with no markup
     /// the images are all there is and always show, with no switch. The
-    /// reader takes the switch away again where its manifest gives no image.
+    /// reader offers the switch only once its manifest confirms an image
+    /// (user, 2026-10-10): never while the manifest is unread.
     /// Off by default: the markup takes the whole width and no page
     /// image is fetched.
     /// The choice holds for the browser session (`sessionStorage`), across
@@ -105,7 +106,8 @@
     }
 
     /// Whether the header shows the page-images switch: only when there are
-    /// page images to show.
+    /// page images to show. Drawn hidden: the reader shows it once the
+    /// manifest confirms an image (`data-canvas-confirmed`).
     private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty && !markup.isEmpty }
 
     /// The header carries no title (user, 2026-10-09): on a biblio page
@@ -231,7 +233,7 @@
               if let info = rawSwitchInfo {
                 // An icon on its own, on par with the row's 16px text, takes
                 // the text's size, as the bars' other icons (user,
-                // 2026-10-09); a size minus 4 is for an icon beside a label.
+                // 2026-10-09).
                 TooltipView(tooltip: info, class: "artifact-raw-info") {
                   IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconSmall)
                 }
@@ -274,6 +276,11 @@
       // Hidden until the reader knows the session's choice, so that a reader
       // left off never shows an empty column first.
       .data("canvas-shown", !switchesCanvas)
+      // The images switch is drawn where the page names an image service,
+      // but offered only once the manifest confirms an image (user,
+      // 2026-10-10): hidden until the reader says so, and for good where
+      // the manifest names none.
+      .data("canvas-confirmed", !switchesCanvas)
       // Whether the pager knows its total; the reader says so once it has
       // counted the pages.
       .data("pages-known", pageCount != nil)
@@ -355,6 +362,9 @@
         // Its total unknown, the pager waits unseen rather than read "of —".
         selector("&[data-pages-known='false'] .artifact-page-nav") {
           visibility(.hidden)
+        }
+        selector("&[data-canvas-confirmed='false'] .artifact-canvas-toggle") {
+          display(.none)
         }
         // Beside the switch it explains, the footer's own gap from it.
         descendant(".artifact-raw-info") {
@@ -980,25 +990,51 @@
       return true
     }
 
-    /// Whether the manifest could not be read at all (no answer), as
-    /// against an answer that names no images.
-    private var manifestUnread = false
+    /// Whether the manifest has confirmed an image, so the switch is
+    /// offered: until then it stays hidden and the images off.
+    private var canvasConfirmed = false
+    /// The reads again of an unread manifest so far.
+    private var manifestRetries = 0
 
-    /// The page images, off unless this session turned them on.
+    /// The page images, off until the manifest confirms one, then off
+    /// unless this session turned them on (`confirmCanvasSwitch`).
     private func setupCanvasSwitch() {
       guard let toggle = root.querySelector(".artifact-canvas-toggle") else { return }
       canvasToggle = toggle
-      canvasShown = stringEquals(sessionStorage.getItem(ArtifactHydration.canvasShownKey) ?? "false", "true")
+      canvasShown = false
       reflectCanvasShown()
       _ = toggle.addEventListener("toggle-button-update") { (event: Event) in
         ArtifactHydration.showCanvases(stringEquals(event.detail, "true"))
       }
     }
 
+    /// The manifest named an image: the switch offered, as this session
+    /// left it.
+    private func confirmCanvasSwitch() {
+      guard let _ = canvasToggle, !canvasConfirmed else { return }
+      canvasConfirmed = true
+      root.setAttribute(data("canvas-confirmed"), "true")
+      canvasShown = stringEquals(sessionStorage.getItem(ArtifactHydration.canvasShownKey) ?? "false", "true")
+      reflectCanvasShown()
+    }
+
+    /// The manifest answered with no image: the switch stays hidden for
+    /// good, and the images show only where there is no markup to read
+    /// instead—a reader with markup keeps them off, as its default has it,
+    /// so a selection dragged past the pane's edge finds no image pane to
+    /// run into.
+    private func dropCanvasSwitch() {
+      guard let _ = canvasToggle else { return }
+      canvasToggle = nil
+      canvasShown = markupPanes.isEmpty
+      root.setAttribute(data("canvas-shown"), canvasShown ? "true" : "false")
+    }
+
     /// The page images shown, the page on screen's canvas read; or put
-    /// away, its tiles let go.
+    /// away, its tiles let go. A switch not yet offered follows nothing:
+    /// it reads the session's choice when it is.
     func setCanvasShown(_ shown: Bool) {
-      guard let _ = canvasToggle, shown != canvasShown else { return }
+      guard let _ = canvasToggle, canvasConfirmed, shown != canvasShown else { return }
       canvasShown = shown
       reflectCanvasShown()
       if shown {
@@ -1052,18 +1088,50 @@
     /// could not be read), so a host can show the viewer or say why not.
     /// When the answer says why there are none, an `artifact-manifest-error`
     /// event, its detail the reason, comes first.
+    ///
+    /// A manifest not read this time (no answer; the server's `"unread"`: a
+    /// timeout, too many reads) pages the markup meanwhile, its switch
+    /// hidden, and is asked for again a few times, each wait longer
+    /// (`ArtifactManifest.retryDelays`, user, 2026-10-10). An answer that
+    /// names images then pages by them, on the page on screen, and offers
+    /// the switch; one that names none keeps it hidden.
     private func loadManifest(url: String) {
       root.fetch(url) { [self] jsonStr in
-        guard let jsonStr else {
-          manifestUnread = true
-          root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "0"))
-          pageMarkup()
+        let manifest = ArtifactManifest.parse(jsonStr)
+        let first = manifestRetries == 0
+        switch manifest.canvasSwitch {
+        case .pending:
+          if first {
+            if let reason = manifest.error {
+              root.dispatchEvent(CustomEvent(type: "artifact-manifest-error", detail: reason))
+            }
+            root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "0"))
+            pageMarkup()
+          }
+          retryManifest(url: url)
           return
+        case .none:
+          dropCanvasSwitch()
+        case .confirmed:
+          confirmCanvasSwitch()
         }
-        parseManifest(jsonStr)
-        // Not read this time (too slow, too many reads): as no answer.
-        if serviceIDs.isEmpty, stringContains(jsonStr, "\"unread\":true") { manifestUnread = true }
-        if serviceIDs.isEmpty, let reason = extractJSONString(jsonStr, key: "error") {
+        // Read again after the markup paged meanwhile: by the manifest now,
+        // on the page on screen.
+        if !first {
+          if manifest.pages.isEmpty { return }
+          if canvasIndex < serviceIDs.count { startService = serviceIDs[canvasIndex] }
+          serviceIDs = []
+          imageWidths = []
+          imageHeights = []
+          canvasLabels = []
+        }
+        for page in manifest.pages {
+          serviceIDs.append(page.serviceID)
+          imageWidths.append(page.width)
+          imageHeights.append(page.height)
+          canvasLabels.append(page.label)
+        }
+        if manifest.pages.isEmpty, let reason = manifest.error {
           root.dispatchEvent(CustomEvent(type: "artifact-manifest-error", detail: reason))
         }
         root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "\(serviceIDs.count)"))
@@ -1072,6 +1140,18 @@
         } else {
           open()
         }
+      }
+    }
+
+    /// The manifest asked for again after the next wait, while the viewer is
+    /// on the page; past the last, the switch stays hidden.
+    private func retryManifest(url: String) {
+      guard manifestRetries < ArtifactManifest.retryDelays.count else { return }
+      let delay = ArtifactManifest.retryDelays[manifestRetries]
+      manifestRetries += 1
+      _ = window.setTimeout(delay) { [self] in
+        guard self.isInDocument else { return }
+        self.loadManifest(url: url)
       }
     }
 
@@ -1088,49 +1168,11 @@
 
     /// The page asked for, else the one this reader was last on.
     private func open() {
-      // The images switch needs an image to show (user, 2026-10-09): one
-      // the manifest names, or, where the manifest could not be read at
-      // all, the image service a page names (user, 2026-10-10: a manifest
-      // read failing hid a switch the server drew, until a reload). Only a
-      // manifest that answers with no images takes the switch away.
-      var imaged = false
-      for width in imageWidths where width > 0 { imaged = true }
-      if manifestUnread {
-        for id in serviceIDs where !stringIsEmpty(id) { imaged = true }
-      }
-      if !imaged, let toggle = canvasToggle {
-        toggle.style.display(.none)
-        canvasToggle = nil
-        // With no switch, the images show only where there is no markup
-        // to read instead: a reader with markup keeps them off, as its
-        // default has it, so a selection dragged past the pane's edge finds
-        // no image pane to run into.
-        canvasShown = markupPanes.isEmpty
-        root.setAttribute(data("canvas-shown"), canvasShown ? "true" : "false")
-      }
       guard !serviceIDs.isEmpty else { return }
       let asked = canvasIndex(ofService: startService) ?? startCanvas ?? savedCanvasIndex()
       loadCanvas(max(0, min(asked, serviceIDs.count - 1)))
     }
 
-    private func parseManifest(_ json: String) {
-      // The viewer's shape: {"label":"...","canvases":[{"id":"...","w":N,"h":N,"l":"..."},...]}
-      // The manifest's free-text label is shown nowhere: the reader has no
-      // title (the page heads it).
-      let parts = stringSplit(json, separator: "\"canvases\":")
-      guard parts.count > 1 else { return }
-      let entries = stringSplit(parts[1], separator: "},{")
-      for entry in entries {
-        guard let id = extractJSONString(entry, key: "id") else { continue }
-        guard stringStartsWith(id, "http") || stringStartsWith(id, "/") else { continue }
-        guard let width = extractJSONInt(entry, key: "w") else { continue }
-        guard let height = extractJSONInt(entry, key: "h") else { continue }
-        serviceIDs.append(id)
-        imageWidths.append(width)
-        imageHeights.append(height)
-        canvasLabels.append(extractJSONString(entry, key: "l") ?? "")
-      }
-    }
     private func loadCanvas(_ idx: Int) {
       guard idx >= 0, idx < serviceIDs.count else { return }
       // Another page's code names other regions.
