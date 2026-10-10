@@ -116,8 +116,8 @@
         selector("& .canvas-grid-label", "& .canvas-readout") {
           position(.absolute)
           paddingInline(spacing2)
-          fontSize(fontSizeXSmall12)
-          lineHeight(lineHeightXSmall20)
+          fontSize(fontSizeMedium16)
+          lineHeight(lineHeightSmall22)
           color(colorSubtle)
           backgroundColor(backgroundColorBackdropLight)
           whiteSpace(.nowrap)
