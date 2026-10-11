@@ -567,7 +567,6 @@
   import EmbeddedSwiftUtilities
   import HTMLBuilder
   import WebAPIs
-  import WebComponents
   import WebTypes
 
   public final class ArtifactHydration: @unchecked Sendable {
@@ -1139,8 +1138,8 @@
     private var reflowToggle: DOM.Element?
 
     /// Reflow, as this session left it: the markup's lines and its code's,
-    /// which pages fetched later follow (`TEILineationHydration` and the
-    /// code's CSS read `data-reflow`).
+    /// which pages fetched later follow (TEIView's and CodeView's CSS read
+    /// `data-reflow`).
     private func setupReflowSwitch() {
       guard let toggle = root.querySelector(".artifact-reflow-toggle") else { return }
       reflowToggle = toggle
@@ -1155,7 +1154,6 @@
       root.setAttribute(data("reflow"), on ? "true" : "false")
       toggle.setAttribute("aria-pressed", on ? "true" : "false")
       toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
-      TEILineationHydration.refresh()
     }
 
     private var rawVisible = false
