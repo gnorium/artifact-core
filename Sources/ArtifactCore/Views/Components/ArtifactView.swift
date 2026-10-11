@@ -1253,7 +1253,7 @@
     }
 
     /// The canvas of the page on screen, read; the one before it put away;
-    /// the ones either side fetched ahead. The rest fetch nothing until they
+    /// the four either side fetched ahead. The rest fetch nothing until they
     /// are paged to.
     private func showCanvas(_ idx: Int) {
       guard canvasShown, object != nil, imageWidths[idx] > 0, imageHeights[idx] > 0 else { return }
@@ -1267,9 +1267,13 @@
       shownCanvas = canvas
       canvas.show(width: imageWidths[idx], height: imageHeights[idx])
       drawRegion()
-      for neighbor in [idx + 1, idx - 1] where neighbor >= 0 && neighbor < serviceIDs.count {
-        CanvasReader.preload(
-          serviceID: serviceIDs[neighbor], width: imageWidths[neighbor], zoom: canvas.fittedZoom)
+      // The four either side, nearest first: images are what a turn waits
+      // for (user, 2026-10-11).
+      for distance in 1...4 {
+        for neighbor in [idx + distance, idx - distance] where neighbor >= 0 && neighbor < serviceIDs.count {
+          CanvasReader.preload(
+            serviceID: serviceIDs[neighbor], width: imageWidths[neighbor], zoom: canvas.fittedZoom)
+        }
       }
     }
 
