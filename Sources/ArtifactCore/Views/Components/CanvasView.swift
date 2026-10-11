@@ -176,6 +176,25 @@
   import WebComponents
   import WebTypes
 
+  /// How a reader's views zoom, the image's and the text's alike (user,
+  /// 2026-10-12): from the fit of the whole page to eight times, the wheel
+  /// zooming in proportion to its travel.
+  enum ViewerZoom {
+    /// The most a view zooms in.
+    static let maximum = 8.0
+    /// A wheel's travel counted in one event, at most, so a mouse wheel's
+    /// notch is not too fast.
+    static let wheelTravel = 40.0
+    /// The zoom one unit of the wheel's travel makes.
+    static let wheelStep = 0.005
+
+    /// What one wheel event multiplies the zoom by: in proportion to its
+    /// travel (`deltaY`), capped.
+    static func wheelFactor(_ deltaY: Double) -> Double {
+      1.0 - max(-wheelTravel, min(wheelTravel, deltaY)) * wheelStep
+    }
+  }
+
   /// One canvas, read: its tiles, its zoom and pan, the gestures that change
   /// them. Made by the viewer the first time the canvas is shown.
   final class CanvasReader: @unchecked Sendable {
@@ -850,13 +869,10 @@
       vp.addEventListener(.wheel) { [self] e in
         e.preventDefault()
         guard imageW > 0, imageH > 0 else { return }
-        // Proportional to the wheel's travel, capped so a mouse wheel is not
-        // too fast.
-        let delta = max(-40.0, min(40.0, e.deltaY))
-        let dz = 1.0 - delta * 0.005
+        let dz = ViewerZoom.wheelFactor(e.deltaY)
         let cx = e.clientX - (viewport?.getBoundingClientRect()?.x ?? 0)
         let cy = e.clientY - (viewport?.getBoundingClientRect()?.y ?? 0)
-        let newZoom = max(minZoom, min(8.0, zoom * dz))
+        let newZoom = max(minZoom, min(ViewerZoom.maximum, zoom * dz))
         panX = cx - (cx - panX) * (newZoom / zoom)
         panY = cy - (cy - panY) * (newZoom / zoom)
         zoom = newZoom
