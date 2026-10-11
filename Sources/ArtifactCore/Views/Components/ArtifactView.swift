@@ -76,6 +76,14 @@
     /// count its canvases instead). Nil: unknown until the reader counts
     /// them, and the pager is hidden until then—never "of —".
     let pageCount: Int?
+    /// Whether the markup holds only some of its pages—the one on screen
+    /// and those either side—and the host fetches the rest as they are
+    /// turned to (a long book: user, 2026-10-11). Each pane then names its
+    /// place among the pages (`data-page-index`), and `pageCount` counts
+    /// them all. When the reader turns to a page none of whose panes is
+    /// drawn, it says so in `artifact-canvas-change` with no pane active;
+    /// the host adds the pane and tells it with `artifact-markup-added`.
+    let windowed: Bool
 
     public init(
       manifestURL: String = "",
@@ -86,6 +94,7 @@
       rawSwitchInfo: String? = nil,
       canvasSwitch: Bool = false,
       pageCount: Int? = nil,
+      windowed: Bool = false,
       @HTMLBuilder markup: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
       @HTMLBuilder actions: () -> [DOM.Node] = { [] },
@@ -99,6 +108,7 @@
       self.rawSwitchInfo = rawSwitchInfo
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
+      self.windowed = windowed
       self.markup = markup()
       self.canvas = canvas()
       self.actions = actions()
@@ -284,6 +294,8 @@
       // Whether the pager knows its total; the reader says so once it has
       // counted the pages.
       .data("pages-known", pageCount != nil)
+      .data("windowed", windowed)
+      .data("page-count", pageCount ?? 0)
       .style {
         selector("&") {
           display(.flex)
@@ -614,11 +626,15 @@
     private var canvasIndex: Int = 0
 
     private var manifestURL: String = ""
+    /// Whether the markup holds only some of its pages (`ArtifactView.windowed`).
+    private var windowed = false
     /// The canvas the page asked for, which outranks the one this reader was
     /// last on: a link to a page of the object means that page.
     private var startCanvas: Int?
     private var startService: String = ""
-    private var markupPanes: [DOM.Element] = []
+    /// The markup's panes drawn now: a windowed reader's change as it is
+    /// paged, so they are read afresh each time.
+    private var markupPanes: [DOM.Element] { root.querySelectorAll(".artifact-markup [data-service-id]") }
     /// The canvas slot, when the viewer has one, and the canvases read so far.
     private var object: DOM.Element?
     private var canvases: [CanvasReader] = []
@@ -672,7 +688,7 @@
       self.manifestURL = manifestURL
       self.startCanvas = startCanvas
       self.startService = startService
-      markupPanes = root.querySelectorAll(".artifact-markup [data-service-id]")
+      windowed = stringEquals(root.dataset["windowed"] ?? "false", "true")
       object = root.querySelector(".artifact-object")
       pageInput = root.querySelector("#artifact-page-input")
       pageTotal = root.querySelector("#artifact-page-total")
@@ -712,6 +728,34 @@
       // canvases names it: `artifact-show-canvas`.
       _ = root.addEventListener("artifact-show-canvas") { [self] (event: Event) in
         if let index = Int(event.detail) { self.loadCanvas(index) }
+      }
+      // Or by a markup page, "<index> <service>", as an evidence roster
+      // names it: by its image where the pages hold it, else by its place
+      // among the markup's pages, which a windowed reader may not have
+      // drawn yet.
+      _ = root.addEventListener("artifact-show-markup") { [self] (event: Event) in
+        let parts = stringSplit(event.detail, separator: " ")
+        let service = parts.count > 1 ? parts[1] : ""
+        if let index = self.canvasIndex(ofService: service) {
+          self.loadCanvas(index)
+        } else if let first = parts.first, let index = Int(first) {
+          self.loadCanvas(index)
+        }
+      }
+      // A windowed reader's host has drawn a pane: show it if it is the
+      // page on screen, its layers as the switches stand.
+      _ = root.addEventListener("artifact-markup-added") { [self] _ in
+        for pane in self.markupPanes {
+          let index = parseInt(pane.dataset["page-index"] ?? "") ?? -1
+          if self.manifestFailed, index >= 0, index < self.serviceIDs.count, stringIsEmpty(self.serviceIDs[index]) {
+            self.serviceIDs[index] = pane.dataset["service-id"] ?? ""
+          }
+        }
+        if case .some = root.querySelector(".artifact-markup [data-layer='translated-rendering']") {
+          self.translatable = true
+        }
+        self.showLayers()
+        self.showMarkup(for: self.canvasIndex)
       }
       if stringIsEmpty(manifestURL) {
         pageMarkup()
@@ -1155,8 +1199,31 @@
       }
     }
 
-    /// No manifest: the pages are the markup's own, in its order.
+    /// Whether the pages are the markup's own: no manifest, or one that
+    /// named none.
+    private var manifestFailed = false
+
+    /// No manifest: the pages are the markup's own, in its order. A
+    /// windowed markup counts them all and knows the image of those drawn.
     private func pageMarkup() {
+      manifestFailed = true
+      if windowed {
+        let count = parseInt(root.dataset["page-count"] ?? "") ?? 0
+        var services: [String] = []
+        for _ in 0..<max(count, 0) { services.append("") }
+        for pane in markupPanes {
+          let index = parseInt(pane.dataset["page-index"] ?? "") ?? -1
+          if index >= 0, index < services.count { services[index] = pane.dataset["service-id"] ?? "" }
+        }
+        for service in services {
+          serviceIDs.append(service)
+          imageWidths.append(0)
+          imageHeights.append(0)
+          canvasLabels.append("")
+        }
+        open()
+        return
+      }
       for pane in markupPanes {
         serviceIDs.append(pane.dataset["service-id"] ?? "")
         imageWidths.append(0)
@@ -1399,10 +1466,13 @@
         pane.setAttribute(data("active"), isActive ? "true" : "false")
       }
       // No pane names this canvas: fall back to the transcriber's order, which
-      // is right whenever the two sequences run together.
+      // is right whenever the two sequences run together—each pane's own
+      // place where the markup is windowed, which a pane not drawn yet
+      // leaves with none active, for the host to fetch.
       if !matched {
         for (position, pane) in markupPanes.enumerated() {
-          pane.setAttribute(data("active"), position == index ? "true" : "false")
+          let place = windowed ? (parseInt(pane.dataset["page-index"] ?? "") ?? -1) : position
+          pane.setAttribute(data("active"), place == index ? "true" : "false")
         }
       }
       // Whoever drew the markup may have work to do when it changes—syntax
