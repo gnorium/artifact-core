@@ -502,11 +502,14 @@
           boxSizing(.borderBox)
           borderBlockStart(borderWidthBase, .solid, borderColorBase)
         }
+        // Its text where the Raw button's text stands in the footer below:
+        // past that button's border and its inline padding (user, 2026-10-11).
         descendant(".artifact-canvas-label") {
           fontSize(fontSizeMedium16)
           color(colorSubtle)
           flex(1)
           minWidth(0)
+          CSS.Property("padding-inline-start", "calc(\(spacing8.value) + \(borderWidthBase.value))")
         }
         fadeOverflow("& .artifact-canvas-label")
         selector(".artifact-fullscreen-button") {
@@ -1116,10 +1119,10 @@
         let layer = translated ? (rawVisible ? "translated-markup" : "translated-rendering") : (rawVisible ? "markup" : "rendering")
         for element in pane.querySelectorAll("[data-layer]") {
           let name = element.getAttribute(data("layer")) ?? ""
+          // Each layer is a flex column: the rendered page's paragraphs
+          // stand apart by its gap (user, 2026-10-11).
           if !stringEquals(name, layer) {
             element.style.display(.none)
-          } else if stringEquals(name, "rendering") {
-            element.style.display(.block)
           } else {
             element.style.display(.flex)
           }
