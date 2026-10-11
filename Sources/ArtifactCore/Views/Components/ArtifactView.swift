@@ -240,6 +240,24 @@
                 class: "artifact-raw-toggle",
                 labelFontWeight: fontWeightNormal
               )
+              // Both layers' lines (user, 2026-10-12). Off: the rendered
+              // page's lines as the scan breaks them (each `<lb/>` a line)
+              // and the code's as stored, never wrapped, scrolling
+              // sideways. On: the page's lines run on as paragraphs, the
+              // code wrapped as plain text.
+              ToggleButtonView(
+                label: "Reflow",
+                icon: nil as HTML.HTMLSpanElement?,
+                modelValue: false,
+                weight: .static,
+                buttonColor: .gray,
+                fullWidth: false,
+                ariaLabel: "Reflow",
+                indicateSelection: true,
+                size: .medium,
+                class: "artifact-reflow-toggle",
+                labelFontWeight: fontWeightNormal
+              )
               if let info = rawSwitchInfo {
                 // An icon on its own, on par with the row's 16px text, takes
                 // the text's size, as the bars' other icons (user,
@@ -368,7 +386,7 @@
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
         }
-        selector("& .artifact-page-nav", "& .artifact-raw-toggle") {
+        selector("& .artifact-page-nav", "& .artifact-raw-toggle", "& .artifact-reflow-toggle") {
           flexShrink(0)
         }
         // Its total unknown, the pager waits unseen rather than read "of —".
@@ -385,9 +403,11 @@
           alignItems(.center)
         }
         // Raw at the footer's start, the pager and fullscreen at its end.
+        // Never narrower than its switches: where they and the pager do not
+        // fit on one row (a phone), the pager wraps to a row of its own.
         descendant(".artifact-footer-start") {
           display(.flex)
-          flex(1)
+          CSS.Property("flex", "1 0 auto")
           alignItems(.center)
           gap(spacing8)
           minWidth(0)
@@ -496,6 +516,7 @@
         descendant(".artifact-footer") {
           flexShrink(0)
           justifyContent(.flexEnd)
+          flexWrap(.wrap)
           gap(spacing8)
           padding(spacing8)
           minHeight(minSizeInteractiveTouch)
@@ -546,6 +567,7 @@
   import EmbeddedSwiftUtilities
   import HTMLBuilder
   import WebAPIs
+  import WebComponents
   import WebTypes
 
   public final class ArtifactHydration: @unchecked Sendable {
@@ -567,6 +589,15 @@
     /// session, so it holds across the reader's pages and the site's, and is
     /// off again in a new session. Storage refused reads as off.
     static let canvasShownKey = "gnorium:artifact-page-images"
+    /// Reflow's choice, kept for the session as the page images' is.
+    static let reflowKey = "gnorium:artifact-reflow"
+
+    /// Every reader's markup reflowed or set by its lines, as one reader's
+    /// Reflow was pressed, and the choice kept for the session.
+    static func reflow(_ on: Bool) {
+      sessionStorage.setItem(reflowKey, on ? "true" : "false")
+      for reader in instance?.readers ?? [] { reader.setReflow(on) }
+    }
 
     /// The page images shown or put away in every reader on the page, as
     /// one reader's switch was pressed, and the choice kept for the session.
@@ -708,6 +739,7 @@
 
       setupControls()
       setupLayers()
+      setupReflowSwitch()
       setupCanvasSwitch()
       setupRegions()
       // A host turns the reader to a page by its image service (a find
@@ -1102,6 +1134,28 @@
       root.setAttribute(data("canvas-shown"), canvasShown ? "true" : "false")
       canvasToggle?.setAttribute("aria-pressed", canvasShown ? "true" : "false")
       canvasToggle?.querySelector("button")?.setAttribute("aria-pressed", canvasShown ? "true" : "false")
+    }
+
+    private var reflowToggle: DOM.Element?
+
+    /// Reflow, as this session left it: the markup's lines and its code's,
+    /// which pages fetched later follow (`TEILineationHydration` and the
+    /// code's CSS read `data-reflow`).
+    private func setupReflowSwitch() {
+      guard let toggle = root.querySelector(".artifact-reflow-toggle") else { return }
+      reflowToggle = toggle
+      setReflow(stringEquals(sessionStorage.getItem(ArtifactHydration.reflowKey) ?? "false", "true"))
+      _ = toggle.addEventListener("toggle-button-update") { (event: Event) in
+        ArtifactHydration.reflow(stringEquals(event.detail, "true"))
+      }
+    }
+
+    func setReflow(_ on: Bool) {
+      guard let toggle = reflowToggle else { return }
+      root.setAttribute(data("reflow"), on ? "true" : "false")
+      toggle.setAttribute("aria-pressed", on ? "true" : "false")
+      toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
+      TEILineationHydration.refresh()
     }
 
     private var rawVisible = false
