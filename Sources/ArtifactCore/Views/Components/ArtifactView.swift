@@ -1225,6 +1225,11 @@
     /// them would hash its String keys, which embedded WASM cannot).
     private var renderingZoom: Double?
     private var markupZoom: Double?
+    /// Whether each layer's zoom is at its fit: one at the fit stays at the
+    /// fit as the pane is resized or the page turned, so it follows the new
+    /// fit and no margin lags; any other is clamped.
+    private var renderingAtFit = false
+    private var markupAtFit = false
     private var zoomQueued = false
     /// A pinch's two fingers' distance and the zoom it began at.
     private var pinchStart: (distance: Double, zoom: Double)?
@@ -1348,7 +1353,10 @@
       // The whole page's fit, never above its own size: it opens at 100%.
       let fit = min(1, min(paneWidth / width, paneHeight / height))
       let kind = zoomKind
-      let zoom = max(fit, min(ViewerZoom.maximum, storedZoom(kind)))
+      let atFit = rawVisible ? markupAtFit : renderingAtFit
+      let zoom = anchor == nil && atFit ? fit : max(fit, min(ViewerZoom.maximum, storedZoom(kind)))
+      let nowAtFit = zoom <= fit
+      if rawVisible { markupAtFit = nowAtFit } else { renderingAtFit = nowAtFit }
       let point = anchor.map { ((pane.scrollLeft + $0.x) / previous, (pane.scrollTop + $0.y) / previous) }
       layer.style.setProperty("zoom", doubleToString(zoom))
       layer.setAttribute(data("zoom"), doubleToString(zoom))
