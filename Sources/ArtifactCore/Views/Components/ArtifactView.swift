@@ -490,6 +490,14 @@
         // Raw XML is intentionally preformatted and can contain very long
         // lines. Let it contribute overflow to `.artifact-markup`, which is
         // the single scroll owner for the entire markup half.
+        // The rendered page's lines, Reflow off, overflow into the pane too
+        // (user, 2026-10-12): `.artifact-markup` the one scroller for both
+        // axes, as under Raw, so its sideways bar stays at the pane's edge
+        // at every scroll, never at the foot of a tall page. (TEIView
+        // scrolls its own lines where no pane holds it.)
+        descendant(".artifact-markup .tei-page-text") {
+          overflow(.visible).important()
+        }
         descendant(".artifact-markup [data-layer='markup'] .code-view") {
           width(perc(100))
           minWidth(0)
