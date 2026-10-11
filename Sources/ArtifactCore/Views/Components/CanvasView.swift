@@ -288,13 +288,14 @@
     }
 
     /// The image, fitted to the viewport: its low-resolution copy, then the
-    /// detail the fit asks for.
-    func show(width: Int, height: Int) {
+    /// detail the fit asks for; or `image`, a plain image shown whole in
+    /// place of the service (an archived copy).
+    func show(width: Int, height: Int, image: String = "") {
       imageW = width
       imageH = height
       fitToViewport()
       compositor?.showSpinner()
-      compositor?.setCanvas(serviceID: serviceID, width: width, height: height)
+      compositor?.setCanvas(serviceID: serviceID, width: width, height: height, image: image)
       updateTransform()
     }
 

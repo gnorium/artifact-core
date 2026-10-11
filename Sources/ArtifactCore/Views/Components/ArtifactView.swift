@@ -621,6 +621,9 @@
     /// labels where a manifest gives them.
     private var serviceIDs: [String] = []
     private var imageWidths: [Int] = []
+    /// Each canvas's plain image in place of its service, where it has one
+    /// (`ArtifactManifest.Page.image`): by the manifest's place.
+    private var plainImages: [String] = []
     private var imageHeights: [Int] = []
     private var canvasLabels: [String] = []
     private var canvasIndex: Int = 0
@@ -1168,9 +1171,11 @@
           imageWidths = []
           imageHeights = []
           canvasLabels = []
+          plainImages = []
         }
         for page in manifest.pages {
           serviceIDs.append(page.serviceID)
+          plainImages.append(page.image)
           imageWidths.append(page.width)
           imageHeights.append(page.height)
           canvasLabels.append(page.label)
@@ -1265,12 +1270,14 @@
       }
       if let shown = shownCanvas, shown !== canvas { shown.hide() }
       shownCanvas = canvas
-      canvas.show(width: imageWidths[idx], height: imageHeights[idx])
+      canvas.show(width: imageWidths[idx], height: imageHeights[idx], image: idx < plainImages.count ? plainImages[idx] : "")
       drawRegion()
       // The four either side, nearest first: images are what a turn waits
       // for (user, 2026-10-11).
       for distance in 1...4 {
-        for neighbor in [idx + distance, idx - distance] where neighbor >= 0 && neighbor < serviceIDs.count {
+        for neighbor in [idx + distance, idx - distance]
+        where neighbor >= 0 && neighbor < serviceIDs.count
+          && (neighbor >= plainImages.count || stringIsEmpty(plainImages[neighbor])) {
           CanvasReader.preload(
             serviceID: serviceIDs[neighbor], width: imageWidths[neighbor], zoom: canvas.fittedZoom)
         }

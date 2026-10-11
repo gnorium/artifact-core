@@ -12,6 +12,10 @@ struct ArtifactManifest {
     let width: Int
     let height: Int
     let label: String
+    /// A plain image shown for the canvas in place of its image service:
+    /// for a page changed at its source, the archived copy of the image a
+    /// run was sent (`"img"`, user 2026-10-11); empty for the live service.
+    var image: String = ""
   }
 
   /// What the page-images switch does with an answer (user, 2026-10-10):
@@ -47,7 +51,9 @@ struct ArtifactManifest {
         guard let width = extractJSONInt(entry, key: "w") else { continue }
         guard let height = extractJSONInt(entry, key: "h") else { continue }
         manifest.pages.append(
-          Page(serviceID: id, width: width, height: height, label: extractJSONString(entry, key: "l") ?? ""))
+          Page(
+            serviceID: id, width: width, height: height, label: extractJSONString(entry, key: "l") ?? "",
+            image: extractJSONString(entry, key: "img") ?? ""))
       }
     }
     if manifest.pages.isEmpty {

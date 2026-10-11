@@ -30,6 +30,8 @@
     private var spinnerEl: DOM.Element?
 
     private var serviceID: String = ""
+    /// A plain image shown whole in place of the service: no tiles, no probe.
+    private var plainImage: String = ""
     /// Whether a canvas is shown: a probe that answers after it was put away
     /// draws nothing.
     private var showing = false
@@ -61,8 +63,9 @@
       container = c
     }
 
-    func setCanvas(serviceID: String, width: Int, height: Int) {
+    func setCanvas(serviceID: String, width: Int, height: Int, image: String = "") {
       self.serviceID = serviceID
+      plainImage = image
       showing = true
       imageW = width
       imageH = height
@@ -73,6 +76,10 @@
       surface?.setAttribute("width", intToString(width))
       surface?.setAttribute("height", intToString(height))
       surface?.setAttribute("viewBox", "0 0 \(intToString(width)) \(intToString(height))")
+      if !stringIsEmpty(image) {
+        loadBackdrop()
+        return
+      }
       Self.probeFormat(base: baseURL(serviceID)) { [self] fmt in
         imageFormat = fmt
         guard showing, stringEquals(self.serviceID, serviceID) else { return }
@@ -163,7 +170,7 @@
 
     private func flushTileLoad() {
       debounceTimer = -1
-      guard showing else { return }
+      guard showing, stringIsEmpty(plainImage) else { return }
       let dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 2.0
       let zoom = pendingZoom
       let tier = zoomTier(zoom)
@@ -181,7 +188,7 @@
     private func loadBackdrop() {
       guard imageW > 0 else { return }
       let base = baseURL(serviceID)
-      let url = "\(base)/full/256,/0/default.\(imageFormat)"
+      let url = stringIsEmpty(plainImage) ? "\(base)/full/256,/0/default.\(imageFormat)" : plainImage
       let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
       img.setAttribute(.class, "canvas-tile-image")
       img.setAttribute(.draggable, "false")
