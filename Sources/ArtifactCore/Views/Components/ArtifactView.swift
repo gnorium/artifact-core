@@ -510,7 +510,7 @@
           overflow(.visible).important()
         }
         // Reflow off, a page's layer is as wide as its longest line: the
-        // shape its zoom fits and centers (`ArtifactReader.applyZoom`).
+        // shape its zoom fits (`ArtifactReader.applyZoom`).
         // Two fingers on the pane pinch the text, never the page.
         selector("&:not([data-reflow='true']) .artifact-markup [data-layer]") {
           width(.maxContent).important()
@@ -1303,9 +1303,10 @@
     /// The text zooms as the image does (`CanvasReader`, user, 2026-10-12),
     /// so a page's lines can be laid against its scan: from the fit of the
     /// whole page (`CanvasReader.fitToViewport`'s) to its actual size,
-    /// 100% (`ViewerZoom.actualSize`), centered on an axis where it is
-    /// smaller than the pane and scrolled with no gap where it is larger
-    /// (`CanvasReader.clampPan`'s rule). Unlike the image, which opens at
+    /// 100% (`ViewerZoom.actualSize`), its box at least the pane's size
+    /// with the text at its top left as a document's (no gap to center),
+    /// scrolled with no gap where it is larger. Its fit: the whole page's
+    /// where it is larger than the pane, else its actual size. Unlike the image, which opens at
     /// its fit, the text opens at its actual size: text is read at its
     /// size. It is CSS `zoom`, not a transform, so the pane's native
     /// scrollbars follow it, and there is no drag. Each layer keeps its own
@@ -1334,16 +1335,21 @@
 
     /// The shown layer's zoom: as set, else as the session left it, else
     /// its actual size; and whether it is at its fit.
-    private func storedZoom() -> (zoom: Double, atFit: Bool) {
+    private func storedZoom() -> (zoom: Double?, atFit: Bool) {
       let zoom = rawVisible ? markupZoom : renderingZoom
       let atFit = rawVisible ? markupAtFit : renderingAtFit
-      if let zoom, let atFit { return (zoom, atFit) }
+      if let atFit { return (zoom, atFit) }
       let kept = sessionStorage.getItem(Self.zoomKey + zoomKind) ?? ""
-      if stringEquals(kept, "fit") { return (ViewerZoom.actualSize, true) }
-      return (parseDouble(kept) ?? ViewerZoom.actualSize, false)
+      if stringEquals(kept, "fit") { return (nil, true) }
+      return (parseDouble(kept), false)
     }
 
-    private func setZoom(_ value: Double, atFit: Bool) {
+    /// The shown layer's zoom as drawn now.
+    private func currentZoom() -> Double {
+      parseDouble(shownLayer()?.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
+    }
+
+    private func setZoom(_ value: Double?, atFit: Bool) {
       if rawVisible {
         markupZoom = value
         markupAtFit = atFit
@@ -1384,7 +1390,7 @@
       }
       event.preventDefault()
       zoom(
-        to: storedZoom().zoom * ViewerZoom.wheelFactor(event.deltaY),
+        to: currentZoom() * ViewerZoom.wheelFactor(event.deltaY),
         about: (event.clientX - box.x, event.clientY - box.y))
     }
 
@@ -1397,7 +1403,7 @@
       guard distance > 0 else { return }
       event.preventDefault()
       guard let start = pinchStart else {
-        pinchStart = (distance, storedZoom().zoom)
+        pinchStart = (distance, currentZoom())
         return
       }
       zoom(to: start.zoom * distance / start.distance, about: ((x0 + x1) / 2 - box.x, (y0 + y1) / 2 - box.y))
@@ -1429,7 +1435,7 @@
 
     /// The most the text zooms in, its fit being `fit`.
     private func maxZoom(fit: Double) -> Double {
-      guard let scale = matchedMaxScale else { return ViewerZoom.actualSize }
+      guard let scale = matchedMaxScale else { return max(fit, ViewerZoom.actualSize) }
       return max(fit, fit * scale)
     }
 
@@ -1474,7 +1480,7 @@
     private func applyMatchText(_ region: ViewerZoom.Region) {
       guard syncs, let pane = markupPane, let layer = shownLayer() else { return }
       let zoom = max(lastFit, min(maxZoom(fit: lastFit), lastFit * region.scale))
-      setZoom(zoom, atFit: lastFit < ViewerZoom.actualSize && zoom <= lastFit)
+      setZoom(zoom, atFit: zoom <= lastFit)
       applyZoom(about: nil, matching: true)
       guard let box = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect() else { return }
       // The layer's place in what the pane scrolls, and the point to center.
@@ -1522,22 +1528,21 @@
       }
     }
 
-    /// `layer` at `zoom`, its centering margins gone: its rendered box.
+    /// `layer` at `zoom`: its rendered box.
     private func measure(_ layer: DOM.Element, at zoom: Double) -> DOM.Rect? {
       layer.style.setProperty("zoom", doubleToString(zoom))
-      _ = layer.style.removeProperty("margin-inline-start")
-      _ = layer.style.removeProperty("margin-block-start")
       return layer.getBoundingClientRect()
     }
 
     /// The zoom at which reflowed text's whole height fits `paneHeight`,
-    /// found by halving: zoomed out, it wraps wider and shorter, so its
-    /// height is measured, never estimated. At the zoom `paneHeight /` its
-    /// height at its actual size it fits (no line is taller, none are
-    /// added); at its actual size it does not; the two close to within a
-    /// pixel of its height.
+    /// never above its actual size, found by halving: zoomed out, it wraps
+    /// wider and shorter, so its height is measured, never estimated. At
+    /// `paneHeight /` its height at its actual size it fits (no line is
+    /// taller, none are added); at its actual size it does not; the two
+    /// close to within a pixel of its height.
     private func reflowedFit(_ layer: DOM.Element, paneHeight: Double) -> Double? {
       guard let whole = measure(layer, at: ViewerZoom.actualSize), whole.height > 0 else { return nil }
+      // Shorter than the pane at its actual size, it is read there.
       if whole.height <= paneHeight { return ViewerZoom.actualSize }
       var fits = paneHeight / whole.height
       var overflows = ViewerZoom.actualSize
@@ -1554,17 +1559,16 @@
     /// keeps the text under it in place. Nothing is clamped before the
     /// layer has a size: a page not yet drawn is left as it is.
     private func applyZoom(about anchor: (x: Double, y: Double)?, matching: Bool = false) {
-      guard let pane = markupPane, let layer = shownLayer(), let box = layer.getBoundingClientRect(),
-        box.width > 0, box.height > 0, let paneBox = pane.getBoundingClientRect()
+      guard let pane = markupPane, let layer = shownLayer() else { return }
+      guard let box = layer.getBoundingClientRect(), box.width > 0, box.height > 0,
+        let paneBox = pane.getBoundingClientRect()
       else { return }
       let previous = parseDouble(layer.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
       // What stands around the layer in the pane (the view's 1px inset,
       // which keeps a ring clear), on both sides alike: where the layer
       // starts, less its centering margin.
-      let marginX = pixels(layer.style.getPropertyValue("margin-inline-start")) * previous
-      let marginY = pixels(layer.style.getPropertyValue("margin-block-start")) * previous
-      let insetX = max(0, box.x - paneBox.x + pane.scrollLeft - marginX)
-      let insetY = max(0, box.y - paneBox.y + pane.scrollTop - marginY)
+      let insetX = max(0, box.x - paneBox.x + pane.scrollLeft)
+      let insetY = max(0, box.y - paneBox.y + pane.scrollTop)
       // The pane's size as if it had no scrollbars: the fit is the zoom at
       // which it needs none, and a size that changed as they came and went
       // would move the fit, the zoom with it, and the bars again.
@@ -1581,10 +1585,22 @@
         guard let reflowed = reflowedFit(layer, paneHeight: paneHeight) else { return }
         fit = reflowed
       } else {
-        fit = min(ViewerZoom.actualSize, min(paneWidth / (box.width / previous), paneHeight / (box.height / previous)))
+        // The contain fit, never above the text's actual size: a page
+        // smaller than the pane is read at its size, its box filling the
+        // pane (below), never enlarged or shown small in it.
+        let width = box.width / previous
+        let height = box.height / previous
+        fit = min(paneWidth / max(paneWidth, width), paneHeight / max(paneHeight, height))
       }
       let stored = storedZoom()
-      var zoom = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom))
+      // The reader's zoom, or at the fit, or, until the reader zooms, the
+      // text's actual size.
+      var zoom: Double
+      if anchor == nil && stored.atFit {
+        zoom = fit
+      } else {
+        zoom = max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
+      }
       // Settled: a change that would move the page by less than a pixel is
       // a measure's rounding (its fit, so its maximum, read again at a new
       // zoom), not a zoom; left as it is, so nothing redraws, frame after
@@ -1594,20 +1610,27 @@
       let settled = abs(zoom - previous) * max(box.width, box.height) / previous < 1
       if settled { zoom = previous }
       let held = settled ? nil : anchor
-      // At the fit only where the fit is a zoom out: a page that fits at its
-      // actual size is at its actual size, and the next page opens there.
-      let atFit = fit < ViewerZoom.actualSize && zoom <= fit
+      // At the fit by the reader's choice alone (a zoom, a sync): a page
+      // that opened enlarged to its fit leaves the next page to open at its
+      // own size, never at a fit the reader did not ask for.
+      let chosen = stored.zoom != nil || stored.atFit
+      let atFit = chosen && zoom <= fit
       let point = held.map { ((pane.scrollLeft + $0.x) / previous, (pane.scrollTop + $0.y) / previous) }
-      guard let shown = measure(layer, at: zoom) else { return }
+      layer.style.setProperty("zoom", doubleToString(zoom))
       layer.setAttribute(data("zoom"), doubleToString(zoom))
-      // A zoomed element's margins are zoomed too: set unzoomed.
-      layer.style.setProperty(
-        "margin-inline-start", doubleToString(max(0, (paneWidth - shown.width) / 2) / zoom) + "px")
-      layer.style.setProperty(
-        "margin-block-start", doubleToString(max(0, (paneHeight - shown.height) / 2) / zoom) + "px")
-      setZoom(zoom, atFit: atFit)
+      // The page at least the pane's size, its text at its top left as a
+      // document's: never a gap to center. The page's box, not the text's:
+      // the text keeps the width of its longest line, which its justified
+      // lines run to.
+      if let page = layer.closest(".tei-page") {
+        page.style.setProperty("min-width", doubleToString(paneWidth) + "px")
+        page.style.setProperty("min-height", doubleToString(paneHeight) + "px")
+      }
       lastFit = fit
-      sessionStorage.setItem(Self.zoomKey + zoomKind, atFit ? "fit" : doubleToString(zoom))
+      if chosen {
+        setZoom(zoom, atFit: atFit)
+        sessionStorage.setItem(Self.zoomKey + zoomKind, atFit ? "fit" : doubleToString(zoom))
+      }
       if let anchor = held, let point {
         pane.scrollLeft = point.0 * zoom - anchor.x
         pane.scrollTop = point.1 * zoom - anchor.y
