@@ -403,11 +403,9 @@
           alignItems(.center)
         }
         // Raw at the footer's start, the pager and fullscreen at its end.
-        // Never narrower than its switches: where they and the pager do not
-        // fit on one row (a phone), the pager wraps to a row of its own.
         descendant(".artifact-footer-start") {
           display(.flex)
-          CSS.Property("flex", "1 0 auto")
+          flex(1)
           alignItems(.center)
           gap(spacing8)
           minWidth(0)
@@ -534,7 +532,6 @@
         descendant(".artifact-footer") {
           flexShrink(0)
           justifyContent(.flexEnd)
-          flexWrap(.wrap)
           gap(spacing8)
           padding(spacing8)
           minHeight(minSizeInteractiveTouch)
@@ -564,6 +561,27 @@
           cursor(.pointer)
           flexShrink(0)
           pseudoClass(.hover) { color(colorBase) }
+        }
+        // On a phone (below 480px) the viewer is never narrower than its
+        // footer's one row at its own size (user, 2026-10-12)—Raw, Reflow,
+        // the pager and fullscreen, their gaps, the footer's inset and the
+        // viewer's border—whatever the pager's total holds: the footer is
+        // as wide as its contents (`max-content`) and the viewer as wide as
+        // that (`min-content`), measured from the footer alone. A page that
+        // nests the viewer deeper scrolls
+        // sideways, as the outliner's does; nothing in it is resized.
+        media(maxWidth(maxWidthBreakpointPhoneNarrow)) {
+          selector("&") { CSS.Property("min-width", "min-content").important() }
+          selector("& .artifact-footer") { CSS.Property("min-width", "max-content").important() }
+          // Only the footer sets it: the rest (the header row, the pane and
+          // its unwrapped lines) is as wide as the viewer, whatever it holds.
+          selector("& > :not(.artifact-footer)") { CSS.Property("contain", "inline-size") }
+          // Option B (`ButtonView.phoneStep`): fullscreen small with every
+          // medium button.
+          selector("\(ButtonView.phoneStep) & .artifact-fullscreen-button") {
+            width(ButtonView.smallMinSize).important()
+            height(ButtonView.smallMinSize).important()
+          }
         }
       }
     }
