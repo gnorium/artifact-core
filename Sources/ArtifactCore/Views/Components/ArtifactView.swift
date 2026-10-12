@@ -516,11 +516,18 @@
           width(.maxContent).important()
           maxWidth(.none).important()
         }
+        descendant(".artifact-markup[data-over-text='true']") { cursor(.text) }
+        descendant(".artifact-markup[data-dragging='true']") { cursor(.grabbing) }
         selector("& .artifact-markup") {
           CSS.Property("touch-action", "pan-x pan-y")
           // Its scroll is the reader's or the sync's alone: the browser's
           // anchoring would move it again after each zoom.
           CSS.Property("overflow-anchor", "none")
+          // A swipe at its edge stays in it, as the image's does.
+          CSS.Property("overscroll-behavior", "contain")
+          // Panned by a drag off its text, as the image is: the text keeps
+          // its I-beam, the rest of the pane the hand.
+          cursor(.grab)
         }
         descendant(".artifact-markup [data-layer='markup'] .code-view") {
           width(perc(100))
@@ -1372,6 +1379,36 @@
       pane.observeResize { [self] _, _ in self.scheduleZoom() }
       pane.observeMutations(childList: true, subtree: true) { [self] in self.scheduleZoom() }
       _ = pane.addEventListener("wheel", { [self] e in self.wheel(e) }, capture: false, passive: false)
+      // A drag from the text selects it, as text is selected; a drag from
+      // anywhere else (between lines, the margins, the ground) pans it, as
+      // the image is panned. The current rule (user, 2026-10-12), which may
+      // be revisited: on a dense page the scrollbars and the wheel's zoom
+      // pan it too. A double or triple click and Shift+click stay the
+      // browser's own.
+      _ = pane.addEventListener("mousedown", { [self] e in self.beginPan(e) }, capture: false, passive: false)
+      // The cursor says which a drag would do: the I-beam over the text,
+      // the hand elsewhere.
+      _ = pane.addEventListener(
+        "mousemove",
+        { [self] e in
+          guard self.panStart == nil, let pane = self.markupPane else { return }
+          let over = self.isOnText(x: e.clientX, y: e.clientY) ? "true" : "false"
+          if !stringEquals(pane.getAttribute(data("over-text")) ?? "", over) { pane.setAttribute(data("over-text"), over) }
+        }, capture: false, passive: true)
+      // A press that moved was a pan, not a click: no gloss, no link.
+      _ = pane.addEventListener(
+        "click",
+        { [self] e in
+          if self.panMoved {
+            self.panMoved = false
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        }, capture: true, passive: false)
+      // Focused, the keys move it as the image's do: the arrows pan, + and
+      // − zoom, 0 opens it again at its actual size or its fit.
+      pane.setAttribute("tabindex", "0")
+      _ = pane.addEventListener("keydown", { [self] e in self.zoomKey(e) }, capture: false, passive: false)
       _ = pane.addEventListener("scroll", { [self] _ in self.scrolled() }, capture: false, passive: true)
       _ = pane.addEventListener("touchstart", { [self] e in self.pinch(e) }, capture: false, passive: false)
       _ = pane.addEventListener("touchmove", { [self] e in self.pinch(e) }, capture: false, passive: false)
@@ -1380,14 +1417,11 @@
       scheduleZoom()
     }
 
-    /// A trackpad's pinch (the browser's ctrl+wheel) or ctrl/cmd+wheel
-    /// zooms about the pointer, as the image's does. A plain wheel scrolls
-    /// the text, as text is read—the one difference from the image, whose
-    /// wheel zooms.
+    /// The wheel—a plain one, a trackpad's two fingers or pinch (the
+    /// browser's ctrl+wheel), ctrl/cmd+wheel—zooms about the pointer, as
+    /// the image's does, and never scrolls the page (user, 2026-10-12).
     private func wheel(_ event: Event) {
-      guard event.ctrlKey || event.metaKey, let pane = markupPane, let box = pane.getBoundingClientRect() else {
-        return
-      }
+      guard let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
       event.preventDefault()
       zoom(
         to: currentZoom() * ViewerZoom.wheelFactor(event.deltaY),
@@ -1407,6 +1441,109 @@
         return
       }
       zoom(to: start.zoom * distance / start.distance, about: ((x0 + x1) / 2 - box.x, (y0 + y1) / 2 - box.y))
+    }
+
+    /// A drag under way: where it began, and the scroll it began at.
+    private var panStart: (x: Double, y: Double, left: Double, top: Double)?
+    private var panMoveListener: Int32 = -1
+    private var panUpListener: Int32 = -1
+    /// Whether the press under way, or just ended, moved: a pan, not a
+    /// click. Any movement counts, as the browser exposes no drag threshold.
+    private var panMoved = false
+
+    /// Whether a point of the viewport is on text: the character the caret
+    /// would stand by there (`caretPositionFromPoint`) has the point in its
+    /// box, either side of the caret.
+    private func isOnText(x: Double, y: Double) -> Bool {
+      guard let caret = document.caretPositionFromPoint(x, y), let text = caret.offsetNode as? DOM.Text else {
+        return false
+      }
+      for (start, end) in [(caret.offset - 1, caret.offset), (caret.offset, caret.offset + 1)]
+      where start >= 0 && end <= text.length {
+        let range = document.createRange()
+        range.setStart(text, start)
+        range.setEnd(text, end)
+        if let box = range.getBoundingClientRect(), x >= box.left, x <= box.right, y >= box.top, y <= box.bottom {
+          return true
+        }
+      }
+      return false
+    }
+
+    /// A press of the main button off the text starts a pan; on the text,
+    /// a double or triple click (a word, a line) and Shift (extend) are left
+    /// to the browser's own selection.
+    private func beginPan(_ event: Event) {
+      guard let pane = markupPane, event.button == 0, event.clickCount <= 1, !event.shiftKey,
+        !isOnText(x: event.clientX, y: event.clientY)
+      else { return }
+      // Code being edited takes its own presses: its caret, its selection.
+      if let _ = event.target?.closest("input, textarea, select, [contenteditable='true'], [contenteditable='plaintext-only']") {
+        return
+      }
+      // No selection begun, and the focus the press would have given, the
+      // page left where it is.
+      event.preventDefault()
+      pane.focus(DOM.FocusOptions(preventScroll: true))
+      panMoved = false
+      panStart = (event.clientX, event.clientY, pane.scrollLeft, pane.scrollTop)
+      endPan()
+      panMoveListener = window.addEventListener(.mousemove) { [self] e in
+        guard let start = self.panStart, let pane = self.markupPane else { return }
+        if e.clientX != start.x || e.clientY != start.y {
+          self.panMoved = true
+          pane.setAttribute(data("dragging"), "true")
+        }
+        pane.scrollLeft = start.left - (e.clientX - start.x)
+        pane.scrollTop = start.top - (e.clientY - start.y)
+      }
+      panUpListener = window.addEventListener(.mouseup) { [self] _ in
+        self.panStart = nil
+        self.endPan()
+      }
+    }
+
+    private func endPan() {
+      if panMoveListener >= 0 { window.removeEventListener(.mousemove, panMoveListener) }
+      if panUpListener >= 0 { window.removeEventListener(.mouseup, panUpListener) }
+      panMoveListener = -1
+      panUpListener = -1
+      markupPane?.removeAttribute(data("dragging"))
+    }
+
+    /// The keys of the focused pane: the arrows pan by a wheel's travel
+    /// (`ViewerZoom.wheelTravel`), + and − zoom by a wheel's step about the
+    /// pane's middle, 0 opens it again (its actual size, or its fit).
+    private func zoomKey(_ event: Event) {
+      // The pane's own keys, when it has the focus: a word's arrows move
+      // between words, a field's its caret.
+      guard let pane = markupPane, let target = event.target, target.id == pane.id,
+        let box = pane.getBoundingClientRect()
+      else { return }
+      let key = event.key
+      let middle = (box.width / 2, box.height / 2)
+      if stringEquals(key, "+") || stringEquals(key, "=") {
+        zoom(to: currentZoom() * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), about: middle)
+      } else if stringEquals(key, "-") {
+        zoom(to: currentZoom() * ViewerZoom.wheelFactor(ViewerZoom.wheelTravel), about: middle)
+      } else if stringEquals(key, "0") {
+        setZoom(nil, atFit: false)
+        sessionStorage.removeItem(Self.zoomKey + zoomKind)
+        applyZoom(about: nil)
+        matchImage()
+      } else if stringEquals(key, "ArrowLeft") {
+        pane.scrollLeft -= ViewerZoom.wheelTravel
+      } else if stringEquals(key, "ArrowRight") {
+        pane.scrollLeft += ViewerZoom.wheelTravel
+      } else if stringEquals(key, "ArrowUp") {
+        pane.scrollTop -= ViewerZoom.wheelTravel
+      } else if stringEquals(key, "ArrowDown") {
+        pane.scrollTop += ViewerZoom.wheelTravel
+      } else {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
     }
 
     private func zoom(to value: Double, about anchor: (x: Double, y: Double)) {
@@ -2019,6 +2156,10 @@
         // An arrow typed in a field moves its caret, never the pages: a
         // form may hold a viewer among its fields.
         if let _ = e.target?.closest("input, textarea, select, [contenteditable='true']") { return }
+        // A focused pane's arrows pan it, as its own keys do.
+        if let target = e.target, let pane = target.closest(".artifact-markup, .canvas-viewport"), pane.id == target.id {
+          return
+        }
         if stringEquals(e.key, "ArrowLeft") { navigate(-1) }
         if stringEquals(e.key, "ArrowRight") { navigate(1) }
       }

@@ -672,10 +672,8 @@
       cropping = on
       viewport?.setAttribute(data("cropping"), on ? "true" : "false")
       if on {
-        viewport?.setAttribute("tabindex", "0")
         viewport?.setAttribute("aria-label", "Crop box: drag on the image, or Enter, then the arrow keys")
       } else {
-        viewport?.removeAttribute("tabindex")
         viewport?.removeAttribute("aria-label")
       }
       drawCrop()
@@ -873,6 +871,7 @@
 
       vp.addEventListener(.mousedown) { [self] e in
         e.preventDefault()
+        vp.focus(DOM.FocusOptions(preventScroll: true))
         endDrag()
         if cropping, imageW > 0, imageH > 0 {
           vp.focus()
@@ -924,11 +923,37 @@
 
       vp.addEventListener(.mouseleave) { [self] _ in readout?.setAttribute(.hidden, "") }
 
+      // Focused, the keys move it as the text's do (user, 2026-10-12): the
+      // arrows pan by a wheel's travel, + and − zoom by a wheel's step about
+      // the middle, 0 fits it again; a crop box's keys come first.
+      vp.setAttribute("tabindex", "0")
       vp.addEventListener(.keydown) { [self] e in
         if cropKey(e.key, shift: e.shiftKey) {
           e.preventDefault()
           e.stopPropagation()
+          return
         }
+        guard imageW > 0, imageH > 0 else { return }
+        let key = e.key
+        if stringEquals(key, "+") || stringEquals(key, "=") {
+          zoom(to: zoom * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), aboutX: viewportW / 2, y: viewportH / 2)
+        } else if stringEquals(key, "-") {
+          zoom(to: zoom * ViewerZoom.wheelFactor(ViewerZoom.wheelTravel), aboutX: viewportW / 2, y: viewportH / 2)
+        } else if stringEquals(key, "0") {
+          zoom(to: minZoom, aboutX: viewportW / 2, y: viewportH / 2)
+        } else if stringEquals(key, "ArrowLeft") || stringEquals(key, "ArrowRight") || stringEquals(key, "ArrowUp")
+          || stringEquals(key, "ArrowDown")
+        {
+          panX += stringEquals(key, "ArrowLeft") ? ViewerZoom.wheelTravel : stringEquals(key, "ArrowRight") ? -ViewerZoom.wheelTravel : 0
+          panY += stringEquals(key, "ArrowUp") ? ViewerZoom.wheelTravel : stringEquals(key, "ArrowDown") ? -ViewerZoom.wheelTravel : 0
+          clampPan()
+          updateTransform()
+          tellRegion()
+        } else {
+          return
+        }
+        e.preventDefault()
+        e.stopPropagation()
       }
 
       vp.addEventListener(.wheel) { [self] e in
