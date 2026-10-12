@@ -529,6 +529,12 @@
           // its I-beam, the rest of the pane the hand.
           cursor(.grab)
         }
+        // The code in the pane on the page's ground, gutter and all, as an
+        // editor's (Xcode's) is (user, 2026-10-12); a code block in prose
+        // keeps the code's gray, to stand apart from it.
+        selector("& .artifact-markup .code-view", "& .artifact-markup .code-view .code-gutter") {
+          backgroundColor(backgroundColorBase).important()
+        }
         descendant(".artifact-markup [data-layer='markup'] .code-view") {
           width(perc(100))
           minWidth(0)
