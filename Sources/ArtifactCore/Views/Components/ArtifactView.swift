@@ -615,10 +615,11 @@
           // its unwrapped lines) is as wide as the viewer, whatever it holds.
           selector("& > :not(.artifact-footer)") { CSS.Property("contain", "inline-size") }
           // Option B (`ButtonView.phoneStep`): fullscreen small with every
-          // medium button.
+          // medium button, its icon the small type's size as theirs is.
           selector("\(ButtonView.phoneStep) & .artifact-fullscreen-button") {
             width(ButtonView.smallMinSize).important()
             height(ButtonView.smallMinSize).important()
+            customProperty("--size-icon-small", fontSizeSmall14.value).important()
           }
         }
       }
