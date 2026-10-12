@@ -1250,6 +1250,8 @@
     private var renderingAtFit: Bool?
     private var markupAtFit: Bool?
     private var zoomQueued = false
+    /// The pointer that pressed last on the pane: "mouse", "pen", "touch".
+    private var lastPointerType = ""
     /// A pinch's two fingers' distance and the zoom it began at.
     private var pinchStart: (distance: Double, zoom: Double)?
     /// The session's zoom of a layer: "fit", or a zoom.
@@ -1298,9 +1300,17 @@
       _ = pane.addEventListener("touchmove", { [self] e in self.pinch(e) }, capture: false, passive: false)
       _ = pane.addEventListener(
         "touchend", { [self] e in if e.touchCount < 2 { self.pinchStart = nil } }, capture: false, passive: true)
-      // A double-click (a double tap) goes between the fit and the actual
-      // size, about the pointer, as the image's does.
-      _ = pane.addEventListener("dblclick", { [self] e in self.toggleZoom(e) }, capture: false, passive: false)
+      // A double tap goes between the fit and the actual size, about the
+      // finger, as the image's does. A mouse's or a trackpad's double-click
+      // stays the browser's own, selecting a word (user, 2026-10-12): touch
+      // selects by a long press instead. Told apart by the pointer that
+      // pressed last.
+      _ = pane.addEventListener(
+        "pointerdown", { [self] e in self.lastPointerType = e.pointerType }, capture: false, passive: true)
+      _ = pane.addEventListener(
+        "dblclick",
+        { [self] e in if stringEquals(self.lastPointerType, "touch") { self.toggleZoom(e) } },
+        capture: false, passive: false)
       scheduleZoom()
     }
 
@@ -1334,7 +1344,7 @@
     }
 
     /// From the actual size to the fit, or from anywhere else to the actual
-    /// size, about the pointer.
+    /// size, about the finger.
     private func toggleZoom(_ event: Event) {
       guard let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
       event.preventDefault()
