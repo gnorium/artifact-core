@@ -228,9 +228,9 @@
           div {
             if rawSwitch, !markup.isEmpty {
               // Icons, subtle and bordered as the reactions button is (user,
-              // 2026-10-12): the code (`<>`), its lines' flow, and the panes
+              // 2026-10-12): the code (`</>`), its lines' flow, and the panes
               // unlinked.
-              RawToggleView(class: "artifact-raw-toggle")
+              RawToggleView(source: .xml, class: "artifact-raw-toggle")
               // Both layers' lines (user, 2026-10-12). Off: the rendered
               // page's lines as the scan breaks them (each `<lb/>` a line)
               // and the code's as stored, never wrapped, scrolling
@@ -238,7 +238,7 @@
               // code wrapped as plain text.
               ToggleButtonView(
                 label: "Reflow",
-                icon: IconView(icon: { s in TextFlowIconView(size: s) }, size: sizeIconSmall),
+                icon: IconView(icon: { s in LucideTextWrapIconView(size: s) }, size: sizeIconSmall),
                 modelValue: false,
                 weight: .subtle,
                 buttonColor: .gray,
@@ -255,7 +255,7 @@
               if switchesCanvas {
                 ToggleButtonView(
                   label: "Detach",
-                  icon: IconView(icon: { s in UnSyncIconView(size: s) }, size: sizeIconSmall),
+                  icon: IconView(icon: { s in LucideRefreshCwOffIconView(size: s) }, size: sizeIconSmall),
                   modelValue: false,
                   weight: .subtle,
                   buttonColor: .gray,
@@ -548,14 +548,17 @@
           boxSizing(.borderBox)
           borderBlockStart(borderWidthBase, .solid, borderColorBase)
         }
-        // Its text where the Raw button's text stands in the footer below:
-        // past that button's border and its inline padding (user, 2026-10-11).
+        // Its text where the rendered text starts below when left-aligned
+        // (user, 2026-10-12): the text's 16 inset in its layer, inside the
+        // TEI view's 1px ring padding and the pane's 1px, less the row's 8.
         descendant(".artifact-canvas-label") {
           fontSize(fontSizeMedium16)
           color(colorSubtle)
           flex(1)
           minWidth(0)
-          CSS.Property("padding-inline-start", "calc(\(spacing8.value) + \(borderWidthBase.value))")
+          CSS.Property(
+            "padding-inline-start",
+            "calc(\(spacing16.value) - \(spacing8.value) + 2 * \(borderWidthBase.value))")
         }
         fadeOverflow("& .artifact-canvas-label")
         selector(".artifact-fullscreen-button") {
