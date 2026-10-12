@@ -232,6 +232,8 @@
     /// The most it zooms in: its actual size, or its fit where that is
     /// larger.
     private var maxZoom: Double { max(minZoom, ViewerZoom.actualSize) }
+    /// The zoom a Safari pinch began at (WebKit's `gesturestart`).
+    private var gestureStartZoom = 1.0
     /// Told what the image shows whenever the reader moves it—a drag, a
     /// wheel, a double-click—never when it is moved to match the text
     /// (pane sync).
@@ -922,6 +924,23 @@
       }
 
       vp.addEventListener(.mouseleave) { [self] _ in readout?.setAttribute(.hidden, "") }
+
+      // Safari's trackpad pinch: WebKit's gesture events, not the ctrl+wheel
+      // other browsers send (which the wheel above zooms by). Zoomed about
+      // the gesture's point from the zoom it began at, by its scale; the
+      // page itself never zoomed. Other browsers never send them.
+      vp.addEventListener("gesturestart") { [self] e in
+        e.preventDefault()
+        gestureStartZoom = zoom
+      }
+      vp.addEventListener("gesturechange") { [self] e in
+        e.preventDefault()
+        guard imageW > 0, imageH > 0 else { return }
+        let box = viewport?.getBoundingClientRect()
+        zoom(
+          to: gestureStartZoom * e.webKitGestureScale, aboutX: e.clientX - (box?.x ?? 0), y: e.clientY - (box?.y ?? 0))
+      }
+      vp.addEventListener("gestureend") { e in e.preventDefault() }
 
       // Focused, the keys move it as the text's do (user, 2026-10-12): the
       // arrows pan by a wheel's travel, + and − zoom by a wheel's step about

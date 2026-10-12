@@ -1330,6 +1330,8 @@
     private var renderingAtFit: Bool?
     private var markupAtFit: Bool?
     private var zoomQueued = false
+    /// The zoom a Safari pinch began at (WebKit's `gesturestart`).
+    private var gestureStartZoom = 1.0
     /// A pinch's two fingers' distance and the zoom it began at.
     private var pinchStart: (distance: Double, zoom: Double)?
     /// The session's zoom of a layer: "fit", or a zoom.
@@ -1414,6 +1416,23 @@
       _ = pane.addEventListener("touchmove", { [self] e in self.pinch(e) }, capture: false, passive: false)
       _ = pane.addEventListener(
         "touchend", { [self] e in if e.touchCount < 2 { self.pinchStart = nil } }, capture: false, passive: true)
+      // Safari's trackpad pinch: WebKit's gesture events, not ctrl+wheel.
+      // Zoomed about the gesture's point from the zoom it began at, by its
+      // scale; the page itself never zoomed. Other browsers never send them.
+      _ = pane.addEventListener(
+        "gesturestart",
+        { [self] e in
+          e.preventDefault()
+          self.gestureStartZoom = self.currentZoom()
+        }, capture: false, passive: false)
+      _ = pane.addEventListener(
+        "gesturechange",
+        { [self] e in
+          e.preventDefault()
+          guard let pane = self.markupPane, let box = pane.getBoundingClientRect() else { return }
+          self.zoom(to: self.gestureStartZoom * e.webKitGestureScale, about: (e.clientX - box.x, e.clientY - box.y))
+        }, capture: false, passive: false)
+      _ = pane.addEventListener("gestureend", { e in e.preventDefault() }, capture: false, passive: false)
       scheduleZoom()
     }
 
