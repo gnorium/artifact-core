@@ -227,8 +227,9 @@
           // on every box (user, 2026-10-10).
           div {
             if rawSwitch, !markup.isEmpty {
-              // Icons, as the image's switch is (user, 2026-10-12): the code
-              // (`<>`), its lines' flow, and the panes unlinked.
+              // Icons, subtle and bordered as the reactions button is (user,
+              // 2026-10-12): the code (`<>`), its lines' flow, and the panes
+              // unlinked.
               RawToggleView(class: "artifact-raw-toggle")
               // Both layers' lines (user, 2026-10-12). Off: the rendered
               // page's lines as the scan breaks them (each `<lb/>` a line)
@@ -239,7 +240,7 @@
                 label: "Reflow",
                 icon: IconView(icon: { s in TextFlowIconView(size: s) }, size: sizeIconSmall),
                 modelValue: false,
-                weight: .plain,
+                weight: .subtle,
                 buttonColor: .gray,
                 iconOnly: true,
                 ariaLabel: "Reflow",
@@ -256,7 +257,7 @@
                   label: "Detach",
                   icon: IconView(icon: { s in UnSyncIconView(size: s) }, size: sizeIconSmall),
                   modelValue: false,
-                  weight: .plain,
+                  weight: .subtle,
                   buttonColor: .gray,
                   iconOnly: true,
                   ariaLabel: "Detach",
@@ -511,6 +512,9 @@
         }
         selector("& .artifact-markup") {
           CSS.Property("touch-action", "pan-x pan-y")
+          // Its scroll is the reader's or the sync's alone: the browser's
+          // anchoring would move it again after each zoom.
+          CSS.Property("overflow-anchor", "none")
         }
         descendant(".artifact-markup [data-layer='markup'] .code-view") {
           width(perc(100))
@@ -1429,28 +1433,60 @@
         scale: zoom / lastFit, maxScale: maxZoom(fit: lastFit) / lastFit)
     }
 
-    /// The text at the image's region.
+    /// The image's latest region, for the text to take at the next frame:
+    /// a burst of wheel events (several a frame) moves the text once a
+    /// frame, the latest region winning, so it never stutters.
+    private var pendingTextRegion: ViewerZoom.Region?
+    private var textMatchQueued = false
+    private var imageMatchQueued = false
+
+    /// The text at the image's region, at the next frame.
     private func matchText(to region: ViewerZoom.Region) {
+      pendingTextRegion = region
+      if textMatchQueued { return }
+      textMatchQueued = true
+      _ = window.requestAnimationFrame { [self] in
+        self.textMatchQueued = false
+        guard let region = self.pendingTextRegion else { return }
+        self.pendingTextRegion = nil
+        self.applyMatchText(region)
+      }
+    }
+
+    /// The text's zoom, then its scroll, in one frame: the scroll from the
+    /// region's own point, never from the scroll before, so no rounding
+    /// adds up.
+    private func applyMatchText(_ region: ViewerZoom.Region) {
       guard syncs, let pane = markupPane, let layer = shownLayer() else { return }
       let zoom = max(lastFit, min(maxZoom(fit: lastFit), lastFit * region.scale))
       setZoom(zoom, atFit: lastFit < ViewerZoom.actualSize && zoom <= lastFit)
       applyZoom(about: nil, matching: true)
       guard let box = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect() else { return }
-      pane.scrollLeft += box.x - paneBox.x + region.centerX * box.width - pane.clientWidth / 2
-      pane.scrollTop += box.y - paneBox.y + region.centerY * box.height - pane.clientHeight / 2
+      // The layer's place in what the pane scrolls, and the point to center.
+      let left = box.x - paneBox.x + pane.scrollLeft
+      let top = box.y - paneBox.y + pane.scrollTop
+      pane.scrollLeft = left + region.centerX * box.width - pane.clientWidth / 2
+      pane.scrollTop = top + region.centerY * box.height - pane.clientHeight / 2
       matchedScroll = (pane.scrollLeft, pane.scrollTop)
     }
 
-    /// The image at the text's region, when the reader moved the text.
+    /// The image at the text's region, when the reader moved the text: at
+    /// the next frame, once however many moves it saw.
     private func matchImage() {
-      guard syncs, let canvas = shownCanvas, let region = textRegion() else { return }
-      canvas.show(region: region)
+      if imageMatchQueued { return }
+      imageMatchQueued = true
+      _ = window.requestAnimationFrame { [self] in
+        self.imageMatchQueued = false
+        guard self.syncs, let canvas = self.shownCanvas, let region = self.textRegion() else { return }
+        canvas.show(region: region)
+      }
     }
 
     /// The pane scrolled: by the reader, matched; to match, let be.
     private func scrolled() {
       guard let pane = markupPane else { return }
-      if let matched = matchedScroll, abs(pane.scrollLeft - matched.x) < 1, abs(pane.scrollTop - matched.y) < 1 {
+      // Where it was put to match, within a pixel's rounding: no echo.
+      if let matched = matchedScroll, abs(pane.scrollLeft - matched.x) <= 1, abs(pane.scrollTop - matched.y) <= 1 {
         return
       }
       matchedScroll = nil
@@ -1514,8 +1550,14 @@
       let marginY = pixels(layer.style.getPropertyValue("margin-block-start")) * previous
       let insetX = max(0, box.x - paneBox.x + pane.scrollLeft - marginX)
       let insetY = max(0, box.y - paneBox.y + pane.scrollTop - marginY)
-      let paneWidth = pane.clientWidth - 2 * insetX
-      let paneHeight = pane.clientHeight - 2 * insetY
+      // The pane's size as if it had no scrollbars: the fit is the zoom at
+      // which it needs none, and a size that changed as they came and went
+      // would move the fit, the zoom with it, and the bars again.
+      let style = window.getComputedStyle(pane)
+      let borderX = pixels(style.getPropertyValue("border-left-width")) + pixels(style.getPropertyValue("border-right-width"))
+      let borderY = pixels(style.getPropertyValue("border-top-width")) + pixels(style.getPropertyValue("border-bottom-width"))
+      let paneWidth = paneBox.width - borderX - 2 * insetX
+      let paneHeight = paneBox.height - borderY - 2 * insetY
       guard paneWidth > 0, paneHeight > 0 else { return }
       // The whole page's fit, never above its actual size: its lines as
       // drawn, or, reflowed, its height as it wraps.
@@ -1527,11 +1569,20 @@
         fit = min(ViewerZoom.actualSize, min(paneWidth / (box.width / previous), paneHeight / (box.height / previous)))
       }
       let stored = storedZoom()
-      let zoom = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom))
+      var zoom = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom))
+      // Settled: a change that would move the page by less than a pixel is
+      // a measure's rounding (its fit, so its maximum, read again at a new
+      // zoom), not a zoom; left as it is, so nothing redraws, frame after
+      // frame, for nothing.
+      // Zooming on against a limit is the same: the zoom does not move, and
+      // neither does the text under the pointer.
+      let settled = abs(zoom - previous) * max(box.width, box.height) / previous < 1
+      if settled { zoom = previous }
+      let held = settled ? nil : anchor
       // At the fit only where the fit is a zoom out: a page that fits at its
       // actual size is at its actual size, and the next page opens there.
       let atFit = fit < ViewerZoom.actualSize && zoom <= fit
-      let point = anchor.map { ((pane.scrollLeft + $0.x) / previous, (pane.scrollTop + $0.y) / previous) }
+      let point = held.map { ((pane.scrollLeft + $0.x) / previous, (pane.scrollTop + $0.y) / previous) }
       guard let shown = measure(layer, at: zoom) else { return }
       layer.setAttribute(data("zoom"), doubleToString(zoom))
       // A zoomed element's margins are zoomed too: set unzoomed.
@@ -1542,7 +1593,7 @@
       setZoom(zoom, atFit: atFit)
       lastFit = fit
       sessionStorage.setItem(Self.zoomKey + zoomKind, atFit ? "fit" : doubleToString(zoom))
-      if let anchor, let point {
+      if let anchor = held, let point {
         pane.scrollLeft = point.0 * zoom - anchor.x
         pane.scrollTop = point.1 * zoom - anchor.y
         // The reader zoomed the text: the image follows (pane sync).
