@@ -1303,8 +1303,8 @@
     /// The text zooms as the image does (`CanvasReader`, user, 2026-10-12),
     /// so a page's lines can be laid against its scan: from the fit of the
     /// whole page (`CanvasReader.fitToViewport`'s) to its actual size,
-    /// 100% (`ViewerZoom.actualSize`), its box at least the pane's size
-    /// with the text at its top left as a document's (no gap to center),
+    /// 100% (`ViewerZoom.actualSize`), its page top-aligned, the rendered
+    /// page centered across the pane as the image is, the code filling it,
     /// scrolled with no gap where it is larger. Its fit: the whole page's
     /// where it is larger than the pane, else its actual size. Unlike the image, which opens at
     /// its fit, the text opens at its actual size: text is read at its
@@ -1528,6 +1528,46 @@
       }
     }
 
+    /// The contain fit, never above the text's actual size: a page smaller
+    /// than the pane is read at its size, its box filling the pane, never
+    /// enlarged or shown small in it.
+    private func containFit(width: Double, height: Double, paneWidth: Double, paneHeight: Double) -> Double {
+      min(paneWidth / max(paneWidth, width), paneHeight / max(paneHeight, height))
+    }
+
+    /// The fit of the rendered text of the page `codeLayer` is on: measured
+    /// from it as it would be shown—at its actual size, Reflow off; its
+    /// height as it wraps, Reflow on—out of sight, then put back as it was.
+    private func renderedFit(of codeLayer: DOM.Element, paneWidth: Double, paneHeight: Double) -> Double? {
+      let name = stringEquals(codeLayer.getAttribute(data("layer")) ?? "", "translated-markup")
+        ? "translated-rendering" : "rendering"
+      guard let page = codeLayer.closest(".tei-page"),
+        let rendered = page.querySelector("[data-layer='" + name + "']")
+      else { return nil }
+      let zoom = rendered.style.getPropertyValue("zoom")
+      rendered.style.setProperty("visibility", "hidden")
+      rendered.style.setProperty("position", "absolute")
+      rendered.style.display(.flex)
+      // Reflowed, it wraps to the pane's width, as when shown.
+      if reflowOn { rendered.style.setProperty("width", doubleToString(paneWidth) + "px") }
+      var fit: Double?
+      if reflowOn {
+        fit = reflowedFit(rendered, paneHeight: paneHeight)
+      } else if let box = measure(rendered, at: ViewerZoom.actualSize), box.width > 0, box.height > 0 {
+        fit = containFit(width: box.width, height: box.height, paneWidth: paneWidth, paneHeight: paneHeight)
+      }
+      rendered.style.display(.none)
+      _ = rendered.style.removeProperty("visibility")
+      _ = rendered.style.removeProperty("position")
+      _ = rendered.style.removeProperty("width")
+      if stringIsEmpty(zoom) {
+        _ = rendered.style.removeProperty("zoom")
+      } else {
+        rendered.style.setProperty("zoom", zoom)
+      }
+      return fit
+    }
+
     /// `layer` at `zoom`: its rendered box.
     private func measure(_ layer: DOM.Element, at zoom: Double) -> DOM.Rect? {
       layer.style.setProperty("zoom", doubleToString(zoom))
@@ -1560,6 +1600,12 @@
     /// layer has a size: a page not yet drawn is left as it is.
     private func applyZoom(about anchor: (x: Double, y: Double)?, matching: Bool = false) {
       guard let pane = markupPane, let layer = shownLayer() else { return }
+      // The text's own box: without the code view's pane-filling minimum or
+      // the page's centering margin.
+      let codeView = layer.querySelector(".code-view")
+      _ = codeView?.style.removeProperty("min-width")
+      _ = codeView?.style.removeProperty("min-height")
+      _ = layer.style.removeProperty("margin-inline-start")
       guard let box = layer.getBoundingClientRect(), box.width > 0, box.height > 0,
         let paneBox = pane.getBoundingClientRect()
       else { return }
@@ -1581,16 +1627,17 @@
       // The whole page's fit, never above its actual size: its lines as
       // drawn, or, reflowed, its height as it wraps.
       let fit: Double
-      if reflowOn {
+      if codeView != nil {
+        // The code zooms out no further than its page's rendered text can
+        // (user, 2026-10-12), for the two to keep one scale: past that its
+        // long lines scroll sideways.
+        guard let rendered = renderedFit(of: layer, paneWidth: paneWidth, paneHeight: paneHeight) else { return }
+        fit = rendered
+      } else if reflowOn {
         guard let reflowed = reflowedFit(layer, paneHeight: paneHeight) else { return }
         fit = reflowed
       } else {
-        // The contain fit, never above the text's actual size: a page
-        // smaller than the pane is read at its size, its box filling the
-        // pane (below), never enlarged or shown small in it.
-        let width = box.width / previous
-        let height = box.height / previous
-        fit = min(paneWidth / max(paneWidth, width), paneHeight / max(paneHeight, height))
+        fit = containFit(width: box.width / previous, height: box.height / previous, paneWidth: paneWidth, paneHeight: paneHeight)
       }
       let stored = storedZoom()
       // The reader's zoom, or at the fit, or, until the reader zooms, the
@@ -1618,13 +1665,30 @@
       let point = held.map { ((pane.scrollLeft + $0.x) / previous, (pane.scrollTop + $0.y) / previous) }
       layer.style.setProperty("zoom", doubleToString(zoom))
       layer.setAttribute(data("zoom"), doubleToString(zoom))
-      // The page at least the pane's size, its text at its top left as a
-      // document's: never a gap to center. The page's box, not the text's:
-      // the text keeps the width of its longest line, which its justified
-      // lines run to.
+      // The page at least the pane's size, top-aligned: never a gap above
+      // it to center.
+      // The pane's room as it is, its scrollbars taken out, so the page
+      // never makes one of its own.
+      let roomWidth = pane.clientWidth - 2 * insetX
+      let roomHeight = pane.clientHeight - 2 * insetY
       if let page = layer.closest(".tei-page") {
-        page.style.setProperty("min-width", doubleToString(paneWidth) + "px")
-        page.style.setProperty("min-height", doubleToString(paneHeight) + "px")
+        page.style.setProperty("min-width", doubleToString(roomWidth) + "px")
+        page.style.setProperty("min-height", doubleToString(roomHeight) + "px")
+      }
+      if let codeView {
+        // The code fills the pane at every zoom, its gutter and ground with
+        // it, as an editor's do, its text at its start (user, 2026-10-12):
+        // the pane's size in the code's own, zoomed, units.
+        codeView.style.setProperty("min-width", doubleToString(roomWidth / zoom) + "px")
+        codeView.style.setProperty("min-height", doubleToString(roomHeight / zoom) + "px")
+      } else {
+        // The rendered page centered across the pane where narrower, as the
+        // image is, for the two to be laid side by side; its lines keep
+        // their own alignment, and wider, it scrolls with no gap. A zoomed
+        // element's margin is zoomed too: set unzoomed.
+        let width = box.width / previous * zoom
+        layer.style.setProperty(
+          "margin-inline-start", doubleToString(max(0, (roomWidth - width) / 2) / zoom) + "px")
       }
       lastFit = fit
       if chosen {
