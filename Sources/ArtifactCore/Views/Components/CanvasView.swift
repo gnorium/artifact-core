@@ -197,6 +197,9 @@
       let centerX: Double
       let centerY: Double
       let scale: Double
+      /// The most its zoom over its fit can be (the image's actual size
+      /// over its fit), which the text mirrors while matched.
+      let maxScale: Double
     }
     /// A wheel's travel counted in one event, at most, so a mouse wheel's
     /// notch is not too fast.
@@ -240,7 +243,8 @@
       let width = Double(imageW) * zoom
       let height = Double(imageH) * zoom
       return .init(
-        centerX: (viewportW / 2 - panX) / width, centerY: (viewportH / 2 - panY) / height, scale: zoom / minZoom)
+        centerX: (viewportW / 2 - panX) / width, centerY: (viewportH / 2 - panY) / height, scale: zoom / minZoom,
+        maxScale: maxZoom / minZoom)
     }
 
     /// The image at `region`: its zoom over its fit, clamped, the point at

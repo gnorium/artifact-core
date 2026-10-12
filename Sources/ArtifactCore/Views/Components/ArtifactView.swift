@@ -1375,6 +1375,18 @@
     /// scroll is known by where it was put (`matchedScroll`).
     private var lastFit = ViewerZoom.actualSize
     private var matchedScroll: (x: Double, y: Double)?
+    /// While matched, the text zooms as far over its fit as the image can
+    /// over its own (`ViewerZoom.Region.maxScale`), past 100% if the image
+    /// goes past its fit's equivalent; unmatched, no further than 100%.
+    private var matchedMaxScale: Double? {
+      guard syncs else { return nil }
+      return shownCanvas?.region?.maxScale
+    }
+
+    /// The most the text zooms in, its fit being `fit`.
+    private func maxZoom(fit: Double) -> Double {
+      max(ViewerZoom.actualSize, fit * (matchedMaxScale ?? 0))
+    }
 
     /// Whether the two are matched now.
     private var syncs: Bool { !reflowOn && !rawVisible && canvasShown && shownCanvas != nil }
@@ -1388,13 +1400,13 @@
       return .init(
         centerX: (paneBox.x + pane.clientWidth / 2 - box.x) / box.width,
         centerY: (paneBox.y + pane.clientHeight / 2 - box.y) / box.height,
-        scale: zoom / lastFit)
+        scale: zoom / lastFit, maxScale: maxZoom(fit: lastFit) / lastFit)
     }
 
     /// The text at the image's region.
     private func matchText(to region: ViewerZoom.Region) {
       guard syncs, let pane = markupPane, let layer = shownLayer() else { return }
-      let zoom = max(lastFit, min(ViewerZoom.actualSize, lastFit * region.scale))
+      let zoom = max(lastFit, min(maxZoom(fit: lastFit), lastFit * region.scale))
       setZoom(zoom, atFit: lastFit < ViewerZoom.actualSize && zoom <= lastFit)
       applyZoom(about: nil, matching: true)
       guard let box = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect() else { return }
@@ -1489,7 +1501,7 @@
         fit = min(ViewerZoom.actualSize, min(paneWidth / (box.width / previous), paneHeight / (box.height / previous)))
       }
       let stored = storedZoom()
-      let zoom = anchor == nil && stored.atFit ? fit : max(fit, min(ViewerZoom.actualSize, stored.zoom))
+      let zoom = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom))
       // At the fit only where the fit is a zoom out: a page that fits at its
       // actual size is at its actual size, and the next page opens there.
       let atFit = fit < ViewerZoom.actualSize && zoom <= fit
