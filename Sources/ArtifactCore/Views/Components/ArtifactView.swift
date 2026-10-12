@@ -1296,6 +1296,7 @@
       pane.observeResize { [self] _, _ in self.scheduleZoom() }
       pane.observeMutations(childList: true, subtree: true) { [self] in self.scheduleZoom() }
       _ = pane.addEventListener("wheel", { [self] e in self.wheel(e) }, capture: false, passive: false)
+      _ = pane.addEventListener("scroll", { [self] _ in self.scrolled() }, capture: false, passive: true)
       _ = pane.addEventListener("touchstart", { [self] e in self.pinch(e) }, capture: false, passive: false)
       _ = pane.addEventListener("touchmove", { [self] e in self.pinch(e) }, capture: false, passive: false)
       _ = pane.addEventListener(
@@ -1352,6 +1353,7 @@
       if !current.atFit && current.zoom >= ViewerZoom.actualSize {
         setZoom(current.zoom, atFit: true)
         applyZoom(about: nil)
+        matchImage()
       } else {
         zoom(to: ViewerZoom.actualSize, about: (event.clientX - box.x, event.clientY - box.y))
       }
@@ -1360,6 +1362,61 @@
     private func zoom(to value: Double, about anchor: (x: Double, y: Double)) {
       setZoom(value, atFit: false)
       applyZoom(about: anchor)
+    }
+
+    // MARK: - Pane sync
+
+    /// The image and the rendered text, Reflow off, show the same part of
+    /// their page (a dev experiment, user 2026-10-12; on, no switch): each
+    /// a fraction of its own page and a zoom over its own fit
+    /// (`ViewerZoom.Region`), so a move in one is matched in the other. The
+    /// code is not: its lines are not the page's. A move made to match is
+    /// never matched back: the image's is told to no one, and the text's
+    /// scroll is known by where it was put (`matchedScroll`).
+    private var lastFit = ViewerZoom.actualSize
+    private var matchedScroll: (x: Double, y: Double)?
+
+    /// Whether the two are matched now.
+    private var syncs: Bool { !reflowOn && !rawVisible && canvasShown && shownCanvas != nil }
+
+    /// What the text shows now, nil until it has a size.
+    private func textRegion() -> ViewerZoom.Region? {
+      guard let pane = markupPane, let layer = shownLayer(), let box = layer.getBoundingClientRect(),
+        let paneBox = pane.getBoundingClientRect(), box.width > 0, box.height > 0
+      else { return nil }
+      let zoom = parseDouble(layer.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
+      return .init(
+        centerX: (paneBox.x + pane.clientWidth / 2 - box.x) / box.width,
+        centerY: (paneBox.y + pane.clientHeight / 2 - box.y) / box.height,
+        scale: zoom / lastFit)
+    }
+
+    /// The text at the image's region.
+    private func matchText(to region: ViewerZoom.Region) {
+      guard syncs, let pane = markupPane, let layer = shownLayer() else { return }
+      let zoom = max(lastFit, min(ViewerZoom.actualSize, lastFit * region.scale))
+      setZoom(zoom, atFit: lastFit < ViewerZoom.actualSize && zoom <= lastFit)
+      applyZoom(about: nil, matching: true)
+      guard let box = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect() else { return }
+      pane.scrollLeft += box.x - paneBox.x + region.centerX * box.width - pane.clientWidth / 2
+      pane.scrollTop += box.y - paneBox.y + region.centerY * box.height - pane.clientHeight / 2
+      matchedScroll = (pane.scrollLeft, pane.scrollTop)
+    }
+
+    /// The image at the text's region, when the reader moved the text.
+    private func matchImage() {
+      guard syncs, let canvas = shownCanvas, let region = textRegion() else { return }
+      canvas.show(region: region)
+    }
+
+    /// The pane scrolled: by the reader, matched; to match, let be.
+    private func scrolled() {
+      guard let pane = markupPane else { return }
+      if let matched = matchedScroll, abs(pane.scrollLeft - matched.x) < 1, abs(pane.scrollTop - matched.y) < 1 {
+        return
+      }
+      matchedScroll = nil
+      matchImage()
     }
 
     /// "12.5px" as 12.5; anything else as 0.
@@ -1407,7 +1464,7 @@
     /// centered where smaller than the pane; `anchor` (a point of the pane)
     /// keeps the text under it in place. Nothing is clamped before the
     /// layer has a size: a page not yet drawn is left as it is.
-    private func applyZoom(about anchor: (x: Double, y: Double)?) {
+    private func applyZoom(about anchor: (x: Double, y: Double)?, matching: Bool = false) {
       guard let pane = markupPane, let layer = shownLayer(), let box = layer.getBoundingClientRect(),
         box.width > 0, box.height > 0, let paneBox = pane.getBoundingClientRect()
       else { return }
@@ -1445,10 +1502,13 @@
       layer.style.setProperty(
         "margin-block-start", doubleToString(max(0, (paneHeight - shown.height) / 2) / zoom) + "px")
       setZoom(zoom, atFit: atFit)
+      lastFit = fit
       sessionStorage.setItem(Self.zoomKey + zoomKind, atFit ? "fit" : doubleToString(zoom))
       if let anchor, let point {
         pane.scrollLeft = point.0 * zoom - anchor.x
         pane.scrollTop = point.1 * zoom - anchor.y
+        // The reader zoomed the text: the image follows (pane sync).
+        if !matching { matchImage() }
       }
     }
 
@@ -1635,6 +1695,7 @@
         self.regionEdited(x: x, y: y, width: width, height: height, done: done)
       }
       canvas.setCropping(mayCrop(service))
+      canvas.onRegion = { [self] region in self.matchText(to: region) }
       canvases.append(canvas)
       return canvas
     }

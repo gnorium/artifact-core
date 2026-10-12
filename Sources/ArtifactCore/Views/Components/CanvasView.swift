@@ -187,6 +187,17 @@
     static let actualSize = 1.0
     /// The session's image zoom: "fit", or a zoom.
     static let imageKey = "gnorium:artifact-zoom:image"
+
+    /// What a view shows of its page (pane sync, a dev experiment, user
+    /// 2026-10-12): the point at the view's middle as fractions of the
+    /// page's width and height, and its zoom over its fit—so two views of
+    /// one page, the image and its text, show the same part of it, each by
+    /// its own fit.
+    struct Region {
+      let centerX: Double
+      let centerY: Double
+      let scale: Double
+    }
     /// A wheel's travel counted in one event, at most, so a mouse wheel's
     /// notch is not too fast.
     static let wheelTravel = 40.0
@@ -218,6 +229,35 @@
     /// The most it zooms in: its actual size, or its fit where that is
     /// larger.
     private var maxZoom: Double { max(minZoom, ViewerZoom.actualSize) }
+    /// Told what the image shows whenever the reader moves it—a drag, a
+    /// wheel, a double-click—never when it is moved to match the text
+    /// (pane sync).
+    var onRegion: ((ViewerZoom.Region) -> Void)?
+
+    /// What the image shows now, nil until it has a size.
+    var region: ViewerZoom.Region? {
+      guard imageW > 0, imageH > 0, minZoom > 0 else { return nil }
+      let width = Double(imageW) * zoom
+      let height = Double(imageH) * zoom
+      return .init(
+        centerX: (viewportW / 2 - panX) / width, centerY: (viewportH / 2 - panY) / height, scale: zoom / minZoom)
+    }
+
+    /// The image at `region`: its zoom over its fit, clamped, the point at
+    /// its middle. Told to no one: it is the text's move, matched.
+    func show(region: ViewerZoom.Region) {
+      guard imageW > 0, imageH > 0 else { return }
+      zoom = max(minZoom, min(maxZoom, minZoom * region.scale))
+      atFit = zoom <= minZoom
+      panX = viewportW / 2 - region.centerX * Double(imageW) * zoom
+      panY = viewportH / 2 - region.centerY * Double(imageH) * zoom
+      clampPan()
+      updateTransform()
+    }
+
+    private func tellRegion() {
+      if let onRegion, let region { onRegion(region) }
+    }
     private var panX: Double = 0
     private var panY: Double = 0
     private var viewportW: Double = 0
@@ -854,6 +894,7 @@
           panY = dragPanY + (e.clientY - dragStartY)
           clampPan()
           updateTransform()
+          tellRegion()
         }
         mouseUpListener = window.addEventListener(.mouseup) { [self] _ in
           endDrag()
@@ -916,6 +957,7 @@
       sessionStorage.setItem(ViewerZoom.imageKey, atFit ? "fit" : doubleToString(zoom))
       clampPan()
       updateTransform()
+      tellRegion()
     }
   }
 #endif
