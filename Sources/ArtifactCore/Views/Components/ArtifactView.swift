@@ -238,7 +238,7 @@
               // code wrapped as plain text.
               ToggleButtonView(
                 label: "Reflow",
-                icon: IconView(icon: { s in LucideTextWrapIconView(size: s) }, size: sizeIconSmall),
+                icon: IconView(icon: { s in TextWrapIconView(size: s) }, size: sizeIconSmall),
                 modelValue: false,
                 weight: .subtle,
                 buttonColor: .gray,
@@ -255,7 +255,7 @@
               if switchesCanvas {
                 ToggleButtonView(
                   label: "Detach",
-                  icon: IconView(icon: { s in LucideRefreshCwOffIconView(size: s) }, size: sizeIconSmall),
+                  icon: IconView(icon: { s in RefreshClockwiseOffIconView(size: s) }, size: sizeIconSmall),
                   modelValue: false,
                   weight: .subtle,
                   buttonColor: .gray,
@@ -294,9 +294,15 @@
             class: "artifact-page-nav"
           )
 
+          // Maximize to go full screen; in full screen the same button
+          // leaves it, and shows minimize.
           button {
             IconView(
-              icon: { size in [FullscreenIconView(size: size)] }, size: sizeIconSmall)
+              icon: { size in [MaximizeIconView(size: size)] }, size: sizeIconSmall,
+              class: "artifact-fullscreen-enter")
+            IconView(
+              icon: { size in [MinimizeIconView(size: size)] }, size: sizeIconSmall,
+              class: "artifact-fullscreen-exit")
           }
           .id("artifact-fullscreen-btn")
           .class("artifact-fullscreen-button")
@@ -574,6 +580,12 @@
           cursor(.pointer)
           flexShrink(0)
           pseudoClass(.hover) { color(colorBase) }
+        }
+        selector("& .artifact-fullscreen-exit", "&:fullscreen .artifact-fullscreen-enter") {
+          display(.none)
+        }
+        selector("&:fullscreen .artifact-fullscreen-exit") {
+          display(.flex)
         }
         // On a phone (below 480px) the viewer is never narrower than its
         // footer's one row at its own size (user, 2026-10-12)—Raw, Reflow,
