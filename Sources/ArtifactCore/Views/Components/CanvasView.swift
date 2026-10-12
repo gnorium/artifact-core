@@ -177,11 +177,16 @@
   import WebTypes
 
   /// How a reader's views zoom, the image's and the text's alike (user,
-  /// 2026-10-12): from the fit of the whole page to eight times, the wheel
-  /// zooming in proportion to its travel.
+  /// 2026-10-12): from the fit of the whole page to its actual size, the
+  /// wheel zooming in proportion to its travel, a double-click between the
+  /// two.
   enum ViewerZoom {
-    /// The most a view zooms in.
-    static let maximum = 8.0
+    /// The actual size: one pixel of the image (its full resolution), or
+    /// of the text, to one CSS pixel. The most a view zooms in, unless its
+    /// fit is larger still.
+    static let actualSize = 1.0
+    /// The session's image zoom: "fit", or a zoom.
+    static let imageKey = "gnorium:artifact-zoom:image"
     /// A wheel's travel counted in one event, at most, so a mouse wheel's
     /// notch is not too fast.
     static let wheelTravel = 40.0
@@ -207,6 +212,12 @@
     private var imageH = 0
     private var zoom: Double = 1.0
     private var minZoom: Double = 0.01
+    /// Whether the image is at its fit, which it follows as the viewport
+    /// changes size; any other zoom is clamped.
+    private var atFit = true
+    /// The most it zooms in: its actual size, or its fit where that is
+    /// larger.
+    private var maxZoom: Double { max(minZoom, ViewerZoom.actualSize) }
     private var panX: Double = 0
     private var panY: Double = 0
     private var viewportW: Double = 0
@@ -273,12 +284,17 @@
       // Recenter whenever the viewport resizes (a sidebar toggled, the window
       // resized). A canvas put away measures nothing, and some browsers call
       // back on scroll with the size unchanged.
+      // The fit is found again: an image at its fit follows it (a pane
+      // made shorter fits the whole image again, not its width alone);
+      // any other zoom is clamped to it.
       vp?.observeResize { [self] w, h in
         guard w > 0, h > 0 else { return }
         guard w != viewportW || h != viewportH else { return }
         viewportW = w
         viewportH = h
         guard imageW > 0, imageH > 0 else { return }
+        minZoom = min(viewportW / Double(imageW), viewportH / Double(imageH))
+        zoom = atFit ? minZoom : max(minZoom, min(maxZoom, zoom))
         panX = (viewportW - Double(imageW) * zoom) / 2
         panY = (viewportH - Double(imageH) * zoom) / 2
         clampPan()
@@ -363,7 +379,11 @@
       let imageW = Double(self.imageW)
       let imageH = Double(self.imageH)
       minZoom = min(viewportW / imageW, viewportH / imageH)
-      zoom = minZoom
+      // At its fit, unless the session zoomed the images in (a reload keeps
+      // it).
+      let kept = parseDouble(sessionStorage.getItem(ViewerZoom.imageKey) ?? "")
+      zoom = kept.map { max(minZoom, min(maxZoom, $0)) } ?? minZoom
+      atFit = zoom <= minZoom
       panX = (viewportW - imageW * zoom) / 2
       panY = (viewportH - imageH * zoom) / 2
     }
@@ -837,7 +857,7 @@
         }
         mouseUpListener = window.addEventListener(.mouseup) { [self] _ in
           endDrag()
-          if zoom <= minZoom + 0.001 {
+          if atFit {
             // Fitted: back to the middle, however it was dragged.
             panX = (viewportW - Double(imageW) * zoom) / 2
             updateTransform()
@@ -872,13 +892,30 @@
         let dz = ViewerZoom.wheelFactor(e.deltaY)
         let cx = e.clientX - (viewport?.getBoundingClientRect()?.x ?? 0)
         let cy = e.clientY - (viewport?.getBoundingClientRect()?.y ?? 0)
-        let newZoom = max(minZoom, min(ViewerZoom.maximum, zoom * dz))
-        panX = cx - (cx - panX) * (newZoom / zoom)
-        panY = cy - (cy - panY) * (newZoom / zoom)
-        zoom = newZoom
-        clampPan()
-        updateTransform()
+        zoom(to: zoom * dz, aboutX: cx, y: cy)
       }
+
+      // A double-click (a double tap) goes between the fit and the actual
+      // size, about the pointer, as a viewer does.
+      vp.addEventListener(.dblclick) { [self] e in
+        guard imageW > 0, imageH > 0 else { return }
+        e.preventDefault()
+        let box = viewport?.getBoundingClientRect()
+        zoom(to: atFit ? maxZoom : minZoom, aboutX: e.clientX - (box?.x ?? 0), y: e.clientY - (box?.y ?? 0))
+      }
+    }
+
+    /// `value`, clamped to the fit and the actual size, about a point of
+    /// the viewport, kept for the session.
+    private func zoom(to value: Double, aboutX cx: Double, y cy: Double) {
+      let newZoom = max(minZoom, min(maxZoom, value))
+      panX = cx - (cx - panX) * (newZoom / zoom)
+      panY = cy - (cy - panY) * (newZoom / zoom)
+      zoom = newZoom
+      atFit = zoom <= minZoom
+      sessionStorage.setItem(ViewerZoom.imageKey, atFit ? "fit" : doubleToString(zoom))
+      clampPan()
+      updateTransform()
     }
   }
 #endif
