@@ -227,19 +227,9 @@
           // on every box (user, 2026-10-10).
           div {
             if rawSwitch, !markup.isEmpty {
-              ToggleButtonView(
-                label: "Raw",
-                icon: nil as HTML.HTMLSpanElement?,
-                modelValue: false,
-                weight: .static,
-                buttonColor: .gray,
-                fullWidth: false,
-                ariaLabel: "Raw",
-                indicateSelection: true,
-                size: .medium,
-                class: "artifact-raw-toggle",
-                labelFontWeight: fontWeightNormal
-              )
+              // Icons, as the image's switch is (user, 2026-10-12): the code
+              // (`<>`), its lines' flow, and the panes unlinked.
+              RawToggleView(class: "artifact-raw-toggle")
               // Both layers' lines (user, 2026-10-12). Off: the rendered
               // page's lines as the scan breaks them (each `<lb/>` a line)
               // and the code's as stored, never wrapped, scrolling
@@ -247,17 +237,33 @@
               // code wrapped as plain text.
               ToggleButtonView(
                 label: "Reflow",
-                icon: nil as HTML.HTMLSpanElement?,
+                icon: IconView(icon: { s in TextFlowIconView(size: s) }, size: sizeIconSmall),
                 modelValue: false,
-                weight: .static,
+                weight: .plain,
                 buttonColor: .gray,
-                fullWidth: false,
+                iconOnly: true,
                 ariaLabel: "Reflow",
-                indicateSelection: true,
                 size: .medium,
-                class: "artifact-reflow-toggle",
-                labelFontWeight: fontWeightNormal
+                class: "artifact-reflow-toggle"
               )
+              // The image and the rendered text kept on the same part of the
+              // page (user, 2026-10-12); pressed, each scrolls alone, for a
+              // page whose text is not yet the scan's. Disabled, never
+              // hidden, where it cannot apply (Raw, Reflow, the images put
+              // away), its state kept underneath.
+              if switchesCanvas {
+                ToggleButtonView(
+                  label: "Detach",
+                  icon: IconView(icon: { s in UnSyncIconView(size: s) }, size: sizeIconSmall),
+                  modelValue: false,
+                  weight: .plain,
+                  buttonColor: .gray,
+                  iconOnly: true,
+                  ariaLabel: "Detach",
+                  size: .medium,
+                  class: "artifact-detach-toggle"
+                )
+              }
               if let info = rawSwitchInfo {
                 // An icon on its own, on par with the row's 16px text, takes
                 // the text's size, as the bars' other icons (user,
@@ -386,7 +392,7 @@
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
         }
-        selector("& .artifact-page-nav", "& .artifact-raw-toggle", "& .artifact-reflow-toggle") {
+        selector("& .artifact-page-nav", "& .artifact-raw-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle") {
           flexShrink(0)
         }
         // Its total unknown, the pager waits unseen rather than read "of —".
@@ -626,6 +632,15 @@
     static let canvasShownKey = "gnorium:artifact-page-images"
     /// Reflow's choice, kept for the session as the page images' is.
     static let reflowKey = "gnorium:artifact-reflow"
+    /// Detach's choice, kept for the session; synced until detached.
+    static let detachKey = "gnorium:artifact-detach"
+
+    /// Every reader's panes detached or synced, as one reader's Detach was
+    /// pressed, and the choice kept for the session.
+    static func detach(_ on: Bool) {
+      sessionStorage.setItem(detachKey, on ? "true" : "false")
+      for reader in instance?.readers ?? [] { reader.setDetached(on) }
+    }
 
     /// Every reader's markup reflowed or set by its lines, as one reader's
     /// Reflow was pressed, and the choice kept for the session.
@@ -775,6 +790,7 @@
       setupControls()
       setupLayers()
       setupReflowSwitch()
+      setupSyncSwitch()
       setupZoom()
       setupCanvasSwitch()
       setupRegions()
@@ -1167,12 +1183,47 @@
     /// wrapper (which its styles read) and its button (which assistive
     /// technology reads).
     private func reflectCanvasShown() {
+      reflectSyncApplies()
       root.setAttribute(data("canvas-shown"), canvasShown ? "true" : "false")
       canvasToggle?.setAttribute("aria-pressed", canvasShown ? "true" : "false")
       canvasToggle?.querySelector("button")?.setAttribute("aria-pressed", canvasShown ? "true" : "false")
     }
 
     private var reflowToggle: DOM.Element?
+    private var detachToggle: DOM.Element?
+    private var syncOn = true
+
+    private func setupSyncSwitch() {
+      guard let toggle = root.querySelector(".artifact-detach-toggle") else { return }
+      detachToggle = toggle
+      setDetached(stringEquals(sessionStorage.getItem(ArtifactHydration.detachKey) ?? "false", "true"))
+      _ = toggle.addEventListener("toggle-button-update") { (event: Event) in
+        ArtifactHydration.detach(stringEquals(event.detail, "true"))
+      }
+    }
+
+    /// Each pane alone, or synced again (the text brought to the image's
+    /// part of the page at once).
+    func setDetached(_ detached: Bool) {
+      guard let toggle = detachToggle else { return }
+      syncOn = !detached
+      toggle.setAttribute("aria-pressed", detached ? "true" : "false")
+      toggle.querySelector("button")?.setAttribute("aria-pressed", detached ? "true" : "false")
+      reflectSyncApplies()
+      if !detached, let region = shownCanvas?.region { matchText(to: region) }
+    }
+
+    /// The switch disabled, never hidden, where sync cannot apply—Raw,
+    /// Reflow, the images put away—so it says it can come back; its state
+    /// kept underneath.
+    private func reflectSyncApplies() {
+      guard let button = detachToggle?.querySelector("button") else { return }
+      if rawVisible || reflowOn || !canvasShown {
+        button.setAttribute("disabled", "")
+      } else {
+        button.removeAttribute("disabled")
+      }
+    }
 
     /// Reflow, as this session left it: the markup's lines and its code's,
     /// which pages fetched later follow (TEIView's and CodeView's CSS read
@@ -1191,6 +1242,7 @@
       root.setAttribute(data("reflow"), on ? "true" : "false")
       toggle.setAttribute("aria-pressed", on ? "true" : "false")
       toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
+      reflectSyncApplies()
       scheduleZoom()
     }
 
@@ -1210,6 +1262,7 @@
     /// translation, Raw picks either's text or its code. A page with no
     /// translation shows nothing under either: emptiness, never a dash.
     private func showLayers() {
+      reflectSyncApplies()
       let layer = shownLayerName
       for pane in root.querySelectorAll(".artifact-markup .tei-page") {
         for element in pane.querySelectorAll("[data-layer]") {
@@ -1250,8 +1303,6 @@
     private var renderingAtFit: Bool?
     private var markupAtFit: Bool?
     private var zoomQueued = false
-    /// The pointer that pressed last on the pane: "mouse", "pen", "touch".
-    private var lastPointerType = ""
     /// A pinch's two fingers' distance and the zoom it began at.
     private var pinchStart: (distance: Double, zoom: Double)?
     /// The session's zoom of a layer: "fit", or a zoom.
@@ -1301,17 +1352,6 @@
       _ = pane.addEventListener("touchmove", { [self] e in self.pinch(e) }, capture: false, passive: false)
       _ = pane.addEventListener(
         "touchend", { [self] e in if e.touchCount < 2 { self.pinchStart = nil } }, capture: false, passive: true)
-      // A double tap goes between the fit and the actual size, about the
-      // finger, as the image's does. A mouse's or a trackpad's double-click
-      // stays the browser's own, selecting a word (user, 2026-10-12): touch
-      // selects by a long press instead. Told apart by the pointer that
-      // pressed last.
-      _ = pane.addEventListener(
-        "pointerdown", { [self] e in self.lastPointerType = e.pointerType }, capture: false, passive: true)
-      _ = pane.addEventListener(
-        "dblclick",
-        { [self] e in if stringEquals(self.lastPointerType, "touch") { self.toggleZoom(e) } },
-        capture: false, passive: false)
       scheduleZoom()
     }
 
@@ -1344,21 +1384,6 @@
       zoom(to: start.zoom * distance / start.distance, about: ((x0 + x1) / 2 - box.x, (y0 + y1) / 2 - box.y))
     }
 
-    /// From the actual size to the fit, or from anywhere else to the actual
-    /// size, about the finger.
-    private func toggleZoom(_ event: Event) {
-      guard let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
-      event.preventDefault()
-      let current = storedZoom()
-      if !current.atFit && current.zoom >= ViewerZoom.actualSize {
-        setZoom(current.zoom, atFit: true)
-        applyZoom(about: nil)
-        matchImage()
-      } else {
-        zoom(to: ViewerZoom.actualSize, about: (event.clientX - box.x, event.clientY - box.y))
-      }
-    }
-
     private func zoom(to value: Double, about anchor: (x: Double, y: Double)) {
       setZoom(value, atFit: false)
       applyZoom(about: anchor)
@@ -1375,21 +1400,22 @@
     /// scroll is known by where it was put (`matchedScroll`).
     private var lastFit = ViewerZoom.actualSize
     private var matchedScroll: (x: Double, y: Double)?
-    /// While matched, the text zooms as far over its fit as the image can
-    /// over its own (`ViewerZoom.Region.maxScale`), past 100% if the image
-    /// goes past its fit's equivalent; unmatched, no further than 100%.
+    /// The text zooms as far over its fit as its page's image can over its
+    /// own (`ViewerZoom.Region.maxScale`), synced or not, so the two sizes
+    /// match and stay matched; with no image, to 100%.
     private var matchedMaxScale: Double? {
-      guard syncs else { return nil }
+      guard canvasShown else { return nil }
       return shownCanvas?.region?.maxScale
     }
 
     /// The most the text zooms in, its fit being `fit`.
     private func maxZoom(fit: Double) -> Double {
-      max(ViewerZoom.actualSize, fit * (matchedMaxScale ?? 0))
+      guard let scale = matchedMaxScale else { return ViewerZoom.actualSize }
+      return max(fit, fit * scale)
     }
 
     /// Whether the two are matched now.
-    private var syncs: Bool { !reflowOn && !rawVisible && canvasShown && shownCanvas != nil }
+    private var syncs: Bool { syncOn && !reflowOn && !rawVisible && canvasShown && shownCanvas != nil }
 
     /// What the text shows now, nil until it has a size.
     private func textRegion() -> ViewerZoom.Region? {
@@ -1668,6 +1694,9 @@
       if let shown = shownCanvas, shown !== canvas { shown.hide() }
       shownCanvas = canvas
       canvas.show(width: imageWidths[idx], height: imageHeights[idx], image: idx < plainImages.count ? plainImages[idx] : "")
+      // Synced, the text opens on the image's part of the page, at its
+      // size, rather than at 100%.
+      if syncs, let region = canvas.region { matchText(to: region) }
       drawRegion()
       // The four either side, nearest first: images are what a turn waits
       // for (user, 2026-10-11).

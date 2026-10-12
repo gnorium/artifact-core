@@ -178,8 +178,8 @@
 
   /// How a reader's views zoom, the image's and the text's alike (user,
   /// 2026-10-12): from the fit of the whole page to its actual size, the
-  /// wheel zooming in proportion to its travel, a double-click between the
-  /// two.
+  /// wheel zooming in proportion to its travel. A double-click is the
+  /// browser's own (it selects, and Live Text reads it): no zoom.
   enum ViewerZoom {
     /// The actual size: one pixel of the image (its full resolution), or
     /// of the text, to one CSS pixel. The most a view zooms in, unless its
@@ -938,15 +938,6 @@
         let cx = e.clientX - (viewport?.getBoundingClientRect()?.x ?? 0)
         let cy = e.clientY - (viewport?.getBoundingClientRect()?.y ?? 0)
         zoom(to: zoom * dz, aboutX: cx, y: cy)
-      }
-
-      // A double-click (a double tap) goes between the fit and the actual
-      // size, about the pointer, as a viewer does.
-      vp.addEventListener(.dblclick) { [self] e in
-        guard imageW > 0, imageH > 0 else { return }
-        e.preventDefault()
-        let box = viewport?.getBoundingClientRect()
-        zoom(to: atFit ? maxZoom : minZoom, aboutX: e.clientX - (box?.x ?? 0), y: e.clientY - (box?.y ?? 0))
       }
     }
 
