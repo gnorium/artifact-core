@@ -335,7 +335,7 @@
           height(perc(100))
           borderRadius(borderRadiusBase)
           overflow(.hidden)
-          border(borderWidthBase, .solid, borderColorBase)
+          border(borderWidthBase, .solid, borderColorSubtle)
           backgroundColor(backgroundColorBase)
         }
 
@@ -358,7 +358,7 @@
           // takes in a control's focus ring, which it would otherwise cut
           // off.
           padding(0)
-          borderBlockEnd(borderWidthBase, .solid, borderColorBase)
+          borderBlockEnd(borderWidthBase, .solid, borderColorSubtle)
           minHeight(minSizeInteractiveTouch)
         }
         // One row, never wrapped: past its width it scrolls sideways under
@@ -463,11 +463,11 @@
           // comes first: to its right when the two are side by side, under it
           // when they stack. It used to be a leading border, from when the
           // object led and the markup sat to its right.
-          borderInlineEnd(borderWidthBase, .solid, borderColorBase)
+          borderInlineEnd(borderWidthBase, .solid, borderColorSubtle)
           backgroundColor(backgroundColorBase)
           media(maxWidth(maxWidthBreakpointMobile)) {
             borderInlineEnd(.none).important()
-            borderBlockEnd(borderWidthBase, .solid, borderColorBase).important()
+            borderBlockEnd(borderWidthBase, .solid, borderColorSubtle).important()
           }
         }
         // The page images switched off: the markup alone, the whole
@@ -565,7 +565,7 @@
           padding(spacing8)
           minHeight(minSizeInteractiveTouch)
           boxSizing(.borderBox)
-          borderBlockStart(borderWidthBase, .solid, borderColorBase)
+          borderBlockStart(borderWidthBase, .solid, borderColorSubtle)
         }
         // Its text where the rendered text starts below when left-aligned
         // (user, 2026-10-12): the text's 16 inset in its layer, inside the
