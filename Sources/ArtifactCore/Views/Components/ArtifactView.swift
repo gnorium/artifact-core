@@ -1439,6 +1439,9 @@
     private var overlayZoomBegan = 0.0
     private var overlayScrollStart = (x: 0.0, y: 0.0)
     private var overlayMotion = 0
+    /// Overlay turned off, the text still on its way back to its zoom and
+    /// scroll: the same motion as the way in, run backward.
+    private var overlayLeaving = false
     private func setupOverlay() {
       guard let toggle = root.querySelector(".artifact-overlay-toggle") else { return }
       _ = toggle.addEventListener("toggle-button-update") { [self] event in
@@ -1448,8 +1451,12 @@
           self.overlayZoomStart = self.currentZoom()
           self.overlayScrollStart = (self.markupPane?.scrollLeft ?? 0, self.markupPane?.scrollTop ?? 0)
           self.overlayZoomBegan = window.performance.now()
+          self.overlayLeaving = false
           self.setZoom(nil, atFit: true)
         } else if !on, let before = self.beforeOverlay {
+          self.overlayZoomStart = self.currentZoom()
+          self.overlayZoomBegan = window.performance.now()
+          self.overlayLeaving = true
           self.setZoom(before.zoom, atFit: before.atFit)
           self.beforeOverlay = nil
         }
@@ -1459,19 +1466,20 @@
         self.overlayMotion += 1
         let ticket = self.overlayMotion
         @Sendable func frame() {
-          guard self.overlayOn, self.overlayMotion == ticket, self.isInDocument else { return }
+          guard self.overlayOn == on, self.overlayMotion == ticket, self.isInDocument else { return }
           self.applyZoom(about: nil)
-          if self.overlayProgress < 1 { _ = window.requestAnimationFrame { frame() } }
-        }
-        if on {
-          _ = window.requestAnimationFrame { frame() }
-        } else {
-          // Once the panels return to their normal sizes, resume matching
-          // from the restored text view rather than the calibrated scan.
-          _ = window.setTimeout(400) { [self] in
-            if overlayMotion == ticket && syncs { matchImage() }
+          if self.overlayProgress < 1 {
+            _ = window.requestAnimationFrame { frame() }
+          } else if !on {
+            // Back at its zoom, with the panels at their normal sizes:
+            // matching resumes from the restored text view rather than the
+            // calibrated scan.
+            self.overlayLeaving = false
+            self.applyZoom(about: nil)
+            if self.syncs { self.matchImage() }
           }
         }
+        _ = window.requestAnimationFrame { frame() }
       }
       reflectSyncApplies()
     }
@@ -1753,7 +1761,7 @@
     }
 
     /// Whether the two are matched now.
-    private var syncs: Bool { !overlayOn && syncOn && !reflowOn && !rawVisible && canvasShown && shownCanvas != nil }
+    private var syncs: Bool { !overlayOn && !overlayLeaving && syncOn && !reflowOn && !rawVisible && canvasShown && shownCanvas != nil }
 
     /// What the text shows now, nil until it has a size.
     private func textRegion() -> ViewerZoom.Region? {
@@ -2002,10 +2010,14 @@
       guard let natural = layer.getBoundingClientRect(), natural.width > 0, natural.height > 0 else { return }
       let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
       let stored = storedZoom()
-      var zoom = overlayOn ? overlayZoomStart + (fit - overlayZoomStart) * overlayProgress : (anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize)))
-      let settled = !overlayOn && abs(zoom - previous) * max(natural.width, natural.height) < 1
+      let resting = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
+      var zoom = overlayOn ? overlayZoomStart + (fit - overlayZoomStart) * overlayProgress
+        : overlayLeaving ? overlayZoomStart + (resting - overlayZoomStart) * overlayProgress : resting
+      let settled = !overlayOn && !overlayLeaving && abs(zoom - previous) * max(natural.width, natural.height) < 1
       if settled { zoom = previous }
-      let chosen = stored.zoom != nil || stored.atFit
+      // On the way back the zoom kept is the one it returns to, never a step
+      // of the motion.
+      let chosen = !overlayLeaving && (stored.zoom != nil || stored.atFit)
       let atFit = chosen && zoom <= fit
       frame.style.setProperty("width", doubleToString(natural.width * zoom) + "px")
       frame.style.setProperty("height", doubleToString(natural.height * zoom) + "px")
@@ -2020,6 +2032,9 @@
       if overlayOn {
         pane.scrollLeft = overlayScrollStart.x * (1 - overlayProgress)
         pane.scrollTop = overlayScrollStart.y * (1 - overlayProgress)
+      } else if overlayLeaving {
+        pane.scrollLeft = overlayScrollStart.x * overlayProgress
+        pane.scrollTop = overlayScrollStart.y * overlayProgress
       } else if !settled, let anchor, let point, let newBox = layer.getBoundingClientRect() {
         pane.scrollLeft += newBox.x - paneBox.x + point.0 * zoom - anchor.x
         pane.scrollTop += newBox.y - paneBox.y + point.1 * zoom - anchor.y
