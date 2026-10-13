@@ -145,7 +145,7 @@
           span {}
             .id("artifact-canvas-label")
             .class("artifact-canvas-label")
-            .data("edge-fade", "expand")
+            .data("edge-fade-view", "expand")
           if !actions.isEmpty || switchesCanvas {
             div {
               actions
@@ -654,7 +654,7 @@
             "padding-inline-start",
             "calc(\(spacing16.value) - \(spacing8.value) + 2 * \(borderWidthBase.value))")
         }
-        fadeOverflow("& .artifact-canvas-label")
+        edgeFadeView("& .artifact-canvas-label")
         selector(".artifact-fullscreen-button") {
           display(.flex)
           alignItems(.center)
