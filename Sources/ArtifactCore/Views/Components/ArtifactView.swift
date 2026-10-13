@@ -198,12 +198,12 @@
           // page together and fullscreen carries both.
           if !markup.isEmpty {
             div {
-              markup
+              div { markup }
+                .id("artifact-markup")
+                .class("artifact-markup")
+                .data("sheet-host", true)
             }
-            .id("artifact-markup")
-            .class("artifact-markup")
-            // A gloss opened in it covers it alone.
-            .data("sheet-host", true)
+            .class("artifact-markup-frame")
           }
 
           // The object: the canvas of the page on screen. A viewer with no
@@ -263,6 +263,13 @@
                   ariaLabel: "Detach",
                   size: .medium,
                   class: "artifact-detach-toggle"
+                )
+                ToggleButtonView(
+                  label: "Overlay",
+                  icon: IconView(icon: { s in LayersIconView(size: s) }, size: sizeIconSmall),
+                  modelValue: false, weight: .subtle, buttonColor: .gray,
+                  iconOnly: true, ariaLabel: "Overlay: drag scan to align, scroll to scale", size: .medium,
+                  class: "artifact-overlay-toggle"
                 )
               }
               if let info = rawSwitchInfo {
@@ -399,7 +406,7 @@
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
         }
-        selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle") {
+        selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle", "& .artifact-overlay-toggle") {
           flexShrink(0)
         }
         // Its total unknown, the pager waits unseen rather than read "of —".
@@ -445,6 +452,17 @@
           minWidth(0)
           minHeight(0)
           overflow(.hidden)
+        }
+        descendant(".artifact-markup-frame") {
+          flex(1, 1, perc(50))
+          position(.relative)
+          minWidth(0)
+          minHeight(0)
+          overflow(.hidden)
+        }
+        descendant(".artifact-markup-frame > .artifact-markup") {
+          width(perc(100))
+          height(perc(100))
         }
         descendant(".artifact-markup") {
           // Half the surface, whichever way the two are laid out. Without the
@@ -528,6 +546,53 @@
           // Panned by a drag off its text, as the image is: the text keeps
           // its I-beam, the rest of the pane the hand.
           cursor(.grab)
+        }
+        // The same two positioned frames interpolate into an overlay,
+        // rather than switching layout models halfway through the reveal.
+        selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-markup-frame", "&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
+          position(.absolute)
+          CSS.Property("inset-block-start", "0")
+          CSS.Property("inset-inline-start", "0")
+          width(perc(50))
+          height(perc(100))
+          CSS.Property("transition", "width 400ms ease-in-out, height 400ms ease-in-out, inset-inline-start 400ms ease-in-out, inset-block-start 400ms ease-in-out")
+          media(maxWidth(maxWidthBreakpointMobile)) {
+            width(perc(100))
+            height(perc(50))
+          }
+          CSS.Property("will-change", "width, height, inset-inline-start, inset-block-start")
+          media("(prefers-reduced-motion: reduce)") { CSS.Property("transition", "none") }
+        }
+        selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
+          CSS.Property("inset-inline-start", "50%")
+          media(maxWidth(maxWidthBreakpointMobile)) {
+            CSS.Property("inset-inline-start", "0")
+            CSS.Property("inset-block-start", "50%")
+          }
+        }
+        selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-frame") {
+          CSS.Property("inset-inline-start", "0").important()
+          CSS.Property("inset-block-start", "0").important()
+          width(perc(100)).important()
+          height(perc(100)).important()
+        }
+        selector("&[data-overlay-active='true'] .artifact-viewer-container") {
+          display(.block)
+        }
+        selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-frame") {
+          position(.absolute)
+          width(perc(100)).important()
+          height(perc(100)).important()
+        }
+        selector("&[data-overlay-active='true'] .artifact-markup-frame") {
+          zIndex(1)
+          CSS.Property("pointer-events", "none")
+        }
+        selector("&[data-overlay-active='true'] .artifact-markup") {
+          backgroundColor(.transparent).important()
+        }
+        selector("&[data-overlay-active='true'] .artifact-object") {
+          CSS.Property("opacity", "0.5")
         }
         // The code in the pane on the page's ground, gutter and all, as an
         // editor's (Xcode's) is (user, 2026-10-12); a code block in prose
@@ -826,6 +891,7 @@
       setupSyncSwitch()
       setupZoom()
       setupCanvasSwitch()
+      setupOverlay()
       setupRegions()
       // A host turns the reader to a page by its image service (a find
       // bar's match): an `artifact-show-service` event on the viewer.
@@ -1243,15 +1309,24 @@
       toggle.setAttribute("aria-pressed", detached ? "true" : "false")
       toggle.querySelector("button")?.setAttribute("aria-pressed", detached ? "true" : "false")
       reflectSyncApplies()
-      if !detached, let region = shownCanvas?.region { matchText(to: region) }
+      if !detached, let region = shownCanvas?.region { animateTextMatch(to: region) }
     }
 
     /// The switch disabled, never hidden, where sync cannot apply—Raw,
     /// Reflow, the images put away—so it says it can come back; its state
     /// kept underneath.
     private func reflectSyncApplies() {
+      let active = overlayOn && !rawVisible && !reflowOn && canvasShown
+      root.setAttribute(data("overlay-active"), active ? "true" : "false")
+      if let button = root.querySelector(".artifact-overlay-toggle button") {
+        if rawVisible || reflowOn || !canvasShown { button.setAttribute("disabled", "") }
+        else { button.removeAttribute("disabled") }
+      }
+      let detached = active || !syncOn
+      detachToggle?.setAttribute("aria-pressed", detached ? "true" : "false")
+      detachToggle?.querySelector("button")?.setAttribute("aria-pressed", detached ? "true" : "false")
       guard let button = detachToggle?.querySelector("button") else { return }
-      if rawVisible || reflowOn || !canvasShown {
+      if rawVisible || reflowOn || !canvasShown || active {
         button.setAttribute("disabled", "")
       } else {
         button.removeAttribute("disabled")
@@ -1348,6 +1423,26 @@
 
     private var markupPane: DOM.Element? { root.querySelector(".artifact-markup") }
     private var reflowOn: Bool { stringEquals(root.getAttribute(data("reflow")) ?? "", "true") }
+    private var overlayOn = false
+    private var beforeOverlay: (zoom: Double?, atFit: Bool)?
+    private func setupOverlay() {
+      guard let toggle = root.querySelector(".artifact-overlay-toggle") else { return }
+      _ = toggle.addEventListener("toggle-button-update") { [self] event in
+        let on = stringEquals(event.detail, "true")
+        if on && !self.overlayOn {
+          self.beforeOverlay = self.storedZoom()
+          self.setZoom(ViewerZoom.actualSize, atFit: false)
+        } else if !on, let before = self.beforeOverlay {
+          self.setZoom(before.zoom, atFit: before.atFit)
+          self.beforeOverlay = nil
+        }
+        self.overlayOn = on
+        self.reflectSyncApplies()
+        self.scheduleZoom()
+      }
+      reflectSyncApplies()
+    }
+
     /// Which zoom the shown layer keeps: the code's (Raw) or the page's.
     private var zoomKind: String { rawVisible ? "markup" : "rendering" }
 
@@ -1431,17 +1526,19 @@
       _ = pane.addEventListener(
         "gesturestart",
         { [self] e in
+          guard !self.rawVisible else { return }
           e.preventDefault()
           self.gestureStartZoom = self.currentZoom()
         }, capture: false, passive: false)
       _ = pane.addEventListener(
         "gesturechange",
         { [self] e in
+          guard !self.rawVisible else { return }
           e.preventDefault()
           guard let pane = self.markupPane, let box = pane.getBoundingClientRect() else { return }
           self.zoom(to: self.gestureStartZoom * e.webKitGestureScale, about: (e.clientX - box.x, e.clientY - box.y))
         }, capture: false, passive: false)
-      _ = pane.addEventListener("gestureend", { e in e.preventDefault() }, capture: false, passive: false)
+      _ = pane.addEventListener("gestureend", { [self] e in if !self.rawVisible { e.preventDefault() } }, capture: false, passive: false)
       scheduleZoom()
     }
 
@@ -1450,7 +1547,7 @@
     /// the image's does, and never scrolls the page (user, 2026-10-12).
     private func wheel(_ event: Event) {
       // Raw is an ordinary code scrollport; it does not synchronize zoom.
-      if rawVisible && !event.ctrlKey && !event.metaKey { return }
+      if rawVisible { return }
       guard let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
       event.preventDefault()
       zoom(
@@ -1460,7 +1557,7 @@
 
     /// Two fingers zoom about their midpoint, by how far they spread.
     private func pinch(_ event: Event) {
-      guard event.touchCount == 2, let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
+      guard !rawVisible, event.touchCount == 2, let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
       let x0 = event.touchClientX(0), y0 = event.touchClientY(0)
       let x1 = event.touchClientX(1), y1 = event.touchClientY(1)
       let distance = ((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)).squareRoot()
@@ -1515,6 +1612,8 @@
       // page left where it is.
       event.preventDefault()
       pane.focus(DOM.FocusOptions(preventScroll: true))
+      textMatchAnimation += 1
+      matchImage()
       panMoved = false
       panStart = (event.clientX, event.clientY, pane.scrollLeft, pane.scrollTop)
       endPan()
@@ -1526,6 +1625,7 @@
         }
         pane.scrollLeft = start.left - (e.clientX - start.x)
         pane.scrollTop = start.top - (e.clientY - start.y)
+        self.matchImage()
       }
       panUpListener = window.addEventListener(.mouseup) { [self] _ in
         self.panStart = nil
@@ -1547,9 +1647,10 @@
     private func zoomKey(_ event: Event) {
       // The pane's own keys, when it has the focus: a word's arrows move
       // between words, a field's its caret.
-      guard let pane = markupPane, let target = event.target, target.id == pane.id,
+      guard !rawVisible, let pane = markupPane, let target = event.target, target.id == pane.id,
         let box = pane.getBoundingClientRect()
       else { return }
+      textMatchAnimation += 1
       let key = event.key
       let middle = (box.width / 2, box.height / 2)
       if stringEquals(key, "+") || stringEquals(key, "=") {
@@ -1577,10 +1678,14 @@
     }
 
     private func zoom(to value: Double, about anchor: (x: Double, y: Double)) {
+      textMatchAnimation += 1
       // A new wording gesture supersedes an image move awaiting its frame.
       pendingTextRegion = nil
       setZoom(value, atFit: false)
       applyZoom(about: anchor)
+      // Even at a zoom limit, cancelling a reattach must bring the image
+      // to the text's current view, including the newest input.
+      matchImage()
     }
 
     // MARK: - Pane sync
@@ -1609,7 +1714,7 @@
     }
 
     /// Whether the two are matched now.
-    private var syncs: Bool { syncOn && !reflowOn && !rawVisible && canvasShown && shownCanvas != nil }
+    private var syncs: Bool { !overlayOn && syncOn && !reflowOn && !rawVisible && canvasShown && shownCanvas != nil }
 
     /// What the text shows now, nil until it has a size.
     private func textRegion() -> ViewerZoom.Region? {
@@ -1630,8 +1735,37 @@
     private var matchQueued = false
     private var pendingImageMatch = false
 
+    private var textMatchAnimation = 0
+
+    /// Reattaching is a reader action, so visibly move into the image's view.
+    /// A newer gesture or mode change cancels the interpolation.
+    private func animateTextMatch(to target: ViewerZoom.Region) {
+      textMatchAnimation += 1
+      pendingTextRegion = nil
+      pendingImageMatch = false
+      guard syncs, let start = textRegion(), !window.matchMedia("(prefers-reduced-motion: reduce)") else {
+        matchText(to: target)
+        return
+      }
+      let ticket = textMatchAnimation
+      let began = window.performance.now()
+      @Sendable func step() {
+        guard ticket == self.textMatchAnimation, self.syncs, self.isInDocument else { return }
+        let progress = min(1, max(0, (window.performance.now() - began) / 400))
+        let eased = progress * progress * (3 - 2 * progress)
+        func between(_ a: Double, _ b: Double) -> Double { a + (b - a) * eased }
+        self.applyMatchText(.init(
+          centerX: between(start.centerX, target.centerX),
+          centerY: between(start.centerY, target.centerY),
+          scale: between(start.scale, target.scale), maxScale: target.maxScale))
+        if progress < 1 { _ = window.requestAnimationFrame { step() } }
+      }
+      _ = window.requestAnimationFrame { step() }
+    }
+
     /// The text at the image's region, at the next frame.
     private func matchText(to region: ViewerZoom.Region) {
+      textMatchAnimation += 1
       pendingTextRegion = region
       pendingImageMatch = false
       scheduleMatch()
@@ -1689,6 +1823,7 @@
         return
       }
       matchedScroll = nil
+      textMatchAnimation += 1
       matchImage()
     }
 
@@ -1828,8 +1963,8 @@
       guard let natural = layer.getBoundingClientRect(), natural.width > 0, natural.height > 0 else { return }
       let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
       let stored = storedZoom()
-      var zoom = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
-      let settled = abs(zoom - previous) * max(natural.width, natural.height) < 1
+      var zoom = overlayOn ? ViewerZoom.actualSize : (anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize)))
+      let settled = !overlayOn && abs(zoom - previous) * max(natural.width, natural.height) < 1
       if settled { zoom = previous }
       let chosen = stored.zoom != nil || stored.atFit
       let atFit = chosen && zoom <= fit
@@ -1873,6 +2008,21 @@
     /// layer has a size: a page not yet drawn is left as it is.
     private func applyZoom(about anchor: (x: Double, y: Double)?, matching: Bool = false) {
       guard let pane = markupPane, let layer = shownLayer() else { return }
+      if rawVisible {
+        // Source code has one readable size on every page, independent of
+        // scan proportions, rendered fit, and old session zoom settings.
+        let left = pane.scrollLeft, top = pane.scrollTop
+        layer.style.setProperty("zoom", "1")
+        layer.setAttribute(data("zoom"), "1")
+        if let code = layer.querySelector(".code-view") {
+          code.style.setProperty("min-width", doubleToString(pane.clientWidth) + "px")
+          code.style.setProperty("min-height", doubleToString(pane.clientHeight) + "px")
+        }
+        pane.scrollLeft = left
+        pane.scrollTop = top
+        matchedScroll = (pane.scrollLeft, pane.scrollTop)
+        return
+      }
       if layer.querySelector(".code-view") == nil && !reflowOn {
         applyPageScale(layer, in: pane, about: anchor, matching: matching)
         return
