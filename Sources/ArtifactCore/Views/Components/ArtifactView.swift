@@ -1517,6 +1517,9 @@
     /// frame's measure. Measured once
     /// a page in the layer's own pixels (`overlayTarget`) and placed where
     /// the layer now is, so the overlay's motion reads no text a frame.
+    /// gnorium-python's `layout_preview` measures the same box, rule for
+    /// rule, on the explication's render (`_TEXT_BLOCK`): a change here is
+    /// made there too.
     private func renderedTextBlock(in layer: DOM.Element) -> [Double]? {
       guard let page = layer.closest(".tei-page"), let box = layer.getBoundingClientRect(), box.width > 0 else {
         return nil

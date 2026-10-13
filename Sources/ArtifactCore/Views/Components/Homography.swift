@@ -5,6 +5,11 @@
 ///
 /// Its nine entries row by row, the last 1: a point (x, y) goes to
 /// ((a·x + b·y + c) / w, (d·x + e·y + f) / w), w = g·x + h·y + 1.
+///
+/// gnorium-python's `layout_measure.homography` is the same math step for
+/// step: the explication lays the scan as the overlay does before it
+/// compares the scan with the render (user, 2026-10-14). Both are held to
+/// one fixed example (`HomographyTests`, `test_layout_measure`).
 struct Homography {
   let values: [Double]
 
