@@ -1511,15 +1511,19 @@
       return values.count == 8 ? values : nil
     }
 
-    /// The page's rendered text block in the window: the box around its
-    /// text, its rules, its figures and its printed frames, as its four
+    /// The page's rendered text block in the window: the ink box of all
+    /// its frame sets—its text (`InkExtent`: its glyphs' ink, not their
+    /// font boxes nor a line's trailing letter-spacing), its rules, its
+    /// figures and its printed frames (those that draw a border)—as its four
     /// corners clockwise from the top-left, x and y in turn, within the
-    /// frame's measure. Measured once
-    /// a page in the layer's own pixels (`overlayTarget`) and placed where
-    /// the layer now is, so the overlay's motion reads no text a frame.
-    /// gnorium-python's `layout_preview` measures the same box, rule for
-    /// rule, on the explication's render (`_TEXT_BLOCK`): a change here is
-    /// made there too.
+    /// frame's measure. The scan's
+    /// zone is the box around all the page prints and holds in writing, as
+    /// the edition sets it all in its frame (user, 2026-10-14). Measured
+    /// once a page in the layer's own pixels (`overlayTarget`) and placed
+    /// where the layer now is, so the overlay's motion reads no text a
+    /// frame. gnorium-python's `layout_preview` measures the same box, rule
+    /// for rule, on the explication's render (`_TEXT_BLOCK`): a change here
+    /// is made there too.
     private func renderedTextBlock(in layer: DOM.Element) -> [Double]? {
       guard let page = layer.closest(".tei-page"), let box = layer.getBoundingClientRect(), box.width > 0 else {
         return nil
@@ -1528,39 +1532,37 @@
       let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
       if !stringEquals(overlayTarget.page, id) || overlayTarget.box.count != 4 {
         let frame = layer.querySelector(".tei-text-block") ?? layer
-        var left = Double.infinity
-        var top = Double.infinity
-        var right = -Double.infinity
-        var bottom = -Double.infinity
-        func take(_ rect: DOM.Rect) {
-          guard rect.width > 0, rect.height > 0 else { return }
-          left = min(left, rect.left)
-          top = min(top, rect.top)
-          right = max(right, rect.right)
-          bottom = max(bottom, rect.bottom)
-        }
-        let walker = document.createTreeWalker(frame, DOM.NodeFilter.SHOW_TEXT)
-        let range = document.createRange()
-        while let next = walker.nextNode() {
-          guard let node = next as? DOM.Text, !stringIsEmpty(stringTrim(node.data)) else { continue }
-          range.setStart(node, 0)
-          range.setEnd(node, node.length)
-          if let rect = range.getBoundingClientRect() { take(rect) }
+        var ink = InkExtent()
+        if let context = document.createElement("canvas").getContext("2d") {
+          let walker = document.createTreeWalker(frame, DOM.NodeFilter.SHOW_TEXT)
+          let range = document.createRange()
+          while let next = walker.nextNode() {
+            guard let node = next as? DOM.Text, let parent = node.parentElement else { continue }
+            measureInk(of: node, in: parent, context: context, range: range, into: &ink)
+          }
         }
         for drawn in frame.querySelectorAll(".tei-rule, .tei-figure-image, .tei-frame") {
-          if let rect = drawn.getBoundingClientRect() { take(rect) }
+          // A frame draws ink only where it draws a border: one that sets
+          // its lines' margins or measure alone draws nothing.
+          if drawn.classList.contains("tei-frame") && !drawsBorder(drawn) { continue }
+          if let rect = drawn.getBoundingClientRect() {
+            ink.take(left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom)
+          }
         }
         // Never wider than the frame: a line set wider than its measure
         // (a face wider than the print's) runs past it, and the scan's text
         // block is the measure's.
         if frame !== layer, let edges = frame.getBoundingClientRect() {
-          left = max(left, edges.left)
-          right = min(right, edges.right)
+          ink.left = max(ink.left, edges.left)
+          ink.right = min(ink.right, edges.right)
         }
-        guard right > left, bottom > top, zoom > 0 else { return nil }
+        guard let measured = ink.box, zoom > 0 else { return nil }
         overlayTarget = (
           id,
-          [(left - box.x) / zoom, (top - box.y) / zoom, (right - box.x) / zoom, (bottom - box.y) / zoom]
+          [
+            (measured[0] - box.x) / zoom, (measured[1] - box.y) / zoom, (measured[2] - box.x) / zoom,
+            (measured[3] - box.y) / zoom,
+          ]
         )
       }
       let measured = overlayTarget.box
@@ -1569,6 +1571,108 @@
       let right = box.x + measured[2] * zoom
       let bottom = box.y + measured[3] * zoom
       return [left, top, right, top, right, bottom, left, bottom]
+    }
+
+    /// Whether an element draws a border on any side: a style other than
+    /// none, at a width.
+    private func drawsBorder(_ element: DOM.Element) -> Bool {
+      let style = window.getComputedStyle(element)
+      for side in ["top", "right", "bottom", "left"] {
+        let drawn = !stringEquals(style.getPropertyValue("border-" + side + "-style"), "none")
+        if drawn, let width = parseDouble(stringReplace(style.getPropertyValue("border-" + side + "-width"), "px", "")),
+          width > 0
+        {
+          return true
+        }
+      }
+      return false
+    }
+
+    /// A text node's ink (`InkExtent`), line by line: on each line it is
+    /// set on, its font box as drawn less the font's ascent and descent and
+    /// plus its glyphs' (`measureText` in the node's computed font), and
+    /// across from its first and last glyphs' ink—a glyph a code point that
+    /// is no space, tab or line end. The node's own lines where it is set on
+    /// one; else its glyphs grouped by the line each is set on.
+    private func measureInk(
+      of node: DOM.Text, in parent: DOM.Element, context: DOM.CanvasRenderingContext2D, range: DOM.Range,
+      into ink: inout InkExtent
+    ) {
+      let bytes = Array(node.data.utf8)
+      // Each glyph's bounds in UTF-16 code units (the range's) and in
+      // UTF-8 bytes (its text's).
+      var glyphs: [(start: Int, end: Int, from: Int, to: Int)] = []
+      var unit = 0
+      var byte = 0
+      for scalar in node.data.unicodeScalars {
+        let units = UTF16.width(scalar)
+        let size = UTF8.width(scalar)
+        if !(scalar == " " || scalar == "\t" || scalar == "\n" || scalar == "\r") {
+          glyphs.append((unit, unit + units, byte, byte + size))
+        }
+        unit += units
+        byte += size
+      }
+      guard !glyphs.isEmpty else { return }
+      func drawn(_ start: Int, _ end: Int) -> DOM.Rect? {
+        range.setStart(node, start)
+        range.setEnd(node, end)
+        return range.getBoundingClientRect()
+      }
+      func text(_ from: Int, _ to: Int) -> String {
+        String(decoding: bytes[from..<to], as: UTF8.self)
+      }
+      let style = window.getComputedStyle(parent)
+      context.font =
+        style.getPropertyValue("font-style") + " " + style.getPropertyValue("font-weight") + " "
+        + style.getPropertyValue("font-size") + " " + style.getPropertyValue("font-family")
+      context.fontVariantCaps = style.getPropertyValue("font-variant-caps")
+      context.fontKerning = style.getPropertyValue("font-kerning")
+      range.setStart(node, 0)
+      range.setEnd(node, node.length)
+      let boxes = range.getClientRects().filter { $0.height > 0 }
+      guard let firstBox = boxes.first else { return }
+      let oneLine = boxes.allSatisfy { $0.top < firstBox.bottom && firstBox.top < $0.bottom }
+      // Each line: its span (UTF-16, UTF-8), its rows, its first and last
+      // glyph's bytes and drawn left.
+      var lines: [(start: Int, end: Int, from: Int, to: Int, top: Double, bottom: Double, ends: [(Int, Int, Double)])] =
+        []
+      for (index, glyph) in glyphs.enumerated() {
+        if oneLine && index > 0 && index < glyphs.count - 1 { continue }
+        guard let rect = drawn(glyph.start, glyph.end), rect.height > 0 else { continue }
+        let end = (glyph.from, glyph.to, rect.left)
+        if let last = lines.last, rect.top < last.bottom, last.top < rect.bottom {
+          lines[lines.count - 1].end = glyph.end
+          lines[lines.count - 1].to = glyph.to
+          lines[lines.count - 1].ends = [last.ends[0], end]
+        } else {
+          lines.append((glyph.start, glyph.end, glyph.from, glyph.to, rect.top, rect.bottom, [end, end]))
+        }
+      }
+      for line in lines {
+        guard let box = drawn(line.start, line.end) else { continue }
+        let metrics = context.measureText(text(line.from, line.to))
+        guard
+          let scale = InkExtent.scale(
+            drawnHeight: box.height, fontAscent: metrics.fontBoundingBoxAscent,
+            fontDescent: metrics.fontBoundingBoxDescent)
+        else { continue }
+        let rows = InkExtent.vertical(
+          drawnTop: box.top, drawnBottom: box.bottom, fontAscent: metrics.fontBoundingBoxAscent,
+          fontDescent: metrics.fontBoundingBoxDescent, inkAscent: metrics.actualBoundingBoxAscent,
+          inkDescent: metrics.actualBoundingBoxDescent, scale: scale)
+        var left = Double.infinity
+        var right = -Double.infinity
+        for (from, to, drawnLeft) in line.ends {
+          let glyph = context.measureText(text(from, to))
+          let across = InkExtent.horizontal(
+            drawnLeft: drawnLeft, inkLeft: glyph.actualBoundingBoxLeft, inkRight: glyph.actualBoundingBoxRight,
+            scale: scale)
+          left = min(left, across.left)
+          right = max(right, across.right)
+        }
+        ink.take(left: left, top: rows.top, right: right, bottom: rows.bottom)
+      }
     }
 
     /// The shown page's rendered text block in its layer's own pixels
