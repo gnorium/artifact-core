@@ -62,18 +62,16 @@ enum OverlayMotion {
 
 /// Where the overlay holds the edition's page (user, 2026-10-14): its
 /// text frame, onto which the scan's text block is laid, with the page's
-/// own equal margins around it, as the render draws it. Never smaller than
-/// the view in both axes (its fit), centered in an axis it is narrower in,
-/// else the view kept within it: the scan's margins are trimmed, and the
-/// edition's show the page's ground alone.
+/// own equal margins around it, as the render draws it. The whole page at
+/// its fit, centered, held still: a fixed comparison no gesture pans or
+/// zooms. The scan's margins are trimmed, and the edition's show the page's
+/// ground alone.
 struct OverlayFraming {
   /// The page's size in its layer's own pixels, unzoomed.
   let page: (width: Double, height: Double)
   /// The view: its width and height.
   let width: Double
   let height: Double
-  /// The most the layer zooms in, unless the fit is more.
-  let most: Double
 
   /// The zoom at which the whole page fits the view.
   var fit: Double {
@@ -81,21 +79,9 @@ struct OverlayFraming {
     return max(0, min(width / page.width, height / page.height))
   }
 
-  /// A view of the layer (its zoom, and its origin in the view) bounded to
-  /// the page: the zoom between the fit and the most, and the page
-  /// centered or covering the view in each axis.
-  func clamp(zoom: Double, x: Double, y: Double) -> (zoom: Double, x: Double, y: Double) {
-    let zoom = max(fit, min(max(fit, most), zoom))
-    return (zoom, Self.bound(x, length: page.width * zoom, view: width), Self.bound(y, length: page.height * zoom, view: height))
-  }
-
-  /// The page fitted and centered.
-  var fitted: (zoom: Double, x: Double, y: Double) { clamp(zoom: fit, x: 0, y: 0) }
-
-  /// The layer's origin in one axis: the page (`length` long, zoomed)
-  /// centered where it is no longer than the view, else covering it.
-  private static func bound(_ origin: Double, length: Double, view: Double) -> Double {
-    if length <= view { return (view - length) / 2 }
-    return min(0, max(view - length, origin))
+  /// The page fitted and centered: its zoom, and its origin in the view.
+  var fitted: (zoom: Double, x: Double, y: Double) {
+    let zoom = fit
+    return (zoom, (width - page.width * zoom) / 2, (height - page.height * zoom) / 2)
   }
 }

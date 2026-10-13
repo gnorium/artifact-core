@@ -341,9 +341,6 @@
           register(zone: last.zone, onto: last.target, progress: last.progress)
           return
         }
-        let offsetX = panX - (viewportW - Double(imageW) * zoom) / 2
-        let offsetY = panY - (viewportH - Double(imageH) * zoom) / 2
-        let previousZoom = zoom
         viewportW = w
         viewportH = h
         guard imageW > 0, imageH > 0 else { return }
@@ -351,10 +348,6 @@
         zoom = atFit ? minZoom : max(minZoom, min(maxZoom, zoom))
         panX = (viewportW - Double(imageW) * zoom) / 2
         panY = (viewportH - Double(imageH) * zoom) / 2
-        if aligningOverlay {
-          panX += offsetX * zoom / max(0.001, previousZoom)
-          panY += offsetY * zoom / max(0.001, previousZoom)
-        }
         clampPan()
         updateTransform()
       }
@@ -446,20 +439,16 @@
       panY = (viewportH - imageH * zoom) / 2
     }
 
-    private var aligningOverlay: Bool {
-      stringEquals(root.closest(".artifact-view")?.getAttribute(data("overlay-active")) ?? "", "true")
+    /// Whether the reader's overlay holds the scan still (user,
+    /// 2026-10-14): on, or laying it under the text; no wheel, drag,
+    /// pinch, touch or key pans or zooms it.
+    private var locked: Bool {
+      registering || stringEquals(root.closest(".artifact-view")?.getAttribute(data("overlay-active")) ?? "", "true")
     }
 
     private func clampPan() {
       let iw = Double(imageW) * zoom
       let ih = Double(imageH) * zoom
-      if aligningOverlay {
-        // Calibration must permit translation even when the whole scan fits.
-        // Keep at least a portion visible so the image cannot be lost.
-        panX = min(viewportW - 24, max(24 - iw, panX))
-        panY = min(viewportH - 24, max(24 - ih, panY))
-        return
-      }
       // Smaller than the viewport: centered, no panning. Larger: no empty
       // gap at any edge.
       if iw <= viewportW {
@@ -486,10 +475,9 @@
     /// (its region, and whether at its fit): the motion leaves from it and,
     /// the overlay off, comes back to it. Nil while the scan is its own.
     private var registrationStart: (region: ViewerZoom.Region, atFit: Bool)?
-    /// Whether the overlay lays the scan under the text now: the reader's
-    /// gestures move the text then, never the scan alone.
     /// The registration last set, set again when the viewport resizes.
     private var lastRegistration: (zone: [Double], target: [Double], progress: Double)?
+    /// Whether the overlay lays the scan under the text now.
     var registering: Bool {
       if let _ = registrationStart { return true }
       return false
@@ -992,44 +980,17 @@
       viewport?.setAttribute(data("dragging"), "false")
     }
 
-    private var overlayTouch: (x: Double, y: Double, left: Double, top: Double)?
-    private var overlayPinch: (distance: Double, zoom: Double)?
-
-    private func snapOverlayCenter() {
-      let centered = (viewportW - Double(imageW) * zoom) / 2
-      if abs(panX - centered) <= 12 { panX = centered; updateTransform(); tellRegion() }
-    }
-
-    private func overlayTouchMove(_ event: Event) {
-      guard aligningOverlay, !registering, event.touchCount > 0 else { return }
+    /// A touch on the scan the overlay holds still: taken, so the page
+    /// neither scrolls nor zooms under it.
+    private func lockedTouch(_ event: Event) {
+      guard locked else { return }
       event.preventDefault()
-      let x = event.touchClientX(0), y = event.touchClientY(0)
-      if event.touchCount >= 2 {
-        overlayTouch = nil
-        let x1 = event.touchClientX(1), y1 = event.touchClientY(1)
-        let distance = ((x1-x)*(x1-x)+(y1-y)*(y1-y)).squareRoot()
-        guard distance > 0, let box = viewport?.getBoundingClientRect() else { return }
-        guard let start = overlayPinch else { overlayPinch = (distance, zoom); return }
-        zoom(to: start.zoom * distance / start.distance, aboutX: (x+x1)/2-box.x, y: (y+y1)/2-box.y)
-      } else {
-        overlayPinch = nil
-        guard let start = overlayTouch else { overlayTouch = (x,y,panX,panY); return }
-        panX = start.left + x - start.x
-        panY = start.top + y - start.y
-        clampPan(); updateTransform(); tellRegion()
-      }
     }
 
     private func setupGestures() {
       guard let vp = viewport else { return }
-      _ = vp.addEventListener("touchstart", { [self] event in overlayTouchMove(event) }, capture: false, passive: false)
-      _ = vp.addEventListener("touchmove", { [self] event in overlayTouchMove(event) }, capture: false, passive: false)
-      _ = vp.addEventListener("touchend", { [self] event in
-        guard aligningOverlay else { return }
-        overlayTouch = nil; overlayPinch = nil
-        if event.touchCount == 0 { snapOverlayCenter() }
-      }, capture: false, passive: false)
-      _ = vp.addEventListener("touchcancel", { [self] _ in overlayTouch = nil; overlayPinch = nil }, capture: false, passive: false)
+      _ = vp.addEventListener("touchstart", { [self] event in lockedTouch(event) }, capture: false, passive: false)
+      _ = vp.addEventListener("touchmove", { [self] event in lockedTouch(event) }, capture: false, passive: false)
 
       vp.addEventListener(.mousedown) { [self] e in
         e.preventDefault()
@@ -1049,7 +1010,7 @@
             return
           }
         }
-        guard !registering else { return }
+        guard !locked else { return }
         dragStartX = e.clientX
         dragStartY = e.clientY
         dragPanX = panX
@@ -1064,12 +1025,8 @@
         }
         mouseUpListener = window.addEventListener(.mouseup) { [self] _ in
           endDrag()
-          let centered = (viewportW - Double(imageW) * zoom) / 2
-          if aligningOverlay {
-            // A magnetic center, not forced recentering after every drag.
-            snapOverlayCenter()
-          } else if atFit {
-            panX = centered
+          if atFit {
+            panX = (viewportW - Double(imageW) * zoom) / 2
             updateTransform()
           }
         }
@@ -1099,8 +1056,7 @@
       }
       vp.addEventListener("gesturechange") { [self] e in
         e.preventDefault()
-        if aligningOverlay, overlayPinch != nil { return }
-        guard imageW > 0, imageH > 0 else { return }
+        guard imageW > 0, imageH > 0, !locked else { return }
         let box = viewport?.getBoundingClientRect()
         zoom(
           to: gestureStartZoom * e.webKitGestureScale, aboutX: e.clientX - (box?.x ?? 0), y: e.clientY - (box?.y ?? 0))
@@ -1117,7 +1073,7 @@
           e.stopPropagation()
           return
         }
-        guard imageW > 0, imageH > 0, !registering else { return }
+        guard imageW > 0, imageH > 0, !locked else { return }
         let key = e.key
         if stringEquals(key, "+") || stringEquals(key, "=") {
           zoom(to: zoom * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), aboutX: viewportW / 2, y: viewportH / 2)
@@ -1142,7 +1098,7 @@
 
       vp.addEventListener(.wheel) { [self] e in
         e.preventDefault()
-        guard imageW > 0, imageH > 0 else { return }
+        guard imageW > 0, imageH > 0, !locked else { return }
         let dz = ViewerZoom.wheelFactor(e.deltaY)
         let cx = e.clientX - (viewport?.getBoundingClientRect()?.x ?? 0)
         let cy = e.clientY - (viewport?.getBoundingClientRect()?.y ?? 0)
@@ -1153,8 +1109,8 @@
     /// `value`, clamped to the fit and the actual size, about a point of
     /// the viewport, kept for the session.
     private func zoom(to value: Double, aboutX cx: Double, y cy: Double) {
-      // Laid under the text, the text's gestures move both.
-      guard !registering else { return }
+      // Held still by the overlay.
+      guard !locked else { return }
       let newZoom = max(minZoom, min(maxZoom, value))
       panX = cx - (cx - panX) * (newZoom / zoom)
       panY = cy - (cy - panY) * (newZoom / zoom)
