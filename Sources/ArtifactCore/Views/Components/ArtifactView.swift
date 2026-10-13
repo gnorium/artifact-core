@@ -230,7 +230,7 @@
               // Icons, subtle and bordered as the reactions button is (user,
               // 2026-10-12): the code (`</>`), its lines' flow, and the panes
               // unlinked.
-              RawToggleView(source: .xml, class: "artifact-raw-toggle")
+              XMLToggleButtonView(class: "artifact-xml-toggle")
               // Both layers' lines (user, 2026-10-12). Off: the rendered
               // page's lines as the scan breaks them (each `<lb/>` a line)
               // and the code's as stored, never wrapped, scrolling
@@ -399,7 +399,7 @@
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
         }
-        selector("& .artifact-page-nav", "& .artifact-raw-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle") {
+        selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle") {
           flexShrink(0)
         }
         // Its total unknown, the pager waits unseen rather than read "of —".
@@ -481,14 +481,14 @@
         }
         // The switch is in the header and the layers are in the pane, so the
         // rule that ties them lives on the viewer, where both are in scope.
-        selector("&:has(.artifact-raw-toggle[aria-pressed='true']) .artifact-markup [data-layer='rendering']") {
+        selector("&:has(.artifact-xml-toggle[aria-pressed='true']) .artifact-markup [data-layer='rendering']") {
           display(.none)
         }
         // Flex, not block: a layer holding one element also holds the
         // whitespace around it in the markup, and a block container turns that
         // into a line box above and below—a gap that looks like padding
         // nobody asked for. A flex container drops whitespace-only children.
-        selector("&:has(.artifact-raw-toggle[aria-pressed='true']) .artifact-markup [data-layer='markup']") {
+        selector("&:has(.artifact-xml-toggle[aria-pressed='true']) .artifact-markup [data-layer='markup']") {
           display(.flex)
           flexDirection(.column)
           width(perc(100))
@@ -898,7 +898,7 @@
     /// A viewer fetched in after the switch was pressed reads the attribute
     /// as it stands.
     private func setupLayers() {
-      let raw = root.querySelector(".artifact-raw-toggle")
+      let raw = root.querySelector(".artifact-xml-toggle")
       if case .some = root.querySelector(".artifact-markup [data-layer='translated-rendering']") {
         translatable = true
       }
@@ -1447,6 +1447,8 @@
     /// browser's ctrl+wheel), ctrl/cmd+wheel—zooms about the pointer, as
     /// the image's does, and never scrolls the page (user, 2026-10-12).
     private func wheel(_ event: Event) {
+      // Raw is an ordinary code scrollport; it does not synchronize zoom.
+      if rawVisible && !event.ctrlKey && !event.metaKey { return }
       guard let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
       event.preventDefault()
       zoom(
@@ -1573,6 +1575,8 @@
     }
 
     private func zoom(to value: Double, about anchor: (x: Double, y: Double)) {
+      // A new wording gesture supersedes an image move awaiting its frame.
+      pendingTextRegion = nil
       setZoom(value, atFit: false)
       applyZoom(about: anchor)
     }
@@ -1592,7 +1596,7 @@
     /// own (`ViewerZoom.Region.maxScale`), synced or not, so the two sizes
     /// match and stay matched; with no image, to 100%.
     private var matchedMaxScale: Double? {
-      guard canvasShown else { return nil }
+      guard canvasShown && !rawVisible && !reflowOn else { return nil }
       return shownCanvas?.region?.maxScale
     }
 
@@ -1621,19 +1625,32 @@
     /// a burst of wheel events (several a frame) moves the text once a
     /// frame, the latest region winning, so it never stutters.
     private var pendingTextRegion: ViewerZoom.Region?
-    private var textMatchQueued = false
-    private var imageMatchQueued = false
+    private var matchQueued = false
+    private var pendingImageMatch = false
 
     /// The text at the image's region, at the next frame.
     private func matchText(to region: ViewerZoom.Region) {
       pendingTextRegion = region
-      if textMatchQueued { return }
-      textMatchQueued = true
+      pendingImageMatch = false
+      scheduleMatch()
+    }
+
+    /// Both directions share a frame: the latest reader move wins, and
+    /// an older move from the other pane cannot overwrite it afterwards.
+    private func scheduleMatch() {
+      if matchQueued { return }
+      matchQueued = true
       _ = window.requestAnimationFrame { [self] in
-        self.textMatchQueued = false
-        guard let region = self.pendingTextRegion else { return }
+        self.matchQueued = false
+        let region = self.pendingTextRegion
+        let image = self.pendingImageMatch
         self.pendingTextRegion = nil
-        self.applyMatchText(region)
+        self.pendingImageMatch = false
+        if let region {
+          self.applyMatchText(region)
+        } else if image, self.syncs, let canvas = self.shownCanvas, let region = self.textRegion() {
+          canvas.show(region: region)
+        }
       }
     }
 
@@ -1657,13 +1674,9 @@
     /// The image at the text's region, when the reader moved the text: at
     /// the next frame, once however many moves it saw.
     private func matchImage() {
-      if imageMatchQueued { return }
-      imageMatchQueued = true
-      _ = window.requestAnimationFrame { [self] in
-        self.imageMatchQueued = false
-        guard self.syncs, let canvas = self.shownCanvas, let region = self.textRegion() else { return }
-        canvas.show(region: region)
-      }
+      pendingTextRegion = nil
+      pendingImageMatch = true
+      scheduleMatch()
     }
 
     /// The pane scrolled: by the reader, matched; to match, let be.
@@ -1763,20 +1776,40 @@
     /// layer has a size: a page not yet drawn is left as it is.
     private func applyZoom(about anchor: (x: Double, y: Double)?, matching: Bool = false) {
       guard let pane = markupPane, let layer = shownLayer() else { return }
+      // Capture the point before measuring changes layout or clamps scroll.
+      // It belongs to the layer, whose centering margin changes with zoom.
+      guard let oldBox = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect() else { return }
+      let previous = parseDouble(layer.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
+      let oldScroll = (x: pane.scrollLeft, y: pane.scrollTop)
+      let point = anchor.map { ((paneBox.x + $0.x - oldBox.x) / previous, (paneBox.y + $0.y - oldBox.y) / previous) }
       // The text's own box: without the code view's pane-filling minimum or
       // the page's centering margin.
       let codeView = layer.querySelector(".code-view")
       _ = codeView?.style.removeProperty("min-width")
       _ = codeView?.style.removeProperty("min-height")
-      _ = layer.style.removeProperty("margin-inline-start")
-      guard let box = layer.getBoundingClientRect(), box.width > 0, box.height > 0,
-        let paneBox = pane.getBoundingClientRect()
+      // A margin does not affect the measured width. Removing it briefly
+      // shrinks the scroll range and loses the reader's previous position.
+      let margin = pixels(layer.style.getPropertyValue("margin-inline-start")) * previous
+      if codeView == nil && !reflowOn {
+        // Center a stable page frame, not the width of its shortest text.
+        // Canvas proportions describe the page only; no text coordinates.
+        let ratio = canvasIndex < imageWidths.count && canvasIndex < imageHeights.count
+          && imageWidths[canvasIndex] > 0 && imageHeights[canvasIndex] > 0
+          ? Double(imageWidths[canvasIndex]) / Double(imageHeights[canvasIndex]) : 0.75
+        let pageWidth = 640.0
+        layer.style.setProperty("min-width", doubleToString(pageWidth) + "px")
+        layer.style.setProperty("min-height", doubleToString(pageWidth / ratio) + "px")
+      } else if codeView == nil {
+        _ = layer.style.removeProperty("min-width")
+        _ = layer.style.removeProperty("min-height")
+        _ = layer.style.removeProperty("margin-inline-start")
+      }
+      guard let box = layer.getBoundingClientRect(), box.width > 0, box.height > 0
       else { return }
-      let previous = parseDouble(layer.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
       // What stands around the layer in the pane (the view's 1px inset,
       // which keeps a ring clear), on both sides alike: where the layer
       // starts, less its centering margin.
-      let insetX = max(0, box.x - paneBox.x + pane.scrollLeft)
+      let insetX = max(0, box.x - paneBox.x + pane.scrollLeft - margin)
       let insetY = max(0, box.y - paneBox.y + pane.scrollTop)
       // The pane's size as if it had no scrollbars: the fit is the zoom at
       // which it needs none, and a size that changed as they came and went
@@ -1825,7 +1858,6 @@
       // own size, never at a fit the reader did not ask for.
       let chosen = stored.zoom != nil || stored.atFit
       let atFit = chosen && zoom <= fit
-      let point = held.map { ((pane.scrollLeft + $0.x) / previous, (pane.scrollTop + $0.y) / previous) }
       layer.style.setProperty("zoom", doubleToString(zoom))
       layer.setAttribute(data("zoom"), doubleToString(zoom))
       // The page at least the pane's size, top-aligned: never a gap above
@@ -1859,11 +1891,19 @@
         sessionStorage.setItem(Self.zoomKey + zoomKind, atFit ? "fit" : doubleToString(zoom))
       }
       if let anchor = held, let point {
-        pane.scrollLeft = point.0 * zoom - anchor.x
-        pane.scrollTop = point.1 * zoom - anchor.y
+        if let newBox = layer.getBoundingClientRect() {
+          pane.scrollLeft += newBox.x - paneBox.x + point.0 * zoom - anchor.x
+          pane.scrollTop += newBox.y - paneBox.y + point.1 * zoom - anchor.y
+        }
         // The reader zoomed the text: the image follows (pane sync).
         if !matching { matchImage() }
+      } else {
+        pane.scrollLeft = oldScroll.x
+        pane.scrollTop = oldScroll.y
       }
+      // Measurement and zoom can generate deferred scroll events too.
+      // Only a subsequent reader scroll should start another sync.
+      matchedScroll = (pane.scrollLeft, pane.scrollTop)
     }
 
     /// A manifest that cannot be read pages as none is there: by the
@@ -1877,7 +1917,7 @@
     ///
     /// A manifest not read this time (no answer; the server's `"unread"`: a
     /// timeout, too many reads) pages the markup meanwhile, its switch
-    /// hidden, and is asked for again a few times, each wait longer
+    /// hidden, and is asked for again with capped backoff
     /// (`ArtifactManifest.retryDelays`, user, 2026-10-10). An answer that
     /// names images then pages by them, on the page on screen, and offers
     /// the switch; one that names none keeps it hidden.
@@ -1931,11 +1971,11 @@
       }
     }
 
-    /// The manifest asked for again after the next wait, while the viewer is
-    /// on the page; past the last, the switch stays hidden.
+    /// A temporary failure never settles "no images": keep retrying with
+    /// capped backoff while the viewer remains in the document.
     private func retryManifest(url: String) {
-      guard manifestRetries < ArtifactManifest.retryDelays.count else { return }
-      let delay = ArtifactManifest.retryDelays[manifestRetries]
+      guard isInDocument else { return }
+      let delay = ArtifactManifest.retryDelay(after: manifestRetries)
       manifestRetries += 1
       _ = window.setTimeout(delay) { [self] in
         guard self.isInDocument else { return }

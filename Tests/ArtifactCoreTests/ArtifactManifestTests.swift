@@ -25,6 +25,10 @@ final class ArtifactManifestTests: XCTestCase {
     XCTAssertEqual(timedOut.canvasSwitch, .pending)
     XCTAssertEqual(timedOut.error, "The source URL took too long.")
     XCTAssertFalse(ArtifactManifest.retryDelays.isEmpty)
+    XCTAssertEqual(ArtifactManifest.parse(#"{"error":"Network error"}"#).canvasSwitch, .pending)
+    XCTAssertEqual(ArtifactManifest.parse("null").canvasSwitch, .pending)
+    XCTAssertEqual(ArtifactManifest.parse("").canvasSwitch, .pending)
+    XCTAssertEqual(ArtifactManifest.retryDelay(after: 20), 30000)
   }
 
   func testAManifestThatNamesNoImageDropsTheSwitch() {

@@ -44,6 +44,13 @@ struct ArtifactManifest {
     // The manifest's free-text label is shown nowhere: the reader has no
     // title (the page heads it).
     let parts = stringSplit(json, separator: "\"canvases\":")
+    // The fetch bridge returns an error-only object on network or JSON
+    // failure. Only an actual canvases array can settle "no images".
+    guard parts.count > 1 else {
+      manifest.error = extractJSONString(json, key: "error")
+      manifest.unread = true
+      return manifest
+    }
     if parts.count > 1 {
       for entry in stringSplit(parts[1], separator: "},{") {
         guard let id = extractJSONString(entry, key: "id") else { continue }
@@ -69,6 +76,10 @@ struct ArtifactManifest {
   }
 
   /// The waits, in milliseconds, before each read again of an unread
-  /// manifest: a few, each longer, then the switch stays hidden.
-  static let retryDelays: [Double] = [4000, 8000, 16000]
+  /// Back off to 30 seconds, then keep trying while the reader is attached.
+  static let retryDelays: [Double] = [4000, 8000, 16000, 30000]
+
+  static func retryDelay(after attempts: Int) -> Double {
+    retryDelays[min(max(0, attempts), retryDelays.count - 1)]
+  }
 }
