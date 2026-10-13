@@ -268,7 +268,7 @@
                   label: "Overlay",
                   icon: IconView(icon: { s in LayersIconView(size: s) }, size: sizeIconSmall),
                   modelValue: false, weight: .subtle, buttonColor: .gray,
-                  iconOnly: true, ariaLabel: "Overlay: drag scan to align, scroll to scale", size: .medium,
+                  iconOnly: true, ariaLabel: "Overlay", size: .medium,
                   class: "artifact-overlay-toggle"
                 )
               }
@@ -590,6 +590,16 @@
         }
         selector("&[data-overlay-active='true'] .artifact-markup") {
           backgroundColor(.transparent).important()
+          overflow(.hidden).important()
+        }
+        selector("&[data-overlay-active='true'] .canvas-viewport") { CSS.Property("touch-action", "none") }
+        selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled") {
+          backgroundColor(backgroundColorBlue).important()
+          borderColor(backgroundColorBlue).important()
+          CSS.Property("opacity", "0.5")
+        }
+        selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled .button-icon", "& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled .button-label") {
+          color(colorOnSolid).important()
         }
         selector("&[data-overlay-active='true'] .artifact-object") {
           CSS.Property("opacity", "0.5")
@@ -1425,13 +1435,20 @@
     private var reflowOn: Bool { stringEquals(root.getAttribute(data("reflow")) ?? "", "true") }
     private var overlayOn = false
     private var beforeOverlay: (zoom: Double?, atFit: Bool)?
+    private var overlayZoomStart = 1.0
+    private var overlayZoomBegan = 0.0
+    private var overlayScrollStart = (x: 0.0, y: 0.0)
+    private var overlayMotion = 0
     private func setupOverlay() {
       guard let toggle = root.querySelector(".artifact-overlay-toggle") else { return }
       _ = toggle.addEventListener("toggle-button-update") { [self] event in
         let on = stringEquals(event.detail, "true")
         if on && !self.overlayOn {
           self.beforeOverlay = self.storedZoom()
-          self.setZoom(ViewerZoom.actualSize, atFit: false)
+          self.overlayZoomStart = self.currentZoom()
+          self.overlayScrollStart = (self.markupPane?.scrollLeft ?? 0, self.markupPane?.scrollTop ?? 0)
+          self.overlayZoomBegan = window.performance.now()
+          self.setZoom(nil, atFit: true)
         } else if !on, let before = self.beforeOverlay {
           self.setZoom(before.zoom, atFit: before.atFit)
           self.beforeOverlay = nil
@@ -1439,8 +1456,30 @@
         self.overlayOn = on
         self.reflectSyncApplies()
         self.scheduleZoom()
+        self.overlayMotion += 1
+        let ticket = self.overlayMotion
+        @Sendable func frame() {
+          guard self.overlayOn, self.overlayMotion == ticket, self.isInDocument else { return }
+          self.applyZoom(about: nil)
+          if self.overlayProgress < 1 { _ = window.requestAnimationFrame { frame() } }
+        }
+        if on {
+          _ = window.requestAnimationFrame { frame() }
+        } else {
+          // Once the panels return to their normal sizes, resume matching
+          // from the restored text view rather than the calibrated scan.
+          _ = window.setTimeout(400) { [self] in
+            if overlayMotion == ticket && syncs { matchImage() }
+          }
+        }
       }
       reflectSyncApplies()
+    }
+
+    private var overlayProgress: Double {
+      if window.matchMedia("(prefers-reduced-motion: reduce)") { return 1 }
+      let p = min(1, max(0, (window.performance.now() - overlayZoomBegan) / 400))
+      return p * p * (3 - 2 * p)
     }
 
     /// Which zoom the shown layer keeps: the code's (Raw) or the page's.
@@ -1963,7 +2002,7 @@
       guard let natural = layer.getBoundingClientRect(), natural.width > 0, natural.height > 0 else { return }
       let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
       let stored = storedZoom()
-      var zoom = overlayOn ? ViewerZoom.actualSize : (anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize)))
+      var zoom = overlayOn ? overlayZoomStart + (fit - overlayZoomStart) * overlayProgress : (anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize)))
       let settled = !overlayOn && abs(zoom - previous) * max(natural.width, natural.height) < 1
       if settled { zoom = previous }
       let chosen = stored.zoom != nil || stored.atFit
@@ -1978,7 +2017,10 @@
         setZoom(zoom, atFit: atFit)
         sessionStorage.setItem(Self.zoomKey + zoomKind, atFit ? "fit" : doubleToString(zoom))
       }
-      if !settled, let anchor, let point, let newBox = layer.getBoundingClientRect() {
+      if overlayOn {
+        pane.scrollLeft = overlayScrollStart.x * (1 - overlayProgress)
+        pane.scrollTop = overlayScrollStart.y * (1 - overlayProgress)
+      } else if !settled, let anchor, let point, let newBox = layer.getBoundingClientRect() {
         pane.scrollLeft += newBox.x - paneBox.x + point.0 * zoom - anchor.x
         pane.scrollTop += newBox.y - paneBox.y + point.1 * zoom - anchor.y
         if !matching { matchImage() }

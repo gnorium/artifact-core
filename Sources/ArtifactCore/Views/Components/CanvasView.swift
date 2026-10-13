@@ -336,6 +336,9 @@
       vp?.observeResize { [self] w, h in
         guard w > 0, h > 0 else { return }
         guard w != viewportW || h != viewportH else { return }
+        let offsetX = panX - (viewportW - Double(imageW) * zoom) / 2
+        let offsetY = panY - (viewportH - Double(imageH) * zoom) / 2
+        let previousZoom = zoom
         viewportW = w
         viewportH = h
         guard imageW > 0, imageH > 0 else { return }
@@ -343,6 +346,10 @@
         zoom = atFit ? minZoom : max(minZoom, min(maxZoom, zoom))
         panX = (viewportW - Double(imageW) * zoom) / 2
         panY = (viewportH - Double(imageH) * zoom) / 2
+        if aligningOverlay {
+          panX += offsetX * zoom / max(0.001, previousZoom)
+          panY += offsetY * zoom / max(0.001, previousZoom)
+        }
         clampPan()
         updateTransform()
       }
@@ -434,9 +441,20 @@
       panY = (viewportH - imageH * zoom) / 2
     }
 
+    private var aligningOverlay: Bool {
+      stringEquals(root.closest(".artifact-view")?.getAttribute(data("overlay-active")) ?? "", "true")
+    }
+
     private func clampPan() {
       let iw = Double(imageW) * zoom
       let ih = Double(imageH) * zoom
+      if aligningOverlay {
+        // Calibration must permit translation even when the whole scan fits.
+        // Keep at least a portion visible so the image cannot be lost.
+        panX = min(viewportW - 24, max(24 - iw, panX))
+        panY = min(viewportH - 24, max(24 - ih, panY))
+        return
+      }
       // Smaller than the viewport: centered, no panning. Larger: no empty
       // gap at any edge.
       if iw <= viewportW {
@@ -868,8 +886,44 @@
       viewport?.setAttribute(data("dragging"), "false")
     }
 
+    private var overlayTouch: (x: Double, y: Double, left: Double, top: Double)?
+    private var overlayPinch: (distance: Double, zoom: Double)?
+
+    private func snapOverlayCenter() {
+      let centered = (viewportW - Double(imageW) * zoom) / 2
+      if abs(panX - centered) <= 12 { panX = centered; updateTransform(); tellRegion() }
+    }
+
+    private func overlayTouchMove(_ event: Event) {
+      guard aligningOverlay, event.touchCount > 0 else { return }
+      event.preventDefault()
+      let x = event.touchClientX(0), y = event.touchClientY(0)
+      if event.touchCount >= 2 {
+        overlayTouch = nil
+        let x1 = event.touchClientX(1), y1 = event.touchClientY(1)
+        let distance = ((x1-x)*(x1-x)+(y1-y)*(y1-y)).squareRoot()
+        guard distance > 0, let box = viewport?.getBoundingClientRect() else { return }
+        guard let start = overlayPinch else { overlayPinch = (distance, zoom); return }
+        zoom(to: start.zoom * distance / start.distance, aboutX: (x+x1)/2-box.x, y: (y+y1)/2-box.y)
+      } else {
+        overlayPinch = nil
+        guard let start = overlayTouch else { overlayTouch = (x,y,panX,panY); return }
+        panX = start.left + x - start.x
+        panY = start.top + y - start.y
+        clampPan(); updateTransform(); tellRegion()
+      }
+    }
+
     private func setupGestures() {
       guard let vp = viewport else { return }
+      _ = vp.addEventListener("touchstart", { [self] event in overlayTouchMove(event) }, capture: false, passive: false)
+      _ = vp.addEventListener("touchmove", { [self] event in overlayTouchMove(event) }, capture: false, passive: false)
+      _ = vp.addEventListener("touchend", { [self] event in
+        guard aligningOverlay else { return }
+        overlayTouch = nil; overlayPinch = nil
+        if event.touchCount == 0 { snapOverlayCenter() }
+      }, capture: false, passive: false)
+      _ = vp.addEventListener("touchcancel", { [self] _ in overlayTouch = nil; overlayPinch = nil }, capture: false, passive: false)
 
       vp.addEventListener(.mousedown) { [self] e in
         e.preventDefault()
@@ -903,9 +957,12 @@
         }
         mouseUpListener = window.addEventListener(.mouseup) { [self] _ in
           endDrag()
-          if atFit {
-            // Fitted: back to the middle, however it was dragged.
-            panX = (viewportW - Double(imageW) * zoom) / 2
+          let centered = (viewportW - Double(imageW) * zoom) / 2
+          if aligningOverlay {
+            // A magnetic center, not forced recentering after every drag.
+            snapOverlayCenter()
+          } else if atFit {
+            panX = centered
             updateTransform()
           }
         }
@@ -935,6 +992,7 @@
       }
       vp.addEventListener("gesturechange") { [self] e in
         e.preventDefault()
+        if aligningOverlay, overlayPinch != nil { return }
         guard imageW > 0, imageH > 0 else { return }
         let box = viewport?.getBoundingClientRect()
         zoom(
