@@ -1304,8 +1304,10 @@
           // stand apart by its gap (user, 2026-10-11).
           if !stringEquals(name, layer) {
             element.style.display(.none)
+            element.closest("[data-page-scale='true']")?.style.display(.none)
           } else {
             element.style.display(.flex)
+            element.closest("[data-page-scale='true']")?.style.display(.block)
           }
         }
       }
@@ -1322,8 +1324,8 @@
     /// scrolled with no gap where it is larger. Its fit: the whole page's
     /// where it is larger than the pane, else its actual size. Unlike the image, which opens at
     /// its fit, the text opens at its actual size: text is read at its
-    /// size. It is CSS `zoom`, not a transform, so the pane's native
-    /// scrollbars follow it, and there is no drag. Each layer keeps its own
+    /// size. A sized frame reserves the rendered page's scaled extent while
+    /// a transform preserves its typography. Reflow and code use CSS zoom. Each layer keeps its own
     /// zoom (the rendered page's, the code's) for the session, Reflow on or
     /// off: reflowed, zooming out wraps the text wider and shorter, and its
     /// fit is the zoom at which its whole height fits the pane.
@@ -1720,7 +1722,10 @@
       guard let page = codeLayer.closest(".tei-page"),
         let rendered = page.querySelector("[data-layer='" + name + "']")
       else { return nil }
+      restoreFlow(of: rendered)
       let zoom = rendered.style.getPropertyValue("zoom")
+      let transform = rendered.style.getPropertyValue("transform")
+      rendered.style.setProperty("transform", "none")
       rendered.style.setProperty("visibility", "hidden")
       rendered.style.setProperty("position", "absolute")
       rendered.style.display(.flex)
@@ -1733,6 +1738,11 @@
         fit = containFit(width: box.width, height: box.height, paneWidth: paneWidth, paneHeight: paneHeight)
       }
       rendered.style.display(.none)
+      if stringIsEmpty(transform) {
+        _ = rendered.style.removeProperty("transform")
+      } else {
+        rendered.style.setProperty("transform", transform)
+      }
       _ = rendered.style.removeProperty("visibility")
       _ = rendered.style.removeProperty("position")
       _ = rendered.style.removeProperty("width")
@@ -1770,12 +1780,104 @@
       return fits
     }
 
+    /// Scale a stable printed layout. CSS zoom recalculates font metrics and
+    /// intrinsic widths, changing the page height and paired fit mid-gesture.
+    private func applyPageScale(
+      _ layer: DOM.Element, in pane: DOM.Element,
+      about anchor: (x: Double, y: Double)?, matching: Bool
+    ) {
+      guard let oldBox = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect(),
+        let parent = layer.parentElement else { return }
+      let previous = currentZoom()
+      let oldScroll = (x: pane.scrollLeft, y: pane.scrollTop)
+      let point = anchor.map { ((paneBox.x + $0.x - oldBox.x) / previous, (paneBox.y + $0.y - oldBox.y) / previous) }
+      let existing = stringEquals(parent.getAttribute(data("page-scale")) ?? "", "true")
+      let margin = existing ? pixels(parent.style.getPropertyValue("margin-inline-start"))
+        : pixels(layer.style.getPropertyValue("margin-inline-start")) * previous
+      let insetX = max(0, oldBox.x - paneBox.x + oldScroll.x - margin)
+      let insetY = max(0, oldBox.y - paneBox.y + oldScroll.y)
+      let style = window.getComputedStyle(pane)
+      let borderX = pixels(style.getPropertyValue("border-left-width")) + pixels(style.getPropertyValue("border-right-width"))
+      let borderY = pixels(style.getPropertyValue("border-top-width")) + pixels(style.getPropertyValue("border-bottom-width"))
+      let paneWidth = paneBox.width - borderX - 2 * insetX
+      let paneHeight = paneBox.height - borderY - 2 * insetY
+      guard paneWidth > 0, paneHeight > 0 else { return }
+      let frame: DOM.Element
+      if existing {
+        frame = parent
+      } else {
+        frame = document.createElement(.div)
+        frame.setAttribute(data("page-scale"), "true")
+        frame.style.setProperty("position", "relative")
+        frame.style.setProperty("flex-shrink", "0")
+        frame.style.setProperty("overflow", "hidden")
+        parent.insertBefore(frame, layer)
+        frame.appendChild(layer)
+      }
+      let ratio = canvasIndex < imageWidths.count && canvasIndex < imageHeights.count
+        && imageWidths[canvasIndex] > 0 && imageHeights[canvasIndex] > 0
+        ? Double(imageWidths[canvasIndex]) / Double(imageHeights[canvasIndex]) : 0.75
+      layer.style.setProperty("zoom", "1")
+      layer.style.setProperty("position", "absolute")
+      layer.style.setProperty("inset", "0 auto auto 0")
+      layer.style.setProperty("margin-inline-start", "0")
+      layer.style.setProperty("min-width", "640px")
+      layer.style.setProperty("min-height", doubleToString(640 / ratio) + "px")
+      layer.style.setProperty("transform-origin", "top left")
+      layer.style.setProperty("transform", "none")
+      guard let natural = layer.getBoundingClientRect(), natural.width > 0, natural.height > 0 else { return }
+      let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
+      let stored = storedZoom()
+      var zoom = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
+      let settled = abs(zoom - previous) * max(natural.width, natural.height) < 1
+      if settled { zoom = previous }
+      let chosen = stored.zoom != nil || stored.atFit
+      let atFit = chosen && zoom <= fit
+      frame.style.setProperty("width", doubleToString(natural.width * zoom) + "px")
+      frame.style.setProperty("height", doubleToString(natural.height * zoom) + "px")
+      frame.style.setProperty("margin-inline-start", doubleToString(max(0, (pane.clientWidth - 2 * insetX - natural.width * zoom) / 2)) + "px")
+      layer.style.setProperty("transform", "scale(" + doubleToString(zoom) + ")")
+      layer.setAttribute(data("zoom"), doubleToString(zoom))
+      lastFit = fit
+      if chosen {
+        setZoom(zoom, atFit: atFit)
+        sessionStorage.setItem(Self.zoomKey + zoomKind, atFit ? "fit" : doubleToString(zoom))
+      }
+      if !settled, let anchor, let point, let newBox = layer.getBoundingClientRect() {
+        pane.scrollLeft += newBox.x - paneBox.x + point.0 * zoom - anchor.x
+        pane.scrollTop += newBox.y - paneBox.y + point.1 * zoom - anchor.y
+        if !matching { matchImage() }
+      } else {
+        pane.scrollLeft = oldScroll.x
+        pane.scrollTop = oldScroll.y
+      }
+      matchedScroll = (pane.scrollLeft, pane.scrollTop)
+    }
+
+    /// Reflow returns to ordinary layout, with its own wrapping and CSS zoom.
+    private func restoreFlow(of layer: DOM.Element) {
+      guard let frame = layer.parentElement,
+        stringEquals(frame.getAttribute(data("page-scale")) ?? "", "true"),
+        let parent = frame.parentElement else { return }
+      parent.insertBefore(layer, frame)
+      parent.removeChild(frame)
+      for property in ["position", "inset", "transform", "transform-origin"] {
+        _ = layer.style.removeProperty(property)
+      }
+      layer.style.setProperty("zoom", layer.getAttribute(data("zoom")) ?? "1")
+    }
+
     /// The shown layer at its zoom, clamped to its fit and its actual size,
     /// centered where smaller than the pane; `anchor` (a point of the pane)
     /// keeps the text under it in place. Nothing is clamped before the
     /// layer has a size: a page not yet drawn is left as it is.
     private func applyZoom(about anchor: (x: Double, y: Double)?, matching: Bool = false) {
       guard let pane = markupPane, let layer = shownLayer() else { return }
+      if layer.querySelector(".code-view") == nil && !reflowOn {
+        applyPageScale(layer, in: pane, about: anchor, matching: matching)
+        return
+      }
+      restoreFlow(of: layer)
       // Capture the point before measuring changes layout or clamps scroll.
       // It belongs to the layer, whose centering margin changes with zoom.
       guard let oldBox = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect() else { return }
