@@ -1447,6 +1447,10 @@
       _ = toggle.addEventListener("toggle-button-update") { [self] event in
         let on = stringEquals(event.detail, "true")
         if on && !self.overlayOn {
+          // Registered from the scan's fit, where the page's text block
+          // is measured; without one, the scan stays as the reader left it.
+          self.overlayTarget = ("", [])
+          if let _ = self.overlayZone() { self.shownCanvas?.fitForRegistration() }
           self.beforeOverlay = self.storedZoom()
           self.overlayZoomStart = self.currentZoom()
           self.overlayScrollStart = (self.markupPane?.scrollLeft ?? 0, self.markupPane?.scrollTop ?? 0)
@@ -1488,6 +1492,102 @@
       if window.matchMedia("(prefers-reduced-motion: reduce)") { return 1 }
       let p = min(1, max(0, (window.performance.now() - overlayZoomBegan) / 400))
       return p * p * (3 - 2 * p)
+    }
+
+    /// The shown page's text block on its scan (`TEIView`'s
+    /// `data-text-block`): its four corners, x and y in turn, in the 0–1000
+    /// space; nil where it was not measured.
+    private func overlayZone() -> [Double]? {
+      guard let page = root.querySelector(".artifact-markup .tei-page[data-active='true']"),
+        let text = page.getAttribute(data("text-block")), !stringIsEmpty(text)
+      else { return nil }
+      var values: [Double] = []
+      for point in stringSplit(text, separator: " ") {
+        for value in stringSplit(point, separator: ",") {
+          guard let number = parseDouble(value) else { return nil }
+          values.append(number)
+        }
+      }
+      return values.count == 8 ? values : nil
+    }
+
+    /// The page's rendered text block in the window: the box around its
+    /// text, its rules, its figures and its printed frames, as its four
+    /// corners clockwise from the top-left, x and y in turn, within the
+    /// frame's measure. Measured once
+    /// a page in the layer's own pixels (`overlayTarget`) and placed where
+    /// the layer now is, so the overlay's motion reads no text a frame.
+    private func renderedTextBlock(in layer: DOM.Element) -> [Double]? {
+      guard let page = layer.closest(".tei-page"), let box = layer.getBoundingClientRect(), box.width > 0 else {
+        return nil
+      }
+      let zoom = currentZoom()
+      let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
+      if !stringEquals(overlayTarget.page, id) || overlayTarget.box.count != 4 {
+        let frame = layer.querySelector(".tei-text-block") ?? layer
+        var left = Double.infinity
+        var top = Double.infinity
+        var right = -Double.infinity
+        var bottom = -Double.infinity
+        func take(_ rect: DOM.Rect) {
+          guard rect.width > 0, rect.height > 0 else { return }
+          left = min(left, rect.left)
+          top = min(top, rect.top)
+          right = max(right, rect.right)
+          bottom = max(bottom, rect.bottom)
+        }
+        let walker = document.createTreeWalker(frame, DOM.NodeFilter.SHOW_TEXT)
+        let range = document.createRange()
+        while let next = walker.nextNode() {
+          guard let node = next as? DOM.Text, !stringIsEmpty(stringTrim(node.data)) else { continue }
+          range.setStart(node, 0)
+          range.setEnd(node, node.length)
+          if let rect = range.getBoundingClientRect() { take(rect) }
+        }
+        for drawn in frame.querySelectorAll(".tei-rule, .tei-figure-image, .tei-frame") {
+          if let rect = drawn.getBoundingClientRect() { take(rect) }
+        }
+        // Never wider than the frame: a line set wider than its measure
+        // (a face wider than the print's) runs past it, and the scan's text
+        // block is the measure's.
+        if frame !== layer, let edges = frame.getBoundingClientRect() {
+          left = max(left, edges.left)
+          right = min(right, edges.right)
+        }
+        guard right > left, bottom > top, zoom > 0 else { return nil }
+        overlayTarget = (
+          id,
+          [(left - box.x) / zoom, (top - box.y) / zoom, (right - box.x) / zoom, (bottom - box.y) / zoom]
+        )
+      }
+      let measured = overlayTarget.box
+      let left = box.x + measured[0] * zoom
+      let top = box.y + measured[1] * zoom
+      let right = box.x + measured[2] * zoom
+      let bottom = box.y + measured[3] * zoom
+      return [left, top, right, top, right, bottom, left, bottom]
+    }
+
+    /// The shown page's rendered text block in its layer's own pixels
+    /// (left, top, right, bottom), by its page's image and its layer.
+    private var overlayTarget: (page: String, box: [Double]) = ("", [])
+
+    /// The overlay's registration (user, 2026-10-13): where the shown page's
+    /// text block was measured on its scan (`overlayZone`), the scan is laid
+    /// by the projective transform that takes those corners to the rendered
+    /// text block's (`renderedTextBlock`), eased in with the overlay's own
+    /// motion and out with it (`CanvasReader.register`). Without one, the
+    /// scan is as before.
+    private func registerOverlay() {
+      guard let canvas = shownCanvas else { return }
+      let progress = overlayOn ? overlayProgress : overlayLeaving ? 1 - overlayProgress : 0
+      guard progress > 0, let zone = overlayZone(), let layer = shownLayer(),
+        let target = renderedTextBlock(in: layer)
+      else {
+        canvas.clearRegistration()
+        return
+      }
+      canvas.register(zone: zone, onto: target, progress: progress)
     }
 
     /// Which zoom the shown layer keeps: the code's (Raw) or the page's.
@@ -2044,6 +2144,7 @@
         pane.scrollTop = oldScroll.y
       }
       matchedScroll = (pane.scrollLeft, pane.scrollTop)
+      registerOverlay()
     }
 
     /// Reflow returns to ordinary layout, with its own wrapping and CSS zoom.

@@ -475,6 +475,58 @@
       drawRegion()
     }
 
+    // MARK: - Registration
+
+    /// The scan at its fit, where the overlay's registration starts from.
+    func fitForRegistration() {
+      guard imageW > 0, imageH > 0 else { return }
+      zoom = minZoom
+      atFit = true
+      panX = (viewportW - Double(imageW) * zoom) / 2
+      panY = (viewportH - Double(imageH) * zoom) / 2
+      clampPan()
+      updateTransform()
+    }
+
+    /// The scan laid under the text (the reader's overlay, user,
+    /// 2026-10-13): the projective transform (`Homography`) that takes the
+    /// corners of its text block (`zone`, x and y in turn in the 0–1000
+    /// space, clockwise from the top-left) where its fit sets them to the
+    /// rendered text block's (`target`, the same four in the window's
+    /// coordinates), `progress` of the way there from none, set on the tile
+    /// surface with CSS `matrix3d()`. The reader's own pan and zoom move
+    /// the scan under it, so they adjust it from there.
+    func register(zone: [Double], onto target: [Double], progress: Double) {
+      guard zone.count == 8, target.count == 8, imageW > 0, imageH > 0, minZoom > 0,
+        let surface = viewport?.querySelector(".canvas-tile-surface"),
+        let box = viewport?.getBoundingClientRect()
+      else { return }
+      let fitX = (viewportW - Double(imageW) * minZoom) / 2
+      let fitY = (viewportH - Double(imageH) * minZoom) / 2
+      var source: [Double] = []
+      var destination: [Double] = []
+      for corner in 0..<4 {
+        source.append(fitX + zone[2 * corner] / Self.zoneExtent * Double(imageW) * minZoom)
+        source.append(fitY + zone[2 * corner + 1] / Self.zoneExtent * Double(imageH) * minZoom)
+        destination.append(target[2 * corner] - box.x)
+        destination.append(target[2 * corner + 1] - box.y)
+      }
+      guard let homography = Homography(from: source, to: destination) else { return }
+      let matrix = homography.eased(max(0, min(1, progress))).cssMatrix3D.map(doubleToString)
+      surface.style.setProperty("transform-origin", "0 0")
+      surface.style.setProperty("transform", "matrix3d(" + stringJoin(matrix, separator: ", ") + ")")
+    }
+
+    /// The scan where its own pan and zoom alone set it.
+    func clearRegistration() {
+      guard let surface = viewport?.querySelector(".canvas-tile-surface") else { return }
+      _ = surface.style.removeProperty("transform")
+      _ = surface.style.removeProperty("transform-origin")
+    }
+
+    /// The space a zone's corners are in, over the whole image.
+    private static let zoneExtent = 1000.0
+
     // MARK: - Region
 
     /// A region of the image (0–1000) drawn over it, as the image is
