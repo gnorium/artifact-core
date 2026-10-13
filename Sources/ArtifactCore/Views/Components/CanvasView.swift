@@ -336,6 +336,11 @@
       vp?.observeResize { [self] w, h in
         guard w > 0, h > 0 else { return }
         guard w != viewportW || h != viewportH else { return }
+        // Laid under the text, it is the registration's to place.
+        if let last = lastRegistration, registering {
+          register(zone: last.zone, onto: last.target, progress: last.progress)
+          return
+        }
         let offsetX = panX - (viewportW - Double(imageW) * zoom) / 2
         let offsetY = panY - (viewportH - Double(imageH) * zoom) / 2
         let previousZoom = zoom
@@ -477,15 +482,24 @@
 
     // MARK: - Registration
 
-    /// The scan at its fit, where the overlay's registration starts from.
-    func fitForRegistration() {
-      guard imageW > 0, imageH > 0 else { return }
-      zoom = minZoom
-      atFit = true
-      panX = (viewportW - Double(imageW) * zoom) / 2
-      panY = (viewportH - Double(imageH) * zoom) / 2
-      clampPan()
-      updateTransform()
+    /// What the scan showed when the overlay began laying it under the text
+    /// (its region, and whether at its fit): the motion leaves from it and,
+    /// the overlay off, comes back to it. Nil while the scan is its own.
+    private var registrationStart: (region: ViewerZoom.Region, atFit: Bool)?
+    /// Whether the overlay lays the scan under the text now: the reader's
+    /// gestures move the text then, never the scan alone.
+    /// The registration last set, set again when the viewport resizes.
+    private var lastRegistration: (zone: [Double], target: [Double], progress: Double)?
+    var registering: Bool {
+      if let _ = registrationStart { return true }
+      return false
+    }
+
+    /// The overlay begins laying the scan under the text, from what it
+    /// shows now.
+    func beginRegistration() {
+      guard !registering, let region else { return }
+      registrationStart = (region, atFit)
     }
 
     /// The scan laid under the text (the reader's overlay, user,
@@ -493,35 +507,75 @@
     /// corners of its text block (`zone`, x and y in turn in the 0–1000
     /// space, clockwise from the top-left) where its fit sets them to the
     /// rendered text block's (`target`, the same four in the window's
-    /// coordinates), `progress` of the way there from none, set on the tile
-    /// surface with CSS `matrix3d()`. The reader's own pan and zoom move
-    /// the scan under it, so they adjust it from there.
+    /// coordinates), `progress` (eased) of the way there from none, set on
+    /// the tile surface with CSS `matrix3d()`. On the way the scan's own
+    /// view goes from where the reader left it to its fit, in its viewport
+    /// as the viewport moves, and its margins—all outside its text block,
+    /// which is not content—are trimmed away (user, 2026-10-14).
     func register(zone: [Double], onto target: [Double], progress: Double) {
-      guard zone.count == 8, target.count == 8, imageW > 0, imageH > 0, minZoom > 0,
+      guard zone.count == 8, target.count == 8, imageW > 0, imageH > 0, let start = registrationStart,
         let surface = viewport?.querySelector(".canvas-tile-surface"),
-        let box = viewport?.getBoundingClientRect()
+        let box = viewport?.getBoundingClientRect(), box.width > 0, box.height > 0
       else { return }
+      let progress = max(0, min(1, progress))
+      lastRegistration = (zone, target, progress)
+      // The viewport as it is drawn now, its pane moving: its fit, and the
+      // view between the reader's and the fit.
+      viewportW = box.width
+      viewportH = box.height
+      minZoom = min(viewportW / Double(imageW), viewportH / Double(imageH))
+      let fitCenter = 0.5
+      let scale = start.region.scale + (1 - start.region.scale) * progress
+      let centerX = start.region.centerX + (fitCenter - start.region.centerX) * progress
+      let centerY = start.region.centerY + (fitCenter - start.region.centerY) * progress
+      zoom = minZoom * scale
+      panX = viewportW / 2 - centerX * Double(imageW) * zoom
+      panY = viewportH / 2 - centerY * Double(imageH) * zoom
+      updateTransform()
       let fitX = (viewportW - Double(imageW) * minZoom) / 2
       let fitY = (viewportH - Double(imageH) * minZoom) / 2
       var source: [Double] = []
       var destination: [Double] = []
+      var trim: [String] = []
+      // The image's corners, clockwise from the top-left as the zone's.
+      let corners: [(Double, Double)] = [(0, 0), (1, 0), (1, 1), (0, 1)]
       for corner in 0..<4 {
-        source.append(fitX + zone[2 * corner] / Self.zoneExtent * Double(imageW) * minZoom)
-        source.append(fitY + zone[2 * corner + 1] / Self.zoneExtent * Double(imageH) * minZoom)
+        let x = zone[2 * corner] / Self.zoneExtent * Double(imageW)
+        let y = zone[2 * corner + 1] / Self.zoneExtent * Double(imageH)
+        source.append(fitX + x * minZoom)
+        source.append(fitY + y * minZoom)
         destination.append(target[2 * corner] - box.x)
         destination.append(target[2 * corner + 1] - box.y)
+        let edgeX = corners[corner].0 * Double(imageW)
+        let edgeY = corners[corner].1 * Double(imageH)
+        trim.append(
+          doubleToString(panX + (edgeX + (x - edgeX) * progress) * zoom) + "px "
+            + doubleToString(panY + (edgeY + (y - edgeY) * progress) * zoom) + "px")
       }
       guard let homography = Homography(from: source, to: destination) else { return }
-      let matrix = homography.eased(max(0, min(1, progress))).cssMatrix3D.map(doubleToString)
+      let matrix = homography.eased(progress).cssMatrix3D.map(doubleToString)
       surface.style.setProperty("transform-origin", "0 0")
       surface.style.setProperty("transform", "matrix3d(" + stringJoin(matrix, separator: ", ") + ")")
+      // The scan's margins trimmed away (user, 2026-10-14): a polygon on
+      // the surface, in its own coordinates before the warp, so the trim
+      // follows it, its corners closing in from the image's to its text
+      // block's. Outside it nothing is drawn.
+      surface.style.setProperty("clip-path", "polygon(" + stringJoin(trim, separator: ", ") + ")")
     }
 
-    /// The scan where its own pan and zoom alone set it.
+    /// The scan where its own pan and zoom alone set it: back at what it
+    /// showed before the overlay, untrimmed.
     func clearRegistration() {
-      guard let surface = viewport?.querySelector(".canvas-tile-surface") else { return }
-      _ = surface.style.removeProperty("transform")
-      _ = surface.style.removeProperty("transform-origin")
+      guard let start = registrationStart else { return }
+      registrationStart = nil
+      lastRegistration = nil
+      if let surface = viewport?.querySelector(".canvas-tile-surface") {
+        for property in ["transform", "transform-origin", "clip-path"] {
+          _ = surface.style.removeProperty(property)
+        }
+      }
+      guard imageW > 0, imageH > 0, minZoom > 0 else { return }
+      show(region: start.region)
     }
 
     /// The space a zone's corners are in, over the whole image.
@@ -947,7 +1001,7 @@
     }
 
     private func overlayTouchMove(_ event: Event) {
-      guard aligningOverlay, event.touchCount > 0 else { return }
+      guard aligningOverlay, !registering, event.touchCount > 0 else { return }
       event.preventDefault()
       let x = event.touchClientX(0), y = event.touchClientY(0)
       if event.touchCount >= 2 {
@@ -995,6 +1049,7 @@
             return
           }
         }
+        guard !registering else { return }
         dragStartX = e.clientX
         dragStartY = e.clientY
         dragPanX = panX
@@ -1062,7 +1117,7 @@
           e.stopPropagation()
           return
         }
-        guard imageW > 0, imageH > 0 else { return }
+        guard imageW > 0, imageH > 0, !registering else { return }
         let key = e.key
         if stringEquals(key, "+") || stringEquals(key, "=") {
           zoom(to: zoom * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), aboutX: viewportW / 2, y: viewportH / 2)
@@ -1098,6 +1153,8 @@
     /// `value`, clamped to the fit and the actual size, about a point of
     /// the viewport, kept for the session.
     private func zoom(to value: Double, aboutX cx: Double, y cy: Double) {
+      // Laid under the text, the text's gestures move both.
+      guard !registering else { return }
       let newZoom = max(minZoom, min(maxZoom, value))
       panX = cx - (cx - panX) * (newZoom / zoom)
       panY = cy - (cy - panY) * (newZoom / zoom)
