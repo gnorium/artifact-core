@@ -555,6 +555,11 @@
           // its I-beam, the rest of the pane the hand.
           cursor(.grab)
         }
+        // Reflowed, it is a text pane that scrolls (user, 2026-10-14): the
+        // browser's own cursor, the I-beam over its text; nothing pans.
+        selector("&[data-reflow='true'] .artifact-markup") {
+          cursor(.auto)
+        }
         // The same two positioned frames interpolate into an overlay,
         // rather than switching layout models halfway through the reveal.
         selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-markup-frame", "&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
@@ -1409,10 +1414,16 @@
     func setReflow(_ on: Bool) {
       guard let toggle = reflowToggle else { return }
       root.setAttribute(data("reflow"), on ? "true" : "false")
+      // A text pane's own cursor, never the pan's (`setupZoom`).
+      if on {
+        markupPane?.removeAttribute(data("over-text"))
+        endPan()
+        panStart = nil
+      }
       toggle.setAttribute("aria-pressed", on ? "true" : "false")
       toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
-      reflectSyncApplies()
-      scheduleZoom()
+      // A framed page's grid is Reflow off's alone.
+      showLayers()
     }
 
     private var rawVisible = false
@@ -1442,12 +1453,24 @@
             element.style.display(.none)
             element.closest("[data-page-scale='true']")?.style.display(.none)
           } else {
-            element.style.display(.flex)
+            showLayer(element)
             element.closest("[data-page-scale='true']")?.style.display(.block)
           }
         }
       }
       scheduleZoom()
+    }
+
+    /// A layer shown as its own rules lay it out: a framed page as its grid
+    /// (`TEIView`: the frame, its marginalia around it, user 2026-10-14),
+    /// unless reflowed; any other as a flex column. An inline flex on a
+    /// framed page dropped its grid, and set a head note at its foot.
+    private func showLayer(_ element: DOM.Element) {
+      if !reflowOn, stringEquals(element.getAttribute(data("framed")) ?? "", "true") {
+        element.style.display(.grid)
+      } else {
+        element.style.display(.flex)
+      }
     }
 
     // MARK: - Zoom
@@ -2135,7 +2158,7 @@
       _ = pane.addEventListener(
         "mousemove",
         { [self] e in
-          guard self.panStart == nil, let pane = self.markupPane else { return }
+          guard self.panStart == nil, !self.reflowOn, let pane = self.markupPane else { return }
           let over = self.isOnText(x: e.clientX, y: e.clientY) ? "true" : "false"
           if !stringEquals(pane.getAttribute(data("over-text")) ?? "", over) { pane.setAttribute(data("over-text"), over) }
         }, capture: false, passive: true)
@@ -2196,6 +2219,10 @@
     private func wheel(_ event: Event) {
       // Raw is an ordinary code scrollport; it does not synchronize zoom.
       if rawVisible { return }
+      // Reflowed, the pane is a text pane (user, 2026-10-14): the wheel
+      // scrolls it natively; a pinch (the browser's ctrl+wheel) or
+      // ctrl/cmd+wheel still zooms its text.
+      if reflowOn && !event.ctrlKey && !event.metaKey { return }
       guard let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
       event.preventDefault()
       if overlayRests {
@@ -2305,7 +2332,8 @@
         }
         return
       }
-      guard let pane = markupPane, event.button == 0, event.clickCount <= 1, !event.shiftKey,
+      // Reflowed, a press selects text as in any text pane: nothing pans.
+      guard !reflowOn, let pane = markupPane, event.button == 0, event.clickCount <= 1, !event.shiftKey,
         !isOnText(x: event.clientX, y: event.clientY)
       else { return }
       // Code being edited takes its own presses: its caret, its selection.
@@ -2381,6 +2409,8 @@
         event.stopPropagation()
         return
       }
+      // Reflowed, the arrows scroll the text pane as the browser's own.
+      if reflowOn && stringStartsWith(key, "Arrow") { return }
       textMatchAnimation += 1
       if stringEquals(key, "+") || stringEquals(key, "=") {
         zoom(to: currentZoom() * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), about: middle)
@@ -2592,7 +2622,7 @@
       rendered.style.setProperty("transform", "none")
       rendered.style.setProperty("visibility", "hidden")
       rendered.style.setProperty("position", "absolute")
-      rendered.style.display(.flex)
+      showLayer(rendered)
       // Reflowed, it wraps to the pane's width, as when shown.
       if reflowOn { rendered.style.setProperty("width", doubleToString(paneWidth) + "px") }
       var fit: Double?
