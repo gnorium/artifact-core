@@ -11,13 +11,35 @@ struct StructureRow: Equatable {
   var top: Double
   var right: Double
   var bottom: Double
+  /// The edges an edition's line is set by (its block's alignment), and
+  /// its type's em (its font-size, in the frame's pixels): what its edges
+  /// across are judged by. A scan's line has none.
+  var alignment: StructureAlignment = .none
+  var em: Double = 0
+  /// The block it is a line of (an id; -1 none): a justified block's last
+  /// line is set from its start alone.
+  var block: Int32 = -1
 
-  /// The box around both.
+  /// The box around both, the first's setting kept.
   func joined(_ other: StructureRow) -> StructureRow {
-    StructureRow(
-      left: min(left, other.left), top: min(top, other.top), right: max(right, other.right),
-      bottom: max(bottom, other.bottom))
+    var joined = self
+    joined.left = min(left, other.left)
+    joined.top = min(top, other.top)
+    joined.right = max(right, other.right)
+    joined.bottom = max(bottom, other.bottom)
+    return joined
   }
+}
+
+/// The edges a line is set by: those the print aligns.
+enum StructureAlignment: Equatable {
+  /// None judged: a scan's line, or a line whose setting is not known.
+  case none
+  case left
+  case right
+  case center
+  /// Both edges: a justified block's line, but its last (`left`).
+  case justified
 }
 
 enum StructurePairing {
@@ -49,9 +71,48 @@ enum StructurePairing {
   /// Whether a pair is within the tolerance: its tops and its bottoms each
   /// within a quarter of the body's leading (`leading`), half a half-line,
   /// where the gap grid's rounding (gnorium-python `type_scale`: a gap is a
-  /// whole number of half-lines) puts a gap on another step.
+  /// whole number of half-lines) puts a gap on another step; and across,
+  /// each edge the edition's line is set by (`aligned`) within an em of
+  /// its type.
   static func within(_ edition: StructureRow, _ scan: StructureRow, leading: Double) -> Bool {
     abs(edition.top - scan.top) <= leading / 4 && abs(edition.bottom - scan.bottom) <= leading / 4
+      && aligned(edition, scan)
+  }
+
+  /// Whether an edition's line stands across where its scan line does, by
+  /// the edges the print aligns (user, 2026-10-14): a left-set line's left
+  /// edge, a right-set line's right, a centered line's center, a justified
+  /// line's both (its block's last line its left alone); a ragged edge is
+  /// never judged. Only gross misalignment counts: an edge more than one em
+  /// of the line's own type from the scan's, the em being the unit the
+  /// edition face's widths differ from the print's in (Noto set at the
+  /// print's measured size is a little wider or narrower than its face,
+  /// never an em a line off). No other constant.
+  static func aligned(_ edition: StructureRow, _ scan: StructureRow) -> Bool {
+    let em = edition.em
+    guard em > 0 else { return true }
+    let left = abs(edition.left - scan.left) <= em
+    let right = abs(edition.right - scan.right) <= em
+    switch edition.alignment {
+    case .none: return true
+    case .left: return left
+    case .right: return right
+    case .center: return abs((edition.left + edition.right) / 2 - (scan.left + scan.right) / 2) <= em
+    case .justified: return left && right
+    }
+  }
+
+  /// A justified block's last line set from its start alone (a paragraph's
+  /// ragged end): each row whose block no later row is of.
+  static func lastLinesLeft(_ rows: [StructureRow]) -> [StructureRow] {
+    rows.enumerated().map { index, row in
+      guard row.alignment == .justified, row.block >= 0,
+        !rows[(index + 1)...].contains(where: { $0.block == row.block })
+      else { return row }
+      var last = row
+      last.alignment = .left
+      return last
+    }
   }
 
   /// The two structures' rows paired in order by dynamic programming

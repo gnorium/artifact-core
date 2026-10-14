@@ -346,6 +346,8 @@
       vp?.observeResize { [self] w, h in
         guard w > 0, h > 0 else { return }
         guard w != viewportW || h != viewportH else { return }
+        // Moving with the overlay, it is the overlay's to place.
+        guard !blending else { return }
         viewportW = w
         viewportH = h
         guard imageW > 0, imageH > 0 else { return }
@@ -476,6 +478,59 @@
     }
 
     // MARK: - A spot, a word
+
+    /// What the image shows as a spot: the point of it at the viewport's
+    /// middle (fractions of it) and its zoom (viewport pixels per image
+    /// pixel); nil before it has a size.
+    var spot: (centerX: Double, centerY: Double, zoom: Double)? {
+      guard imageW > 0, imageH > 0, zoom > 0, viewportW > 0 else { return nil }
+      return (
+        (viewportW / 2 - panX) / (Double(imageW) * zoom), (viewportH / 2 - panY) / (Double(imageH) * zoom), zoom
+      )
+    }
+
+    /// Whether the overlay is moving the image (`blend`): its viewport's
+    /// resizing leaves it be.
+    private var blending = false
+
+    /// The image on its way between its own view (`own`, a spot) and where
+    /// the overlay lays it (user, 2026-10-14): at the scale and place that
+    /// put the top edge of its text block (`zone`, its corners in the
+    /// 0–1000 space) on the rendered text block's laid box (`target`: left,
+    /// top, right, bottom in the window), `progress` (eased) of the way
+    /// there; its own view at 0. As the panes slide, each frame: coming on,
+    /// it zooms into the text's place as it fades out; going off, back into
+    /// its pane as it fades in.
+    func blend(own: (centerX: Double, centerY: Double, zoom: Double), zone: [Double], target: [Double], progress: Double) {
+      guard zone.count == 8, target.count == 4, imageW > 0, imageH > 0,
+        let box = viewport?.getBoundingClientRect(), box.width > 0, box.height > 0
+      else { return }
+      blending = true
+      viewportW = box.width
+      viewportH = box.height
+      minZoom = min(viewportW / Double(imageW), viewportH / Double(imageH))
+      let x0 = zone[0] / Self.zoneExtent * Double(imageW)
+      let y0 = zone[1] / Self.zoneExtent * Double(imageH)
+      let x1 = zone[2] / Self.zoneExtent * Double(imageW)
+      let y1 = zone[3] / Self.zoneExtent * Double(imageH)
+      let span = ((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)).squareRoot()
+      guard span > 0 else { return }
+      let laidZoom = (target[2] - target[0]) / span
+      let laidX = target[0] - box.x - x0 * laidZoom
+      let laidY = target[1] - box.y - y0 * laidZoom
+      let ownX = viewportW / 2 - own.centerX * Double(imageW) * own.zoom
+      let ownY = viewportH / 2 - own.centerY * Double(imageH) * own.zoom
+      let p = max(0, min(1, progress))
+      zoom = own.zoom + (laidZoom - own.zoom) * p
+      panX = ownX + (laidX - ownX) * p
+      panY = ownY + (laidY - ownY) * p
+      updateTransform()
+    }
+
+    /// The overlay's move done: the image its own again.
+    func endBlend() {
+      blending = false
+    }
 
     /// The image at `centerX`, `centerY` (fractions of it) at the
     /// viewport's middle, at `zoom` (the viewport's pixels per image pixel),

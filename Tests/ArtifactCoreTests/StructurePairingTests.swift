@@ -50,3 +50,29 @@ final class StructurePairingTests: XCTestCase {
     XCTAssertEqual(rows, [StructureRow(left: 0, top: 0, right: 90, bottom: 11), StructureRow(left: 0, top: 20, right: 40, bottom: 30)])
   }
 }
+
+/// Across, only the edges the print aligns, and only past an em of the
+/// line's own type (user, 2026-10-14).
+final class StructureAlignmentTests: XCTestCase {
+  static func row(_ left: Double, _ right: Double, _ alignment: StructureAlignment, block: Int32 = -1) -> StructureRow {
+    StructureRow(left: left, top: 0, right: right, bottom: 10, alignment: alignment, em: 16, block: block)
+  }
+
+  func testEachAlignmentJudgesItsOwnEdgesWithinAnEm() {
+    let scan = StructureRow(left: 100, top: 0, right: 300, bottom: 10)
+    XCTAssertTrue(StructurePairing.aligned(Self.row(110, 400, .left), scan))
+    XCTAssertFalse(StructurePairing.aligned(Self.row(120, 300, .left), scan))
+    XCTAssertTrue(StructurePairing.aligned(Self.row(0, 290, .right), scan))
+    XCTAssertTrue(StructurePairing.aligned(Self.row(90, 330, .center), scan))
+    XCTAssertFalse(StructurePairing.aligned(Self.row(120, 340, .center), scan))
+    XCTAssertFalse(StructurePairing.aligned(Self.row(100, 280, .justified), scan))
+    XCTAssertTrue(StructurePairing.aligned(Self.row(100, 280, .none), scan))
+  }
+
+  func testAJustifiedBlocksLastLineIsSetFromItsStartAlone() {
+    let rows = StructurePairing.lastLinesLeft([
+      Self.row(0, 100, .justified, block: 1), Self.row(0, 60, .justified, block: 1), Self.row(0, 100, .justified, block: 2),
+    ])
+    XCTAssertEqual(rows.map(\.alignment), [.justified, .left, .left])
+  }
+}

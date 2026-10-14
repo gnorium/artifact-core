@@ -1589,7 +1589,9 @@
           self.beforeOverlay = self.storedZoom()
           if let _ = self.overlayZone() {
             // Laid by the page's text block, from what the text shows now,
-            // the pane's zoom and scroll kept for the way back.
+            // the pane's zoom and scroll kept for the way back; the image
+            // leaving from what it shows.
+            self.scanOwn = self.shownCanvas?.spot
             self.overlayFrom = self.layerPlace()
             self.setOverlayRegistered(true)
           } else {
@@ -1645,8 +1647,14 @@
                 x: (Double(pane.clientWidth) / 2 - view.x) / focus.zoom, y: (Double(pane.clientHeight) / 2 - view.y) / focus.zoom
               )
               self.overlayFocus = (middle.x, middle.y, focus.zoom)
-              self.sendScan(to: middle, zoom: focus.zoom)
+              if let spot = self.scanSpot(at: middle, zoom: focus.zoom) { self.scanOwn = spot }
             }
+            // The image its own again, at the spot it came back to.
+            self.shownCanvas?.endBlend()
+            if registered, let own = self.scanOwn {
+              self.shownCanvas?.showSpot(centerX: own.centerX, centerY: own.centerY, zoom: own.zoom)
+            }
+            self.scanOwn = nil
             self.setOverlayRegistered(false)
             self.applyZoom(about: nil)
             if registered, let pane = self.markupPane {
@@ -1681,27 +1689,38 @@
       let y = (paneBox.y + Double(pane.clientTop) + Double(pane.clientHeight) / 2 - place.y) / place.zoom
       overlayFocus = (x, y, place.zoom)
       setZoom(place.zoom, atFit: false)
-      sendScan(to: (x, y), zoom: place.zoom)
+      if let spot = scanSpot(at: (x, y), zoom: place.zoom) { scanOwn = spot }
     }
 
-    /// The scan sent to the point of its image under `spot` (the page's
-    /// point, in the layer's own pixels) at the zoom the text is drawn at
-    /// (`CanvasReader.showSpot`), through the registration's
-    /// homography taken back.
-    private func sendScan(to spot: (x: Double, y: Double), zoom: Double) {
-      let x = spot.x
-      let y = spot.y
-      let place = (zoom: zoom, x: 0.0, y: 0.0)
-      guard let zone = overlayZone(), overlayTarget.box.count == 4, let size = shownImageSize else { return }
+    /// The image's own view the overlay leaves from, coming on, and goes
+    /// back to, going off (`CanvasReader.blend`).
+    private var scanOwn: (centerX: Double, centerY: Double, zoom: Double)?
+
+    /// The image moved with the overlay (user, 2026-10-14): between its own
+    /// view (`scanOwn`) and where the overlay lays it, by the rendered text
+    /// block, on the overlay's one clock and curve, as it fades.
+    private func blendScan(_ layer: DOM.Element) {
+      guard let canvas = shownCanvas, let own = scanOwn, overlayRegistered, overlayOn || overlayLeaving,
+        let zone = overlayZone(), let measured = renderedTextBlock(in: layer)
+      else { return }
+      let box = shownImageSize.map { laid([measured[0], measured[1], measured[2], measured[5]], zone: zone, size: $0) }
+        ?? [measured[0], measured[1], measured[2], measured[5]]
+      canvas.blend(own: own, zone: zone, target: box, progress: overlayOn ? overlayProgress : 1 - overlayProgress)
+    }
+
+    /// The image's spot under `spot` (the page's point, in the layer's own
+    /// pixels) at the zoom the text is drawn at, through the registration's
+    /// homography taken back: where the overlay off leaves it.
+    private func scanSpot(at spot: (x: Double, y: Double), zoom: Double) -> (centerX: Double, centerY: Double, zoom: Double)? {
+      guard let zone = overlayZone(), overlayTarget.box.count == 4, let size = shownImageSize else { return nil }
       let box = laid(overlayTarget.box, zone: zone, size: size)
       let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
       let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
-      guard let back = Homography(from: target, to: corners) else { return }
-      let spot = back.apply(x: x, y: y)
+      guard let back = Homography(from: target, to: corners) else { return nil }
+      let point = back.apply(x: spot.x, y: spot.y)
       let zoneSpan = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
-      guard zoneSpan > 0 else { return }
-      shownCanvas?.showSpot(
-        centerX: spot.x / size.width, centerY: spot.y / size.height, zoom: place.zoom * (box[2] - box[0]) / zoneSpan)
+      guard zoneSpan > 0 else { return nil }
+      return (point.x / size.width, point.y / size.height, zoom * (box[2] - box[0]) / zoneSpan)
     }
 
     /// Where registration lays the zone (gnorium-python
@@ -2102,6 +2121,7 @@
       lastFit = fit
       matchedScroll = (pane.scrollLeft, pane.scrollTop)
       drawStructure()
+      blendScan(layer)
     }
 
     /// Where the text's pane holds the page at the overlay's zoom, the spot
@@ -3562,10 +3582,21 @@
           while let next = walker.nextNode() {
             guard let node = next as? DOM.Text, let parent = node.parentElement else { continue }
             let block: Int32 = parent.closest(".tei-block").map { $0.id } ?? -1
+            // How its line is set: the edges the print aligns, and its
+            // type's em (CSS pixels, the layer's own).
+            let style = window.getComputedStyle(parent)
+            let align = style.getPropertyValue("text-align")
+            let rightToLeft = stringEquals(style.getPropertyValue("direction"), "rtl")
+            let alignment: StructureAlignment =
+              stringEquals(align, "justify") ? .justified
+              : stringEquals(align, "center") ? .center
+              : stringEquals(align, "right") || (stringEquals(align, "end") && !rightToLeft)
+                || (stringEquals(align, "start") && rightToLeft) ? .right : .left
+            let em = pixels(style.getPropertyValue("font-size"))
             for line in inkLines(of: node, in: parent, context: context, range: range) {
               let row = StructureRow(
                 left: (line.left - box.x) / scale, top: (line.top - box.y) / scale, right: (line.right - box.x) / scale,
-                bottom: (line.bottom - box.y) / scale)
+                bottom: (line.bottom - box.y) / scale, alignment: alignment, em: em, block: block)
               lines.append(row)
               if block >= 0 {
                 if let index = blocks.firstIndex(where: { $0.id == block }) {
@@ -3577,7 +3608,7 @@
             }
           }
         }
-        return StructurePairing.rows(lines)
+        return StructurePairing.lastLinesLeft(StructurePairing.rows(lines))
       }
       let editionMain = editionRows(of: [frame ?? layer])
       // The edition's notes (each child of a margin area: a note's section
