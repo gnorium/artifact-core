@@ -605,11 +605,18 @@
         selector("&[data-overlay-active='true'] .artifact-markup-frame") {
           zIndex(1)
         }
-        // The overlay draws structure, never the scan's pixels (user,
-        // 2026-10-14): the edition's pane, on its own ground, covers the
-        // scan's whole.
         selector("&[data-overlay-active='true'] .artifact-markup") {
           overflow(.hidden).important()
+        }
+        // The overlay draws structure, never the scan's pixels (user,
+        // 2026-10-14): from overlay on until off has run, the text on no
+        // ground of its own, the scan fading out under it and back on the
+        // overlay's one clock (`--artifact-overlay-progress`), gone at rest.
+        selector("&[data-overlay-fading='true'] .artifact-markup") {
+          backgroundColor(.transparent).important()
+        }
+        selector("&[data-overlay-fading='true'] .artifact-object") {
+          CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
         }
         selector("&[data-overlay-active='true'] .canvas-viewport") { CSS.Property("touch-action", "none") }
         selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled") {
@@ -638,6 +645,8 @@
         // tolerance, the diff's colors past it—orange a pair off, green an
         // edition line the scan lacks, red a scan line the edition lacks.
         descendant(".artifact-structure") {
+          // Fading in as the scan fades out, on the same clock.
+          CSS.Property("opacity", "var(--artifact-overlay-progress, 1)")
           position(.absolute)
           CSS.Property("left", "0")
           CSS.Property("top", "0")
@@ -1742,6 +1751,22 @@
       }
     }
 
+    /// The overlay's fade on its one clock and curve (user, 2026-10-14):
+    /// coming on, the scan fades out under the text and the structure's
+    /// lines fade in; going off, the reverse; the text itself never fades.
+    /// `--artifact-overlay-progress` (0 the scan alone, 1 the structure
+    /// alone) on the viewer while it runs or rests, none once off has run.
+    private func fadeOverlay() {
+      guard overlayOn || overlayLeaving else {
+        root.removeAttribute(data("overlay-fading"))
+        _ = root.style.removeProperty("--artifact-overlay-progress")
+        return
+      }
+      root.setAttribute(data("overlay-fading"), "true")
+      root.style.setProperty(
+        "--artifact-overlay-progress", doubleToString(overlayOn ? overlayProgress : 1 - overlayProgress))
+    }
+
     /// The overlay's motion so far, on its curve: 0 to 1.
     private var overlayProgress: Double {
       if window.matchMedia("(prefers-reduced-motion: reduce)") { return 1 }
@@ -2759,6 +2784,7 @@
       let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
       let stored = storedZoom()
       let resting = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
+      fadeOverlay()
       if overlayRegistered && (overlayOn || overlayLeaving) {
         placeOverlay(layer, frame: frame, in: pane, natural: natural, fit: fit, resting: resting)
         return
@@ -3643,23 +3669,37 @@
       // The main text's rows paired where they stand; each note's with the
       // scan's it gathered, each side from its own box's top-left (its
       // lines within it: gnorium-python `layout_measure.compare`'s
-      // marginalia), its place being the note's measured one.
-      var groups: [(edition: [StructureRow], scan: [ScanRow], from: (x: Double, y: Double), to: (x: Double, y: Double))] = [
-        (editionMain, scanMain, (0, 0), (0, 0))
-      ]
+      // marginalia), so a note set elsewhere still pairs line for line.
+      // A note's lines are judged by its own leading (user, 2026-10-14):
+      // an owner's mark (a hand, a stamp, a label) is none of the type
+      // scale, so its own measured line pitch—the median distance between
+      // its scan lines' tops, else its edition lines', else the body's
+      // leading for a line alone—is its L.
+      func pitch(_ rows: [StructureRow]) -> Double? {
+        guard rows.count > 1 else { return nil }
+        var steps: [Double] = []
+        for index in 1..<rows.count { steps.append(rows[index].top - rows[index - 1].top) }
+        steps.sort()
+        return steps[steps.count / 2]
+      }
+      var groups:
+        [(edition: [StructureRow], scan: [ScanRow], from: (x: Double, y: Double), to: (x: Double, y: Double), leading: Double)] = [
+          (editionMain, scanMain, (0, 0), (0, 0), leading)
+        ]
       for (index, note) in notes.enumerated() {
         let rows = scanRows(gathered[index])
         var reach = rows.first?.box ?? note.box
         for row in rows { reach = reach.joined(row.box) }
-        groups.append((note.rows, rows, (note.box.left, note.box.top), (reach.left, reach.top)))
+        let own = pitch(rows.map { $0.box }) ?? pitch(note.rows) ?? leading
+        groups.append((note.rows, rows, (note.box.left, note.box.top), (reach.left, reach.top), own))
       }
-      groups.append(([], scanRows(alone), (0, 0), (0, 0)))
+      groups.append(([], scanRows(alone), (0, 0), (0, 0), leading))
       var editionRowsAll: [StructureRow] = []
       var scanRowsAll: [ScanRow] = []
       func moved(_ row: StructureRow, by shift: (x: Double, y: Double)) -> StructureRow {
         StructureRow(left: row.left - shift.x, top: row.top - shift.y, right: row.right - shift.x, bottom: row.bottom - shift.y)
       }
-      for (edition, scan, from, to) in groups {
+      for (edition, scan, from, to, leading) in groups {
         editionRowsAll += edition
         scanRowsAll += scan
         var editionState = [String](repeating: "within", count: edition.count)
@@ -3668,7 +3708,12 @@
           edition: edition.map { moved($0, by: from) }, scan: scan.map { moved($0.box, by: to) }, leading: leading)
         {
           switch match {
-          case .pair(let e, let s, let within):
+          case .pair(let e, let s, _):
+            // Paired from their own boxes, judged where each stands: a
+            // note regularized to its canonical place (a bookplate
+            // centered) is orange where its measured place differs past
+            // its own tolerance (user, 2026-10-14).
+            let within = StructurePairing.within(edition[e], scan[s].box, leading: leading)
             editionState[e] = within ? "within" : "off"
             scanState[s] = within ? "within" : "off"
             // Each word to the word it overlaps most across, both ways
@@ -3722,7 +3767,7 @@
     /// the page's scan is laid by its text block; gnorium-python's review
     /// image draws the same scene for the model.
     private func drawStructure() {
-      let shown = overlayRegistered && overlayOn
+      let shown = overlayRegistered && (overlayOn || overlayLeaving)
       for drawn in root.querySelectorAll(".artifact-markup .artifact-structure") {
         if !shown { drawn.remove() }
       }
