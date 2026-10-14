@@ -1782,6 +1782,23 @@
       let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
       if !stringEquals(overlayTarget.page, id) || overlayTarget.box.count != 4 {
         let frame = layer.querySelector(".tei-text-block") ?? layer
+        // A derived text block (a page with no main text: the work frame
+        // placed on its scan, gnorium-python `layout_measure.derived_corners`)
+        // is the frame itself, laid on it whole; its marginalia keep their
+        // measured offsets from it.
+        if let derived = page.getAttribute(data("text-block-derived")), stringEquals(derived, "true"), frame !== layer,
+          let edges = frame.getBoundingClientRect(), zoom > 0
+        {
+          overlayTarget = (
+            id,
+            [
+              (edges.left - box.x) / zoom, (edges.top - box.y) / zoom, (edges.right - box.x) / zoom,
+              (edges.bottom - box.y) / zoom,
+            ],
+            true
+          )
+          return overlayTarget.box
+        }
         var ink = InkExtent()
         if let context = document.createElement("canvas").getContext("2d") {
           let walker = document.createTreeWalker(frame, DOM.NodeFilter.SHOW_TEXT)
@@ -1805,23 +1822,6 @@
         // frame's sides within a word space of its face (its lines
         // justified to the measure) spans it (`laid`).
         var spans = false
-        // A derived text block (a page with no main text: the work frame
-        // placed on its scan, gnorium-python `layout_measure.derived_corners`)
-        // is the frame itself, laid on it whole; its marginalia keep their
-        // measured offsets from it.
-        if let derived = page.getAttribute(data("text-block-derived")), stringEquals(derived, "true"), frame !== layer,
-          let edges = frame.getBoundingClientRect(), zoom > 0
-        {
-          overlayTarget = (
-            id,
-            [
-              (edges.left - box.x) / zoom, (edges.top - box.y) / zoom, (edges.right - box.x) / zoom,
-              (edges.bottom - box.y) / zoom,
-            ],
-            true
-          )
-          return overlayTarget.box
-        }
         if frame !== layer, let edges = frame.getBoundingClientRect() {
           ink.left = max(ink.left, edges.left)
           ink.right = min(ink.right, edges.right)
