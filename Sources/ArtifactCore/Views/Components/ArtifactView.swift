@@ -1514,7 +1514,7 @@
       _ = toggle.addEventListener("toggle-button-update") { [self] event in
         let on = stringEquals(event.detail, "true")
         if on && !self.overlayOn {
-          self.overlayTarget = ("", [])
+          self.overlayTarget = ("", [], false)
           self.overlayView = nil
           self.overlayFocus = nil
           self.overlayZoomStart = self.currentZoom()
@@ -1645,8 +1645,13 @@
     /// text block's box (`box`: left, top, right, bottom) by its height,
     /// centered across it, the scan's own proportions kept. A line's width
     /// is the face's, so a centered block's width is no measure of the
-    /// scan's, and is never stretched to it.
+    /// scan's, and is never stretched to it. A block spanning the frame's
+    /// measure (`overlayTarget.spans`: its lines justified to it) is laid
+    /// on by its width too: its measure is the print's, so a scanner's
+    /// stretch across the page is absorbed by the one affine map, never a
+    /// local warp.
     private func laid(_ box: [Double], zone: [Double], size: (width: Double, height: Double)) -> [Double] {
+      if overlayTarget.spans { return box }
       let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
       let across = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
       let down = ((corners[6] - corners[0]) * (corners[6] - corners[0]) + (corners[7] - corners[1]) * (corners[7] - corners[1])).squareRoot()
@@ -1766,10 +1771,21 @@
         }
         // Never wider than the frame: a line set wider than its measure
         // (a face wider than the print's) runs past it, and the scan's text
-        // block is the measure's.
+        // block is the measure's. A block whose ink reaches both of the
+        // frame's sides within a word space of its face (its lines
+        // justified to the measure) spans it (`laid`).
+        var spans = false
         if frame !== layer, let edges = frame.getBoundingClientRect() {
           ink.left = max(ink.left, edges.left)
           ink.right = min(ink.right, edges.right)
+          if let context = document.createElement("canvas").getContext("2d") {
+            let style = window.getComputedStyle(frame)
+            context.font =
+              style.getPropertyValue("font-style") + " " + style.getPropertyValue("font-weight") + " "
+              + style.getPropertyValue("font-size") + " " + style.getPropertyValue("font-family")
+            let space = context.measureText(" ").width * zoom
+            spans = ink.left - edges.left <= space && edges.right - ink.right <= space
+          }
         }
         guard let measured = ink.box, zoom > 0 else { return nil }
         overlayTarget = (
@@ -1777,7 +1793,8 @@
           [
             (measured[0] - box.x) / zoom, (measured[1] - box.y) / zoom, (measured[2] - box.x) / zoom,
             (measured[3] - box.y) / zoom,
-          ]
+          ],
+          spans
         )
       }
       return overlayTarget.box
@@ -1887,7 +1904,7 @@
 
     /// The shown page's rendered text block in its layer's own pixels
     /// (left, top, right, bottom), by its page's image and its layer.
-    private var overlayTarget: (page: String, box: [Double]) = ("", [])
+    private var overlayTarget: (page: String, box: [Double], spans: Bool) = ("", [], false)
 
     /// The overlay's registration (user, 2026-10-13): where the shown page's
     /// text block was measured on its scan (`overlayZone`), the scan is laid
