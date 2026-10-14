@@ -1567,6 +1567,8 @@
       guard let toggle = root.querySelector(".artifact-overlay-toggle") else { return }
       _ = toggle.addEventListener("toggle-button-update") { [self] event in
         let on = stringEquals(event.detail, "true")
+        // The word correspondence is side by side's alone.
+        if on { self.markEdition(nil) }
         if on && !self.overlayOn {
           self.overlayTarget = ("", [], false)
           self.overlayView = nil
@@ -3478,7 +3480,9 @@
         ]
       }
       var mainLines: [ScanRow] = []
-      var marginLines: [ScanRow] = []
+      // The scan's marginalia block by block (each a block zone, its lines
+      // after it): a note pairs with blocks, never with lines alone.
+      var marginBlocks: [(box: StructureRow, lines: [ScanRow])] = []
       var scanBlocks: [[Double]] = []
       var lineIsMain = true
       for zone in zones {
@@ -3486,16 +3490,21 @@
         switch zone.kind {
         case 0:
           scanBlocks.append(points)
+          if !zone.main { marginBlocks.append((bounds(points), [])) }
         case 1:
           lineIsMain = zone.main
           let row = ScanRow(box: bounds(points), lines: [points], words: [])
-          if zone.main { mainLines.append(row) } else { marginLines.append(row) }
+          if zone.main {
+            mainLines.append(row)
+          } else if !marginBlocks.isEmpty {
+            marginBlocks[marginBlocks.count - 1].lines.append(row)
+          }
         default:
           let word = (laid: bounds(points), space: spaceBox(zone.points))
           if lineIsMain, !mainLines.isEmpty {
             mainLines[mainLines.count - 1].words.append(word)
-          } else if !lineIsMain, !marginLines.isEmpty {
-            marginLines[marginLines.count - 1].words.append(word)
+          } else if !lineIsMain, let last = marginBlocks.indices.last, !marginBlocks[last].lines.isEmpty {
+            marginBlocks[last].lines[marginBlocks[last].lines.count - 1].words.append(word)
           }
         }
       }
@@ -3515,7 +3524,6 @@
         return rows
       }
       let scanMain = scanRows(mainLines)
-      let scanMargin = scanRows(marginLines)
 
       // The edition's: each line's ink in the layer's own pixels, side by
       // side one row; each block the box around its lines.
@@ -3546,7 +3554,67 @@
         return StructurePairing.rows(lines)
       }
       let editionMain = editionRows(of: [frame ?? layer])
-      let editionMargin = editionRows(of: layer.querySelectorAll(".tei-margin"))
+      // The edition's notes (each child of a margin area: a note's section
+      // or its printed frame), each its rows, its box and its place's sides
+      // (`TEIRenderer.marginalAreas`: "top-left" is top and margin-left).
+      var notes: [(box: StructureRow, rows: [StructureRow], sides: [String])] = []
+      for margin in layer.querySelectorAll(".tei-margin") {
+        let place = margin.getAttribute(data("place")) ?? ""
+        var sides: [String] = []
+        if stringStartsWith(place, "top") { sides.append("top") }
+        if stringStartsWith(place, "bottom") { sides.append("bottom") }
+        if stringEndsWith(place, "left") { sides.append("margin-left") }
+        if stringEndsWith(place, "right") { sides.append("margin-right") }
+        for note in margin.querySelectorAll(":scope > *") {
+          let rows = editionRows(of: [note])
+          guard var box = rows.first else { continue }
+          for row in rows { box = box.joined(row) }
+          notes.append((box, rows, sides))
+        }
+      }
+      // Each scan block of marginalia goes to the edition's note nearest it
+      // on its side of the frame (gnorium-python `layout_measure.side`: the
+      // side it lies wholly beyond, both at a corner, else the nearest
+      // edge), the frame the edition's, the scan laid in it: a note may
+      // gather several (a bookplate the measurement cuts in blocks).
+      let frameBox: StructureRow = {
+        guard let edges = (frame ?? layer).getBoundingClientRect() else { return StructureRow(left: 0, top: 0, right: 0, bottom: 0) }
+        return StructureRow(
+          left: (edges.left - box.x) / scale, top: (edges.top - box.y) / scale, right: (edges.right - box.x) / scale,
+          bottom: (edges.bottom - box.y) / scale)
+      }()
+      func sides(of block: StructureRow) -> [String] {
+        let beyond = [
+          ("top", frameBox.top - block.bottom), ("bottom", block.top - frameBox.bottom),
+          ("margin-left", frameBox.left - block.right), ("margin-right", block.left - frameBox.right),
+        ]
+        let clear = beyond.filter { $0.1 >= 0 }.map { $0.0 }
+        if !clear.isEmpty { return clear }
+        let middle = (block.top + block.bottom) / 2
+        let center = (block.left + block.right) / 2
+        let near = [
+          ("top", middle - frameBox.top), ("bottom", frameBox.bottom - middle), ("margin-left", center - frameBox.left),
+          ("margin-right", frameBox.right - center),
+        ]
+        var nearest = near[0]
+        for side in near where side.1 < nearest.1 { nearest = side }
+        return [nearest.0]
+      }
+      func distance(_ a: StructureRow, _ b: StructureRow) -> Double {
+        abs(a.top - b.top) + abs(a.bottom - b.bottom) + abs(a.left - b.left) + abs(a.right - b.right)
+      }
+      var gathered = [[ScanRow]](repeating: [], count: notes.count)
+      var alone: [ScanRow] = []
+      for block in marginBlocks {
+        let blockSides = sides(of: block.box)
+        var nearest: (index: Int, distance: Double)?
+        for (index, note) in notes.enumerated()
+        where note.sides.contains(where: { side in blockSides.contains { stringEquals($0, side) } }) {
+          let far = distance(note.box, block.box)
+          if nearest.map({ far < $0.distance }) ?? true { nearest = (index, far) }
+        }
+        if let nearest { gathered[nearest.index] += block.lines } else { alone += block.lines }
+      }
 
       // Paired, main text and marginalia apart; their states.
       var editionStates: [String] = []
@@ -3572,10 +3640,33 @@
           return middle >= row.top && middle <= row.bottom
         }.sorted { $0.box.left < $1.box.left }
       }
-      for (edition, scan) in [(editionMain, scanMain), (editionMargin, scanMargin)] {
+      // The main text's rows paired where they stand; each note's with the
+      // scan's it gathered, each side from its own box's top-left (its
+      // lines within it: gnorium-python `layout_measure.compare`'s
+      // marginalia), its place being the note's measured one.
+      var groups: [(edition: [StructureRow], scan: [ScanRow], from: (x: Double, y: Double), to: (x: Double, y: Double))] = [
+        (editionMain, scanMain, (0, 0), (0, 0))
+      ]
+      for (index, note) in notes.enumerated() {
+        let rows = scanRows(gathered[index])
+        var reach = rows.first?.box ?? note.box
+        for row in rows { reach = reach.joined(row.box) }
+        groups.append((note.rows, rows, (note.box.left, note.box.top), (reach.left, reach.top)))
+      }
+      groups.append(([], scanRows(alone), (0, 0), (0, 0)))
+      var editionRowsAll: [StructureRow] = []
+      var scanRowsAll: [ScanRow] = []
+      func moved(_ row: StructureRow, by shift: (x: Double, y: Double)) -> StructureRow {
+        StructureRow(left: row.left - shift.x, top: row.top - shift.y, right: row.right - shift.x, bottom: row.bottom - shift.y)
+      }
+      for (edition, scan, from, to) in groups {
+        editionRowsAll += edition
+        scanRowsAll += scan
         var editionState = [String](repeating: "within", count: edition.count)
         var scanState = [String](repeating: "within", count: scan.count)
-        for match in StructurePairing.pair(edition: edition, scan: scan.map { $0.box }, leading: leading) {
+        for match in StructurePairing.pair(
+          edition: edition.map { moved($0, by: from) }, scan: scan.map { moved($0.box, by: to) }, leading: leading)
+        {
           switch match {
           case .pair(let e, let s, let within):
             editionState[e] = within ? "within" : "off"
@@ -3596,10 +3687,10 @@
               }
               return found?.index
             }
-            let ourBoxes = ours.map { $0.box }
-            let theirBoxes = theirs.map { $0.laid }
+            let ourBoxes = ours.map { moved($0.box, by: from) }
+            let theirBoxes = theirs.map { moved($0.laid, by: to) }
             for (index, word) in ours.enumerated() {
-              guard let other = best(word.box, among: theirBoxes), best(theirBoxes[other], among: ourBoxes) == index
+              guard let other = best(ourBoxes[index], among: theirBoxes), best(theirBoxes[other], among: ourBoxes) == index
               else { continue }
               words.append((word.element, theirs[other].space))
             }
@@ -3613,8 +3704,8 @@
         scanStates += scanState
       }
       let made = Structure(
-        key: key, leading: leading, editionRows: editionMain + editionMargin, editionBlocks: blocks.map { $0.box },
-        scanRows: scanMain + scanMargin, scanBlocks: scanBlocks, editionStates: editionStates, scanStates: scanStates,
+        key: key, leading: leading, editionRows: editionRowsAll, editionBlocks: blocks.map { $0.box },
+        scanRows: scanRowsAll, scanBlocks: scanBlocks, editionStates: editionStates, scanStates: scanStates,
         words: words)
       structure = made
       return made
