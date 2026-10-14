@@ -572,6 +572,13 @@
           CSS.Property("will-change", "width, height, inset-inline-start, inset-block-start")
           media("(prefers-reduced-motion: reduce)") { CSS.Property("transition", "none") }
         }
+        // A page with no measured main text block: the scan comes to its
+        // opacity on the same clock and curve as the panes' move (a
+        // registered page's follows `--artifact-overlay-progress` instead).
+        selector("&[data-canvas-shown='true']:not([data-overlay-registered='true']):has(.artifact-markup-frame) .artifact-object") {
+          CSS.Property("transition", Self.overlayTransition + ", opacity " + OverlayMotion.timing)
+          media("(prefers-reduced-motion: reduce)") { CSS.Property("transition", "none") }
+        }
         selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
           CSS.Property("inset-inline-start", "50%")
           media(maxWidth(maxWidthBreakpointMobile)) {
