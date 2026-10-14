@@ -61,27 +61,46 @@ enum OverlayMotion {
 }
 
 /// Where the overlay holds the edition's page (user, 2026-10-14): its
-/// text frame, onto which the scan's text block is laid, with the page's
-/// own equal margins around it, as the render draws it. The whole page at
-/// its fit, centered, held still: a fixed comparison no gesture pans or
-/// zooms. The scan's margins are trimmed, and the edition's show the page's
-/// ground alone.
+/// page, its text frame onto which the scan's main text block is laid, and
+/// as far as the registered scan reaches beyond it (`content`, in the
+/// layer's own pixels: left, top, right, bottom), so the full image shows.
+/// It opens at its fit, centered; the reader zooms and pans it from there,
+/// the text and the scan as one, never below the fit and never so far that
+/// the content leaves the view where it could fill it (`held`).
 struct OverlayFraming {
-  /// The page's size in its layer's own pixels, unzoomed.
-  let page: (width: Double, height: Double)
+  /// What the view frames, in the layer's own pixels, unzoomed.
+  let content: (left: Double, top: Double, right: Double, bottom: Double)
   /// The view: its width and height.
   let width: Double
   let height: Double
+  /// The most it zooms in: the larger of the text's actual size and the
+  /// scan's (its pixels one to one).
+  let actual: Double
 
-  /// The zoom at which the whole page fits the view.
+  /// The zoom at which the whole content fits the view.
   var fit: Double {
-    guard page.width > 0, page.height > 0 else { return 1 }
-    return max(0, min(width / page.width, height / page.height))
+    let across = content.right - content.left
+    let down = content.bottom - content.top
+    guard across > 0, down > 0 else { return 1 }
+    return max(0, min(width / across, height / down))
   }
 
-  /// The page fitted and centered: its zoom, and its origin in the view.
+  /// The content fitted and centered: its zoom, and the layer's origin in
+  /// the view.
   var fitted: (zoom: Double, x: Double, y: Double) {
-    let zoom = fit
-    return (zoom, (width - page.width * zoom) / 2, (height - page.height * zoom) / 2)
+    held((fit, 0, 0))
+  }
+
+  /// A view held to the framing: its zoom between the fit and the actual
+  /// size; the content centered on an axis where it is smaller than the
+  /// view, else filling it, no edge pulled in past the view's.
+  func held(_ view: (zoom: Double, x: Double, y: Double)) -> (zoom: Double, x: Double, y: Double) {
+    let zoom = max(fit, min(max(fit, actual), view.zoom))
+    func axis(_ value: Double, _ low: Double, _ high: Double, _ size: Double) -> Double {
+      let extent = (high - low) * zoom
+      if extent <= size { return (size - extent) / 2 - low * zoom }
+      return min(-low * zoom, max(size - high * zoom, value))
+    }
+    return (zoom, axis(view.x, content.left, content.right, width), axis(view.y, content.top, content.bottom, height))
   }
 }

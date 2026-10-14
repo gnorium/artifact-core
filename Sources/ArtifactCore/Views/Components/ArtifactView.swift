@@ -535,6 +535,13 @@
           width(.maxContent).important()
           maxWidth(.none).important()
         }
+        // The rendered page takes the pane's cursor (the hand where a drag
+        // pans, the I-beam over its text), whatever its view sets for itself
+        // (an editable reader's, a Revise page's, sets the arrow, user,
+        // 2026-10-14); a word with a gloss keeps its own.
+        selector("& .artifact-markup [data-layer='rendering']", "& .artifact-markup [data-layer='translated-rendering']") {
+          CSS.Property("cursor", "inherit").important()
+        }
         descendant(".artifact-markup[data-over-text='true']") { cursor(.text) }
         descendant(".artifact-markup[data-dragging='true']") { cursor(.grabbing) }
         selector("& .artifact-markup") {
@@ -588,6 +595,11 @@
         }
         selector("&[data-overlay-active='true'] .artifact-markup-frame") {
           zIndex(1)
+        }
+        // Unregistered, the overlay leaves the scan as the reader left it,
+        // and the text over it takes no pointer; registered, the text's
+        // pane takes every gesture, moving the text and the scan as one.
+        selector("&[data-overlay-active='true']:not([data-overlay-registered='true']) .artifact-markup-frame") {
           CSS.Property("pointer-events", "none")
         }
         selector("&[data-overlay-active='true'] .artifact-markup") {
@@ -606,12 +618,13 @@
         selector("&[data-overlay-active='true'] .artifact-object") {
           CSS.Property("opacity", "\(Self.overlayScanOpacity)")
         }
-        // A page whose text block was measured on its scan (user,
-        // 2026-10-14), from overlay on until overlay off has run back: the
-        // edition's page on top, on no ground of its own, held still (never
-        // scrolled, zoomed or panned), the scan under it; the scan coming to
-        // its opacity under it as the overlay does
-        // (`--artifact-overlay-progress`, 0 to 1).
+        // A page whose main text block was measured on its scan (user,
+        // 2026-10-14), from overlay on until overlay off has run: the
+        // edition's page on top, on no ground of its own, never scrolled
+        // (its zoom and pan the overlay's own, the scan's with it), the
+        // whole scan under it; the scan coming to its opacity under it and
+        // back on the overlay's one clock (`--artifact-overlay-progress`, 0
+        // to 1).
         selector("&[data-overlay-registered='true'] .artifact-markup-frame") {
           zIndex(1)
         }
@@ -1470,14 +1483,26 @@
     private var overlayZoomBegan = 0.0
     private var overlayScrollStart = (x: 0.0, y: 0.0)
     private var overlayMotion = 0
-    /// Overlay turned off, the text still on its way back to its zoom and
-    /// scroll: the same motion as the way in, run backward.
+    /// Overlay turned off, the panes still on their way apart: the text
+    /// and the scan slide into their own panes at the overlay's zoom (user,
+    /// 2026-10-14).
     private var overlayLeaving = false
+    /// The overlay's view at rest, where the reader zoomed and panned it
+    /// (user, 2026-10-14): the text and the scan under it move as one; nil
+    /// at its fit (`OverlayFraming.fitted`).
+    private var overlayView: (zoom: Double, x: Double, y: Double)?
+    /// The overlay's framing last placed: what the reader's zoom and pan
+    /// are held to.
+    private var lastFraming: OverlayFraming?
+    /// Where the reader was looking when the overlay went off: a point of
+    /// the page in its layer's own pixels and the zoom, which the text pane
+    /// keeps at its middle as the panes slide apart.
+    private var overlayFocus: (x: Double, y: Double, zoom: Double)?
     /// Whether the overlay lays the scan under the text by the page's
-    /// text block (`overlayZone`), from overlay on until overlay off has run
-    /// back (user, 2026-10-14): the scan's margins trimmed, the edition's
-    /// whole page framed (`OverlayFraming`), its zoom and place the
-    /// overlay's own rather than the pane's zoom and scroll.
+    /// main text block (`overlayZone`), from overlay on until overlay off
+    /// has run (user, 2026-10-14): the whole scan shown, the edition's page
+    /// and the scan's reach framed (`OverlayFraming`), its zoom and place
+    /// the overlay's own rather than the pane's zoom and scroll.
     private var overlayRegistered = false
     /// Where the layer was in the window, and its zoom, when the overlay's
     /// motion began: what the motion leaves from.
@@ -1490,6 +1515,8 @@
         let on = stringEquals(event.detail, "true")
         if on && !self.overlayOn {
           self.overlayTarget = ("", [])
+          self.overlayView = nil
+          self.overlayFocus = nil
           self.overlayZoomStart = self.currentZoom()
           self.overlayScrollStart = (self.markupPane?.scrollLeft ?? 0, self.markupPane?.scrollTop ?? 0)
           self.overlayZoomBegan = window.performance.now()
@@ -1510,8 +1537,14 @@
           self.overlayZoomStart = self.currentZoom()
           self.overlayZoomBegan = window.performance.now()
           self.overlayLeaving = true
-          if self.overlayRegistered { self.overlayFrom = self.layerPlace() }
-          self.setZoom(before.zoom, atFit: before.atFit)
+          if self.overlayRegistered {
+            // The panes slide apart at the overlay's zoom, each keeping
+            // the spot the reader was looking at (user, 2026-10-14).
+            self.overlayFrom = self.layerPlace()
+            self.leaveOverlay()
+          } else {
+            self.setZoom(before.zoom, atFit: before.atFit)
+          }
           self.beforeOverlay = nil
         }
         self.overlayOn = on
@@ -1532,25 +1565,114 @@
           if self.overlayProgress < 1 || moving {
             _ = window.requestAnimationFrame { frame() }
           } else if !on {
-            // Back at its zoom, with the panels at their normal sizes:
-            // matching resumes from the restored text view rather than the
-            // registered scan.
+            // The panes apart at their normal sizes: the text at the
+            // overlay's zoom, the spot the reader was looking at in its
+            // middle; the scan at the same spot and zoom, where the
+            // registration's way out left it. Matching resumes from there.
             self.overlayLeaving = false
             let registered = self.overlayRegistered
+            // The spot the pane's own layout can hold in its middle: the
+            // scan is sent to it, so the two show one point.
+            if registered, let focus = self.overlayFocus, let pane = self.markupPane, let layer = self.shownLayer(),
+              let natural = self.naturalSize(of: layer)
+            {
+              let view = self.leavingView(focus, natural: natural, in: pane)
+              let middle = (
+                x: (Double(pane.clientWidth) / 2 - view.x) / focus.zoom, y: (Double(pane.clientHeight) / 2 - view.y) / focus.zoom
+              )
+              self.overlayFocus = (middle.x, middle.y, focus.zoom)
+              self.sendScan(to: middle, zoom: focus.zoom)
+            }
             self.setOverlayRegistered(false)
             self.applyZoom(about: nil)
             if registered, let pane = self.markupPane {
-              pane.scrollLeft = self.overlayScrollStart.x
-              pane.scrollTop = self.overlayScrollStart.y
+              if let focus = self.overlayFocus, let layer = self.shownLayer(), let box = layer.getBoundingClientRect(),
+                let paneBox = pane.getBoundingClientRect()
+              {
+                let zoom = self.currentZoom()
+                pane.scrollLeft += box.x - paneBox.x - Double(pane.clientLeft) + focus.x * zoom - Double(pane.clientWidth) / 2
+                pane.scrollTop += box.y - paneBox.y - Double(pane.clientTop) + focus.y * zoom - Double(pane.clientHeight) / 2
+              }
               self.matchedScroll = (pane.scrollLeft, pane.scrollTop)
+              self.overlayFocus = nil
+            } else if self.syncs {
+              self.matchImage()
             }
-            if self.syncs { self.matchImage() }
           }
         }
         _ = window.requestAnimationFrame { frame() }
       }
       reflectSyncApplies()
     }
+
+    /// The overlay going off (user, 2026-10-14): the spot of the page at
+    /// the middle of the view, and the zoom, which the text keeps as its
+    /// pane slides back (`overlayFocus`); the scan sent to the same spot of
+    /// its image at the zoom it is seen at (`CanvasReader.endRegistration`),
+    /// through the registration's homography taken back.
+    private func leaveOverlay() {
+      guard let pane = markupPane, let paneBox = pane.getBoundingClientRect(), let place = layerPlace(), place.zoom > 0
+      else { return }
+      let x = (paneBox.x + Double(pane.clientLeft) + Double(pane.clientWidth) / 2 - place.x) / place.zoom
+      let y = (paneBox.y + Double(pane.clientTop) + Double(pane.clientHeight) / 2 - place.y) / place.zoom
+      overlayFocus = (x, y, place.zoom)
+      setZoom(place.zoom, atFit: false)
+      sendScan(to: (x, y), zoom: place.zoom)
+    }
+
+    /// The scan sent to the point of its image under `spot` (the page's
+    /// point, in the layer's own pixels) at the zoom the text is drawn at
+    /// (`CanvasReader.endRegistration`), through the registration's
+    /// homography taken back.
+    private func sendScan(to spot: (x: Double, y: Double), zoom: Double) {
+      let x = spot.x
+      let y = spot.y
+      let place = (zoom: zoom, x: 0.0, y: 0.0)
+      guard let zone = overlayZone(), overlayTarget.box.count == 4, let size = shownImageSize else { return }
+      let box = laid(overlayTarget.box, zone: zone, size: size)
+      let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
+      let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
+      guard let back = Homography(from: target, to: corners) else { return }
+      let spot = back.apply(x: x, y: y)
+      let zoneSpan = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
+      guard zoneSpan > 0 else { return }
+      shownCanvas?.endRegistration(
+        centerX: spot.x / size.width, centerY: spot.y / size.height, zoom: place.zoom * (box[2] - box[0]) / zoneSpan)
+    }
+
+    /// Where registration lays the zone (gnorium-python
+    /// `layout_measure.laid_on`, user, 2026-10-14): onto the rendered main
+    /// text block's box (`box`: left, top, right, bottom) by its height,
+    /// centered across it, the scan's own proportions kept. A line's width
+    /// is the face's, so a centered block's width is no measure of the
+    /// scan's, and is never stretched to it.
+    private func laid(_ box: [Double], zone: [Double], size: (width: Double, height: Double)) -> [Double] {
+      let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
+      let across = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
+      let down = ((corners[6] - corners[0]) * (corners[6] - corners[0]) + (corners[7] - corners[1]) * (corners[7] - corners[1])).squareRoot()
+      guard down > 0 else { return box }
+      let half = across * (box[3] - box[1]) / down / 2
+      let middle = (box[0] + box[2]) / 2
+      return [middle - half, box[1], middle + half, box[3]]
+    }
+
+    /// The shown layer's size unzoomed, its scale's frame's.
+    private func naturalSize(of layer: DOM.Element) -> (width: Double, height: Double)? {
+      let zoom = currentZoom()
+      guard zoom > 0, let box = layer.getBoundingClientRect() else { return nil }
+      return (box.width / zoom, box.height / zoom)
+    }
+
+    /// The shown canvas's image size in its pixels, nil until known.
+    private var shownImageSize: (width: Double, height: Double)? {
+      guard canvasIndex < imageWidths.count, canvasIndex < imageHeights.count, imageWidths[canvasIndex] > 0,
+        imageHeights[canvasIndex] > 0
+      else { return nil }
+      return (Double(imageWidths[canvasIndex]), Double(imageHeights[canvasIndex]))
+    }
+
+    /// The space a zone's corners are in, over the whole image.
+    private static let zoneExtent = 1000.0
 
     private func setOverlayRegistered(_ registered: Bool) {
       overlayRegistered = registered
@@ -1771,77 +1893,89 @@
     /// text block was measured on its scan (`overlayZone`), the scan is laid
     /// by the projective transform that takes those corners to the rendered
     /// text block's (`renderedTextBlock`), eased in with the overlay's own
-    /// motion and out with it (`CanvasReader.register`), its margins
-    /// trimmed away as it comes. Without one, the scan is as before.
+    /// motion and out with it (`CanvasReader.register`), the whole scan
+    /// shown. Without one, the scan is as before.
     private func registerOverlay() {
       guard let canvas = shownCanvas else { return }
       let progress = overlayOn ? overlayProgress : overlayLeaving ? 1 - overlayProgress : 0
       guard overlayRegistered, overlayOn || overlayLeaving, let zone = overlayZone(), let layer = shownLayer(),
-        let target = renderedTextBlock(in: layer)
+        let measured = renderedTextBlock(in: layer)
       else {
         canvas.clearRegistration()
         return
       }
+      let box = shownImageSize.map { laid([measured[0], measured[1], measured[2], measured[5]], zone: zone, size: $0) }
+        ?? [measured[0], measured[1], measured[2], measured[5]]
+      let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
       root.style.setProperty("--artifact-overlay-progress", doubleToString(progress))
       canvas.register(zone: zone, onto: target, progress: progress)
     }
 
     /// The overlay's framing of the shown layer (`OverlayFraming`) in the
-    /// pane as it is now: the edition's whole page, `natural` its size
-    /// unzoomed.
-    private func overlayFraming(natural: (width: Double, height: Double), in pane: DOM.Element) -> OverlayFraming
+    /// pane as it is now: the edition's whole page (`natural` its size
+    /// unzoomed) and as far as the registered scan reaches beyond it, so all
+    /// of the scan shows (user, 2026-10-14); the reader's zoom held between
+    /// its fit and the larger of the text's and the scan's actual sizes.
+    private func overlayFraming(layer: DOM.Element, natural: (width: Double, height: Double), in pane: DOM.Element)
+      -> OverlayFraming
     {
-      OverlayFraming(page: natural, width: Double(pane.clientWidth), height: Double(pane.clientHeight))
+      var content = (left: 0.0, top: 0.0, right: natural.width, bottom: natural.height)
+      var actual = ViewerZoom.actualSize
+      if let zone = overlayZone(), let size = shownImageSize, let measured = textBlock(in: layer, drawnAt: 1) {
+        let box = laid(measured, zone: zone, size: size)
+        let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
+        let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
+        if let laid = Homography(from: corners, to: target) {
+          for (x, y) in [(0.0, 0.0), (size.width, 0), (size.width, size.height), (0, size.height)] {
+            let point = laid.apply(x: x, y: y)
+            content = (
+              min(content.left, point.x), min(content.top, point.y), max(content.right, point.x),
+              max(content.bottom, point.y)
+            )
+          }
+        }
+        let zoneSpan = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
+        if box[2] > box[0] { actual = max(actual, zoneSpan / (box[2] - box[0])) }
+      }
+      return OverlayFraming(content: content, width: Double(pane.clientWidth), height: Double(pane.clientHeight), actual: actual)
     }
 
     /// The layer where the overlay frames it (user, 2026-10-14): on its
-    /// way in from where the reader had it to its whole page's fit,
-    /// centered, the edition's margins kept around its text frame; there,
-    /// held still, a fixed comparison no gesture moves; on its way out back
-    /// to the zoom and the scroll the pane had (`resting`,
-    /// `overlayScrollStart`). Set by the layer's scale and its frame's
+    /// way in from where the reader had it to its fit, centered, the
+    /// edition's page and the scan's reach framed; there, at the reader's
+    /// own zoom and pan, the text and the scan under it moving as one
+    /// (`overlayView`, held to the framing); on its way out at that zoom,
+    /// sliding into its own pane with the spot the reader was looking at in
+    /// its middle (`overlayFocus`). Set by the layer's scale and its frame's
     /// translation, the pane never scrolled.
     private func placeOverlay(
       _ layer: DOM.Element, frame: DOM.Element, in pane: DOM.Element, natural: DOM.Rect, fit: Double, resting: Double
     ) {
       guard let paneBox = pane.getBoundingClientRect() else { return }
-      let framing = overlayFraming(natural: (natural.width, natural.height), in: pane)
+      let framing = overlayFraming(layer: layer, natural: (natural.width, natural.height), in: pane)
+      lastFraming = framing
       let origin = (x: paneBox.x + Double(pane.clientLeft), y: paneBox.y + Double(pane.clientTop))
       let progress = overlayProgress
-      func size(_ zoom: Double) {
-        frame.style.setProperty("width", doubleToString(natural.width * zoom) + "px")
-        frame.style.setProperty("height", doubleToString(natural.height * zoom) + "px")
-      }
       _ = frame.style.removeProperty("transform")
       var view: (zoom: Double, x: Double, y: Double)
+      let from = overlayFrom.map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? framing.fitted
+      func between(_ a: Double, _ b: Double) -> Double { a + (b - a) * progress }
       if overlayOn && progress >= 1 {
-        view = framing.fitted
-      } else {
-        // The motion's two ends, in the pane: where it began, and the
-        // page's fit (in) or the pane's own zoom and scroll (out).
-        let from = overlayFrom.map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? framing.fitted
-        var to = framing.fitted
-        if overlayLeaving {
-          size(resting)
-          frame.style.setProperty("margin-inline-start", "0")
-          pane.scrollLeft = 0
-          pane.scrollTop = 0
-          if let base = layer.getBoundingClientRect() {
-            let inset = max(0, base.x - origin.x)
-            frame.style.setProperty(
-              "margin-inline-start",
-              doubleToString(max(0, (Double(pane.clientWidth) - 2 * inset - natural.width * resting) / 2)) + "px")
-          }
-          pane.scrollLeft = overlayScrollStart.x
-          pane.scrollTop = overlayScrollStart.y
-          if let back = layer.getBoundingClientRect() {
-            to = (resting, back.x - origin.x, back.y - origin.y)
-          }
-        }
-        func between(_ a: Double, _ b: Double) -> Double { a + (b - a) * progress }
+        view = framing.held(overlayView ?? framing.fitted)
+        overlayView = view
+      } else if overlayOn {
+        let to = framing.fitted
         view = (between(from.zoom, to.zoom), between(from.x, to.x), between(from.y, to.y))
+      } else {
+        // Out: at the overlay's zoom, the spot in the middle of the pane
+        // as it is now (it grows back to its own size on the same clock),
+        // as near as the pane's own layout lets it be.
+        let focus = overlayFocus ?? (x: 0, y: 0, zoom: from.zoom)
+        let to = leavingView(focus, natural: (natural.width, natural.height), in: pane)
+        view = (between(from.zoom, focus.zoom), between(from.x, to.x), between(from.y, to.y))
       }
-      size(view.zoom)
+      frame.style.setProperty("width", doubleToString(natural.width * view.zoom) + "px")
+      frame.style.setProperty("height", doubleToString(natural.height * view.zoom) + "px")
       frame.style.setProperty("margin-inline-start", "0")
       layer.style.setProperty("transform", "scale(" + doubleToString(view.zoom) + ")")
       layer.setAttribute(data("zoom"), doubleToString(view.zoom))
@@ -1858,10 +1992,52 @@
       registerOverlay()
     }
 
-    /// Whether the overlay holds the panes still (user, 2026-10-14): from
-    /// overlay on until overlay off has run back, no wheel, drag, pinch,
-    /// touch or key pans or zooms either, the edition's whole page and the
-    /// scan under it a fixed comparison.
+    /// Where the text's pane holds the page at the overlay's zoom, the spot
+    /// the reader was looking at (`focus`, in the layer's own pixels) in
+    /// its middle, as near as the pane's own layout lets it be: a page no
+    /// wider than the pane centered across it, no taller than it at its
+    /// top; else no edge pulled in past the pane's.
+    private func leavingView(
+      _ focus: (x: Double, y: Double, zoom: Double), natural: (width: Double, height: Double), in pane: DOM.Element
+    ) -> (x: Double, y: Double) {
+      let width = Double(pane.clientWidth)
+      let height = Double(pane.clientHeight)
+      let across = natural.width * focus.zoom
+      let down = natural.height * focus.zoom
+      let x = across <= width ? (width - across) / 2 : min(0, max(width - across, width / 2 - focus.x * focus.zoom))
+      let y = down <= height ? 0 : min(0, max(height - down, height / 2 - focus.y * focus.zoom))
+      return (x, y)
+    }
+
+    /// Whether the overlay is at rest, laid by registration: the reader's
+    /// zoom and pan move the text and the scan under it as one (user,
+    /// 2026-10-14).
+    private var overlayRests: Bool { overlayRegistered && overlayOn && overlayProgress >= 1 }
+
+    /// The overlay's view zoomed to `value` about `anchor` (a point of the
+    /// pane), the page's point under it kept there, held to the framing.
+    private func zoomOverlay(to value: Double, about anchor: (x: Double, y: Double)) {
+      guard let framing = lastFraming else { return }
+      let view = overlayView ?? framing.fitted
+      let point = ((anchor.x - view.x) / view.zoom, (anchor.y - view.y) / view.zoom)
+      let zoom = framing.held((value, 0, 0)).zoom
+      overlayView = framing.held((zoom, anchor.x - point.0 * zoom, anchor.y - point.1 * zoom))
+      applyZoom(about: nil)
+    }
+
+    /// The overlay's view moved by `dx`, `dy` (the pane's pixels), held to
+    /// the framing.
+    private func panOverlay(by dx: Double, _ dy: Double) {
+      guard let framing = lastFraming else { return }
+      let view = overlayView ?? framing.fitted
+      overlayView = framing.held((view.zoom, view.x + dx, view.y + dy))
+      applyZoom(about: nil)
+    }
+
+    /// Whether the overlay holds the panes to its own motion: from overlay
+    /// on until overlay off has run, no gesture moves either pane on its
+    /// own; at rest, registered, the reader's zoom and pan move both as one
+    /// (`overlayRests`).
     private var overlayLocked: Bool { overlayOn || overlayLeaving }
 
     /// Which zoom the shown layer keeps: the code's (Raw) or the page's.
@@ -1943,6 +2119,7 @@
         "touchend",
         { [self] e in
           if e.touchCount < 2 { self.pinchStart = nil }
+          if e.touchCount < 1 { self.touchStart = nil }
         }, capture: false, passive: true)
       // Safari's trackpad pinch: WebKit's gesture events, not ctrl+wheel.
       // Zoomed about the gesture's point from the zoom it began at, by its
@@ -1952,6 +2129,7 @@
         { [self] e in
           guard !self.rawVisible else { return }
           e.preventDefault()
+          if self.overlayRests { self.gestureStartZoom = self.currentZoom() }
           guard !self.overlayLocked else { return }
           self.gestureStartZoom = self.currentZoom()
         }, capture: false, passive: false)
@@ -1960,7 +2138,11 @@
         { [self] e in
           guard !self.rawVisible else { return }
           e.preventDefault()
-          guard !self.overlayLocked, let pane = self.markupPane, let box = pane.getBoundingClientRect() else { return }
+          guard let pane = self.markupPane, let box = pane.getBoundingClientRect() else { return }
+          if self.overlayRests {
+            self.zoomOverlay(to: self.gestureStartZoom * e.webKitGestureScale, about: (e.clientX - box.x, e.clientY - box.y))
+          }
+          guard !self.overlayLocked else { return }
           self.zoom(to: self.gestureStartZoom * e.webKitGestureScale, about: (e.clientX - box.x, e.clientY - box.y))
         }, capture: false, passive: false)
       _ = pane.addEventListener("gestureend", { [self] e in if !self.rawVisible { e.preventDefault() } }, capture: false, passive: false)
@@ -1975,6 +2157,11 @@
       if rawVisible { return }
       guard let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
       event.preventDefault()
+      if overlayRests {
+        zoomOverlay(
+          to: currentZoom() * ViewerZoom.wheelFactor(event.deltaY), about: (event.clientX - box.x, event.clientY - box.y))
+        return
+      }
       guard !overlayLocked else { return }
       zoom(
         to: currentZoom() * ViewerZoom.wheelFactor(event.deltaY),
@@ -1983,9 +2170,27 @@
 
     /// Two fingers zoom about their midpoint, by how far they spread.
     private func pinch(_ event: Event) {
-      // The overlay held still: no finger moves it, nor scrolls the pane.
+      // The overlay at rest: one finger pans it, two zoom it, the text and
+      // the scan as one; in its motion no finger moves it.
       if overlayLocked {
         event.preventDefault()
+        guard overlayRests, let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
+        if event.touchCount == 1 {
+          let x = event.touchClientX(0), y = event.touchClientY(0)
+          if let last = touchStart { panOverlay(by: x - last.x, y - last.y) }
+          touchStart = (x, y)
+        } else if event.touchCount == 2 {
+          touchStart = nil
+          let x0 = event.touchClientX(0), y0 = event.touchClientY(0)
+          let x1 = event.touchClientX(1), y1 = event.touchClientY(1)
+          let distance = ((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)).squareRoot()
+          guard distance > 0 else { return }
+          guard let start = pinchStart else {
+            pinchStart = (distance, currentZoom())
+            return
+          }
+          zoomOverlay(to: start.zoom * distance / start.distance, about: ((x0 + x1) / 2 - box.x, (y0 + y1) / 2 - box.y))
+        }
         return
       }
       guard !rawVisible, event.touchCount == 2, let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
@@ -2001,6 +2206,8 @@
       zoom(to: start.zoom * distance / start.distance, about: ((x0 + x1) / 2 - box.x, (y0 + y1) / 2 - box.y))
     }
 
+    /// One finger on the overlay at rest: where it was last.
+    private var touchStart: (x: Double, y: Double)?
     /// A drag under way: where it began, and the scroll it began at.
     private var panStart: (x: Double, y: Double, left: Double, top: Double)?
     private var panMoveListener: Int32 = -1
@@ -2032,7 +2239,32 @@
     /// a double or triple click (a word, a line) and Shift (extend) are left
     /// to the browser's own selection.
     private func beginPan(_ event: Event) {
-      guard !overlayLocked, let pane = markupPane, event.button == 0, event.clickCount <= 1, !event.shiftKey,
+      if overlayLocked {
+        guard overlayRests, event.button == 0, event.clickCount <= 1, !event.shiftKey,
+          !isOnText(x: event.clientX, y: event.clientY), let pane = markupPane
+        else { return }
+        // The overlay at rest: a drag pans the text and the scan as one.
+        event.preventDefault()
+        pane.focus(DOM.FocusOptions(preventScroll: true))
+        panMoved = false
+        panStart = (event.clientX, event.clientY, 0, 0)
+        endPan()
+        panMoveListener = window.addEventListener(.mousemove) { [self] e in
+          guard let start = self.panStart else { return }
+          if e.clientX != start.x || e.clientY != start.y {
+            self.panMoved = true
+            self.markupPane?.setAttribute(data("dragging"), "true")
+          }
+          self.panOverlay(by: e.clientX - start.x, e.clientY - start.y)
+          self.panStart = (e.clientX, e.clientY, 0, 0)
+        }
+        panUpListener = window.addEventListener(.mouseup) { [self] _ in
+          self.panStart = nil
+          self.endPan()
+        }
+        return
+      }
+      guard let pane = markupPane, event.button == 0, event.clickCount <= 1, !event.shiftKey,
         !isOnText(x: event.clientX, y: event.clientY)
       else { return }
       // Code being edited takes its own presses: its caret, its selection.
@@ -2078,12 +2310,37 @@
     private func zoomKey(_ event: Event) {
       // The pane's own keys, when it has the focus: a word's arrows move
       // between words, a field's its caret.
-      guard !rawVisible, !overlayLocked, let pane = markupPane, let target = event.target, target.id == pane.id,
+      guard !rawVisible, let pane = markupPane, let target = event.target, target.id == pane.id,
         let box = pane.getBoundingClientRect()
       else { return }
-      textMatchAnimation += 1
       let key = event.key
       let middle = (box.width / 2, box.height / 2)
+      if overlayLocked {
+        // The overlay at rest: its keys move the text and the scan as one.
+        guard overlayRests else { return }
+        if stringEquals(key, "+") || stringEquals(key, "=") {
+          zoomOverlay(to: currentZoom() * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), about: middle)
+        } else if stringEquals(key, "-") {
+          zoomOverlay(to: currentZoom() * ViewerZoom.wheelFactor(ViewerZoom.wheelTravel), about: middle)
+        } else if stringEquals(key, "0") {
+          overlayView = nil
+          applyZoom(about: nil)
+        } else if stringEquals(key, "ArrowLeft") {
+          panOverlay(by: ViewerZoom.wheelTravel, 0)
+        } else if stringEquals(key, "ArrowRight") {
+          panOverlay(by: -ViewerZoom.wheelTravel, 0)
+        } else if stringEquals(key, "ArrowUp") {
+          panOverlay(by: 0, ViewerZoom.wheelTravel)
+        } else if stringEquals(key, "ArrowDown") {
+          panOverlay(by: 0, -ViewerZoom.wheelTravel)
+        } else {
+          return
+        }
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+      textMatchAnimation += 1
       if stringEquals(key, "+") || stringEquals(key, "=") {
         zoom(to: currentZoom() * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), about: middle)
       } else if stringEquals(key, "-") {
@@ -2392,8 +2649,16 @@
       layer.style.setProperty("position", "absolute")
       layer.style.setProperty("inset", "0 auto auto 0")
       layer.style.setProperty("margin-inline-start", "0")
-      layer.style.setProperty("min-width", "640px")
-      layer.style.setProperty("min-height", doubleToString(640 / ratio) + "px")
+      // A page set in its work's frame is its own size (TEIView: its frame,
+      // its marginalia, its margins), and the zoom fits that page (user,
+      // 2026-10-14); one with no frame takes its canvas's proportions.
+      if stringEquals(layer.getAttribute(data("framed")) ?? "", "true") {
+        _ = layer.style.removeProperty("min-width")
+        _ = layer.style.removeProperty("min-height")
+      } else {
+        layer.style.setProperty("min-width", "640px")
+        layer.style.setProperty("min-height", doubleToString(640 / ratio) + "px")
+      }
       layer.style.setProperty("transform-origin", "top left")
       layer.style.setProperty("transform", "none")
       guard let natural = layer.getBoundingClientRect(), natural.width > 0, natural.height > 0 else { return }
@@ -2493,7 +2758,11 @@
       // A margin does not affect the measured width. Removing it briefly
       // shrinks the scroll range and loses the reader's previous position.
       let margin = pixels(layer.style.getPropertyValue("margin-inline-start")) * previous
-      if codeView == nil && !reflowOn {
+      if codeView == nil && !reflowOn && stringEquals(layer.getAttribute(data("framed")) ?? "", "true") {
+        // A page set in its work's frame is its own size.
+        _ = layer.style.removeProperty("min-width")
+        _ = layer.style.removeProperty("min-height")
+      } else if codeView == nil && !reflowOn {
         // Center a stable page frame, not the width of its shortest text.
         // Canvas proportions describe the page only; no text coordinates.
         let ratio = canvasIndex < imageWidths.count && canvasIndex < imageHeights.count

@@ -490,16 +490,32 @@
       registrationStart = (region, atFit)
     }
 
+    /// Where the overlay off takes the scan (user, 2026-10-14): the point
+    /// of the image the reader was looking at (fractions of it) at the
+    /// viewport's middle, at the zoom it was seen at (the viewport's pixels
+    /// per image pixel). Nil: back to where it was before the overlay.
+    private var registrationEnd: (centerX: Double, centerY: Double, zoom: Double)?
+
+    /// The overlay off takes the scan to `centerX`, `centerY` (fractions of
+    /// the image) at the viewport's middle, at `zoom`: where the reader was
+    /// looking in the overlay, at its zoom (`registrationEnd`).
+    func endRegistration(centerX: Double, centerY: Double, zoom: Double) {
+      registrationEnd = (centerX, centerY, zoom)
+    }
+
     /// The scan laid under the text (the reader's overlay, user,
-    /// 2026-10-13): the projective transform (`Homography`) that takes the
-    /// corners of its text block (`zone`, x and y in turn in the 0–1000
-    /// space, clockwise from the top-left) where its fit sets them to the
-    /// rendered text block's (`target`, the same four in the window's
+    /// 2026-10-13, 2026-10-14): the projective transform (`Homography`)
+    /// that takes the corners of its main text block (`zone`, x and y in
+    /// turn in the 0–1000 space, clockwise from the top-left) to the
+    /// rendered main text block's (`target`, the same four in the window's
     /// coordinates), `progress` (eased) of the way there from none, set on
-    /// the tile surface with CSS `matrix3d()`. On the way the scan's own
-    /// view goes from where the reader left it to its fit, in its viewport
-    /// as the viewport moves, and its margins—all outside its text block,
-    /// which is not content—are trimmed away (user, 2026-10-14).
+    /// the tile surface with CSS `matrix3d()`; the whole image shown, its
+    /// margins and marginalia with it. Its own view goes, on the way, from
+    /// where the reader left it (or, the overlay going off, to where it is
+    /// to be left: `registrationEnd`) to the registered view—the image at
+    /// the scale and place that put its zone on the target—so its tiles are
+    /// drawn at the resolution they are seen at, whatever the overlay's
+    /// zoom, and the warp left is the page's skew and keystone alone.
     func register(zone: [Double], onto target: [Double], progress: Double) {
       guard zone.count == 8, target.count == 8, imageW > 0, imageH > 0, let start = registrationStart,
         let surface = viewport?.querySelector(".canvas-tile-surface"),
@@ -507,62 +523,77 @@
       else { return }
       let progress = max(0, min(1, progress))
       lastRegistration = (zone, target, progress)
-      // The viewport as it is drawn now, its pane moving: its fit, and the
-      // view between the reader's and the fit.
       viewportW = box.width
       viewportH = box.height
       minZoom = min(viewportW / Double(imageW), viewportH / Double(imageH))
-      let fitCenter = 0.5
-      let scale = start.region.scale + (1 - start.region.scale) * progress
-      let centerX = start.region.centerX + (fitCenter - start.region.centerX) * progress
-      let centerY = start.region.centerY + (fitCenter - start.region.centerY) * progress
-      zoom = minZoom * scale
-      panX = viewportW / 2 - centerX * Double(imageW) * zoom
-      panY = viewportH / 2 - centerY * Double(imageH) * zoom
+      var corners: [(x: Double, y: Double)] = []
+      var aims: [(x: Double, y: Double)] = []
+      for corner in 0..<4 {
+        corners.append((zone[2 * corner] / Self.zoneExtent * Double(imageW), zone[2 * corner + 1] / Self.zoneExtent * Double(imageH)))
+        aims.append((target[2 * corner] - box.x, target[2 * corner + 1] - box.y))
+      }
+      // The registered view: the zone's top edge as long as the target's,
+      // its top-left corner on the target's.
+      let zoneSpan = ((corners[1].x - corners[0].x) * (corners[1].x - corners[0].x)
+        + (corners[1].y - corners[0].y) * (corners[1].y - corners[0].y)).squareRoot()
+      let targetSpan = ((aims[1].x - aims[0].x) * (aims[1].x - aims[0].x)
+        + (aims[1].y - aims[0].y) * (aims[1].y - aims[0].y)).squareRoot()
+      guard zoneSpan > 0, targetSpan > 0 else { return }
+      let laidZoom = targetSpan / zoneSpan
+      let laidX = aims[0].x - corners[0].x * laidZoom
+      let laidY = aims[0].y - corners[0].y * laidZoom
+      // The scan's own view at this end of the motion.
+      let own: (zoom: Double, x: Double, y: Double)
+      if let end = registrationEnd {
+        own = (end.zoom, viewportW / 2 - end.centerX * Double(imageW) * end.zoom,
+               viewportH / 2 - end.centerY * Double(imageH) * end.zoom)
+      } else {
+        let zoom = minZoom * start.region.scale
+        own = (zoom, viewportW / 2 - start.region.centerX * Double(imageW) * zoom,
+               viewportH / 2 - start.region.centerY * Double(imageH) * zoom)
+      }
+      zoom = own.zoom + (laidZoom - own.zoom) * progress
+      panX = own.x + (laidX - own.x) * progress
+      panY = own.y + (laidY - own.y) * progress
       updateTransform()
-      let fitX = (viewportW - Double(imageW) * minZoom) / 2
-      let fitY = (viewportH - Double(imageH) * minZoom) / 2
       var source: [Double] = []
       var destination: [Double] = []
-      var trim: [String] = []
-      // The image's corners, clockwise from the top-left as the zone's.
-      let corners: [(Double, Double)] = [(0, 0), (1, 0), (1, 1), (0, 1)]
       for corner in 0..<4 {
-        let x = zone[2 * corner] / Self.zoneExtent * Double(imageW)
-        let y = zone[2 * corner + 1] / Self.zoneExtent * Double(imageH)
-        source.append(fitX + x * minZoom)
-        source.append(fitY + y * minZoom)
-        destination.append(target[2 * corner] - box.x)
-        destination.append(target[2 * corner + 1] - box.y)
-        let edgeX = corners[corner].0 * Double(imageW)
-        let edgeY = corners[corner].1 * Double(imageH)
-        trim.append(
-          doubleToString(panX + (edgeX + (x - edgeX) * progress) * zoom) + "px "
-            + doubleToString(panY + (edgeY + (y - edgeY) * progress) * zoom) + "px")
+        source.append(panX + corners[corner].x * zoom)
+        source.append(panY + corners[corner].y * zoom)
+        destination.append(aims[corner].x)
+        destination.append(aims[corner].y)
       }
       guard let homography = Homography(from: source, to: destination) else { return }
       let matrix = homography.eased(progress).cssMatrix3D.map(doubleToString)
       surface.style.setProperty("transform-origin", "0 0")
       surface.style.setProperty("transform", "matrix3d(" + stringJoin(matrix, separator: ", ") + ")")
-      // The scan's margins trimmed away (user, 2026-10-14): a polygon on
-      // the surface, in its own coordinates before the warp, so the trim
-      // follows it, its corners closing in from the image's to its text
-      // block's. Outside it nothing is drawn.
-      surface.style.setProperty("clip-path", "polygon(" + stringJoin(trim, separator: ", ") + ")")
     }
 
-    /// The scan where its own pan and zoom alone set it: back at what it
-    /// showed before the overlay, untrimmed.
+    /// The scan where its own pan and zoom alone set it: where the overlay
+    /// off left it (`registrationEnd`), else back at what it showed before
+    /// the overlay.
     func clearRegistration() {
       guard let start = registrationStart else { return }
       registrationStart = nil
       lastRegistration = nil
+      let end = registrationEnd
+      registrationEnd = nil
       if let surface = viewport?.querySelector(".canvas-tile-surface") {
-        for property in ["transform", "transform-origin", "clip-path"] {
+        for property in ["transform", "transform-origin"] {
           _ = surface.style.removeProperty(property)
         }
       }
       guard imageW > 0, imageH > 0, minZoom > 0 else { return }
+      if let end {
+        zoom = max(minZoom, min(max(maxZoom, end.zoom), end.zoom))
+        atFit = zoom <= minZoom
+        panX = viewportW / 2 - end.centerX * Double(imageW) * zoom
+        panY = viewportH / 2 - end.centerY * Double(imageH) * zoom
+        clampPan()
+        updateTransform()
+        return
+      }
       show(region: start.region)
     }
 
