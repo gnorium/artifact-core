@@ -201,9 +201,13 @@
               div { markup }
                 .id("artifact-markup")
                 .class("artifact-markup")
-                .data("sheet-host", true)
             }
             .class("artifact-markup-frame")
+            // A sheet opened from the text (a gloss) covers the pane's box
+            // from its frame, which neither scrolls nor zooms: in the pane
+            // it sat at the pane's scroll, so a pane scrolled sideways (a
+            // zoomed page) cut it off at its left (user, 2026-10-14).
+            .data("sheet-host", true)
           }
 
           // The object: the canvas of the page on screen. A viewer with no
@@ -577,13 +581,6 @@
           CSS.Property("will-change", "width, height, inset-inline-start, inset-block-start")
           media("(prefers-reduced-motion: reduce)") { CSS.Property("transition", "none") }
         }
-        // A page with no measured main text block: the scan comes to its
-        // opacity on the same clock and curve as the panes' move (a
-        // registered page's follows `--artifact-overlay-progress` instead).
-        selector("&[data-canvas-shown='true']:not([data-overlay-registered='true']):has(.artifact-markup-frame) .artifact-object") {
-          CSS.Property("transition", Self.overlayTransition + ", opacity " + OverlayMotion.timing)
-          media("(prefers-reduced-motion: reduce)") { CSS.Property("transition", "none") }
-        }
         selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
           CSS.Property("inset-inline-start", "50%")
           media(maxWidth(maxWidthBreakpointMobile)) {
@@ -608,14 +605,10 @@
         selector("&[data-overlay-active='true'] .artifact-markup-frame") {
           zIndex(1)
         }
-        // Unregistered, the overlay leaves the scan as the reader left it,
-        // and the text over it takes no pointer; registered, the text's
-        // pane takes every gesture, moving the text and the scan as one.
-        selector("&[data-overlay-active='true']:not([data-overlay-registered='true']) .artifact-markup-frame") {
-          CSS.Property("pointer-events", "none")
-        }
+        // The overlay draws structure, never the scan's pixels (user,
+        // 2026-10-14): the edition's pane, on its own ground, covers the
+        // scan's whole.
         selector("&[data-overlay-active='true'] .artifact-markup") {
-          backgroundColor(.transparent).important()
           overflow(.hidden).important()
         }
         selector("&[data-overlay-active='true'] .canvas-viewport") { CSS.Property("touch-action", "none") }
@@ -627,27 +620,59 @@
         selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled .button-icon", "& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled .button-label") {
           color(colorOnSolid).important()
         }
-        selector("&[data-overlay-active='true'] .artifact-object") {
-          CSS.Property("opacity", "\(Self.overlayScanOpacity)")
-        }
         // A page whose main text block was measured on its scan (user,
         // 2026-10-14), from overlay on until overlay off has run: the
-        // edition's page on top, on no ground of its own, never scrolled
-        // (its zoom and pan the overlay's own, the scan's with it), the
-        // whole scan under it; the scan coming to its opacity under it and
-        // back on the overlay's one clock (`--artifact-overlay-progress`, 0
-        // to 1).
+        // edition's page on top, never scrolled (its zoom and pan the
+        // overlay's own), the scan's structure drawn over it
+        // (`.artifact-structure`).
         selector("&[data-overlay-registered='true'] .artifact-markup-frame") {
           zIndex(1)
         }
         selector("&[data-overlay-registered='true'] .artifact-markup") {
-          backgroundColor(.transparent).important()
           overflow(.hidden).important()
           CSS.Property("touch-action", "none")
         }
-        selector("&[data-overlay-registered='true'] .artifact-object") {
-          CSS.Property(
-            "opacity", "calc(1 - \(1 - Self.overlayScanOpacity) * var(--artifact-overlay-progress, 0))")
+        // The structure overlay's scene (`drawStructure`), in the layer's
+        // own pixels: the edition's outlines solid, the scan's dashed, a
+        // stroke the screen's width whatever the zoom; quiet within the
+        // tolerance, the diff's colors past it—orange a pair off, green an
+        // edition line the scan lacks, red a scan line the edition lacks.
+        descendant(".artifact-structure") {
+          position(.absolute)
+          CSS.Property("left", "0")
+          CSS.Property("top", "0")
+          width(0)
+          height(0)
+          overflow(.visible)
+          pointerEvents(.none)
+        }
+        descendant(".artifact-structure svg") {
+          position(.absolute)
+          CSS.Property("left", "0")
+          CSS.Property("top", "0")
+          width(px(1))
+          height(px(1))
+          overflow(.visible)
+        }
+        selector("& .artifact-structure rect", "& .artifact-structure polygon") {
+          CSS.Property("fill", "none")
+          CSS.Property("stroke", borderColorSubtle.value)
+          CSS.Property("stroke-width", borderWidthBase.value)
+          CSS.Property("vector-effect", "non-scaling-stroke")
+        }
+        descendant(".artifact-structure [data-side='scan']") {
+          CSS.Property("stroke-dasharray", spacing4.value + " " + spacing4.value)
+        }
+        selector("& .artifact-structure [data-state='off']", "& .artifact-structure [data-state='extra']", "& .artifact-structure [data-state='missing']") {
+          CSS.Property("stroke-width", "calc(2 * " + borderWidthBase.value + ")")
+        }
+        descendant(".artifact-structure [data-state='off']") { CSS.Property("stroke", colorOrange.value) }
+        descendant(".artifact-structure [data-state='extra']") { CSS.Property("stroke", colorGreen.value) }
+        descendant(".artifact-structure [data-state='missing']") { CSS.Property("stroke", colorRed.value) }
+        // The edition's word the scan's under the pointer is (user,
+        // 2026-10-14), as the scan's band marks it.
+        descendant(".artifact-markup .tei-word[data-corresponding='true']") {
+          backgroundColor(backgroundColorBlueSubtle)
         }
         // The code in the pane on the page's ground, gutter and all, as an
         // editor's (Xcode's) is (user, 2026-10-12); a code block in prose
@@ -747,8 +772,6 @@
   }
 
   extension ArtifactView {
-    /// The scan's opacity under the text in overlay.
-    static let overlayScanOpacity = 0.5
     /// The panes' move into the overlay and out of it.
     static let overlayTransition = ["width", "height", "inset-inline-start", "inset-block-start"]
       .map { $0 + " " + OverlayMotion.timing }.joined(separator: ", ")
@@ -955,6 +978,7 @@
       setupZoom()
       setupCanvasSwitch()
       setupOverlay()
+      setupCorrespondence()
       setupRegions()
       // A host turns the reader to a page by its image service (a find
       // bar's match): an `artifact-show-service` event on the viewer.
@@ -1518,7 +1542,7 @@
     /// 2026-10-14).
     private var overlayLeaving = false
     /// The overlay's view at rest, where the reader zoomed and panned it
-    /// (user, 2026-10-14): the text and the scan under it move as one; nil
+    /// (user, 2026-10-14): the text and the structure over it move as one; nil
     /// at its fit (`OverlayFraming.fitted`).
     private var overlayView: (zoom: Double, x: Double, y: Double)?
     /// The overlay's framing last placed: what the reader's zoom and pan
@@ -1528,10 +1552,10 @@
     /// the page in its layer's own pixels and the zoom, which the text pane
     /// keeps at its middle as the panes slide apart.
     private var overlayFocus: (x: Double, y: Double, zoom: Double)?
-    /// Whether the overlay lays the scan under the text by the page's
+    /// Whether the overlay lays the scan's structure over the text by the page's
     /// main text block (`overlayZone`), from overlay on until overlay off
-    /// has run (user, 2026-10-14): the whole scan shown, the edition's page
-    /// and the scan's reach framed (`OverlayFraming`), its zoom and place
+    /// has run (user, 2026-10-14): the edition's page
+    /// and the structure's reach framed (`OverlayFraming`), its zoom and place
     /// the overlay's own rather than the pane's zoom and scroll.
     private var overlayRegistered = false
     /// Where the layer was in the window, and its zoom, when the overlay's
@@ -1553,9 +1577,8 @@
           self.overlayLeaving = false
           self.beforeOverlay = self.storedZoom()
           if let _ = self.overlayZone() {
-            // Registered from what the scan and the text show now, the
-            // pane's zoom and scroll kept for the way back.
-            self.shownCanvas?.beginRegistration()
+            // Laid by the page's text block, from what the text shows now,
+            // the pane's zoom and scroll kept for the way back.
             self.overlayFrom = self.layerPlace()
             self.setOverlayRegistered(true)
           } else {
@@ -1638,7 +1661,7 @@
     /// The overlay going off (user, 2026-10-14): the spot of the page at
     /// the middle of the view, and the zoom, which the text keeps as its
     /// pane slides back (`overlayFocus`); the scan sent to the same spot of
-    /// its image at the zoom it is seen at (`CanvasReader.endRegistration`),
+    /// its image at the zoom it is seen at (`CanvasReader.showSpot`),
     /// through the registration's homography taken back.
     private func leaveOverlay() {
       guard let pane = markupPane, let paneBox = pane.getBoundingClientRect(), let place = layerPlace(), place.zoom > 0
@@ -1652,7 +1675,7 @@
 
     /// The scan sent to the point of its image under `spot` (the page's
     /// point, in the layer's own pixels) at the zoom the text is drawn at
-    /// (`CanvasReader.endRegistration`), through the registration's
+    /// (`CanvasReader.showSpot`), through the registration's
     /// homography taken back.
     private func sendScan(to spot: (x: Double, y: Double), zoom: Double) {
       let x = spot.x
@@ -1666,7 +1689,7 @@
       let spot = back.apply(x: x, y: y)
       let zoneSpan = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
       guard zoneSpan > 0 else { return }
-      shownCanvas?.endRegistration(
+      shownCanvas?.showSpot(
         centerX: spot.x / size.width, centerY: spot.y / size.height, zoom: place.zoom * (box[2] - box[0]) / zoneSpan)
     }
 
@@ -1714,7 +1737,6 @@
       root.setAttribute(data("overlay-registered"), registered ? "true" : "false")
       if !registered {
         overlayFrom = nil
-        _ = root.style.removeProperty("--artifact-overlay-progress")
       }
     }
 
@@ -1872,6 +1894,17 @@
       of node: DOM.Text, in parent: DOM.Element, context: DOM.CanvasRenderingContext2D, range: DOM.Range,
       into ink: inout InkExtent
     ) {
+      for line in inkLines(of: node, in: parent, context: context, range: range) {
+        ink.take(left: line.left, top: line.top, right: line.right, bottom: line.bottom)
+      }
+    }
+
+    /// A text node's ink line by line (`measureInk`'s rule), each line's box
+    /// in the window.
+    private func inkLines(
+      of node: DOM.Text, in parent: DOM.Element, context: DOM.CanvasRenderingContext2D, range: DOM.Range
+    ) -> [StructureRow] {
+      var found: [StructureRow] = []
       let bytes = Array(node.data.utf8)
       // Each glyph's bounds in UTF-16 code units (the range's) and in
       // UTF-8 bytes (its text's).
@@ -1887,7 +1920,7 @@
         unit += units
         byte += size
       }
-      guard !glyphs.isEmpty else { return }
+      guard !glyphs.isEmpty else { return [] }
       func drawn(_ start: Int, _ end: Int) -> DOM.Rect? {
         range.setStart(node, start)
         range.setEnd(node, end)
@@ -1905,7 +1938,7 @@
       range.setStart(node, 0)
       range.setEnd(node, node.length)
       let boxes = range.getClientRects().filter { $0.height > 0 }
-      guard let firstBox = boxes.first else { return }
+      guard let firstBox = boxes.first else { return [] }
       let oneLine = boxes.allSatisfy { $0.top < firstBox.bottom && firstBox.top < $0.bottom }
       // Each line: its span (UTF-16, UTF-8), its rows, its first and last
       // glyph's bytes and drawn left.
@@ -1945,40 +1978,22 @@
           left = min(left, across.left)
           right = max(right, across.right)
         }
-        ink.take(left: left, top: rows.top, right: right, bottom: rows.bottom)
+        if right > left, rows.bottom > rows.top {
+          found.append(StructureRow(left: left, top: rows.top, right: right, bottom: rows.bottom))
+        }
       }
+      return found
     }
 
     /// The shown page's rendered text block in its layer's own pixels
     /// (left, top, right, bottom), by its page's image and its layer.
     private var overlayTarget: (page: String, box: [Double], spans: Bool) = ("", [], false)
 
-    /// The overlay's registration (user, 2026-10-13): where the shown page's
-    /// text block was measured on its scan (`overlayZone`), the scan is laid
-    /// by the projective transform that takes those corners to the rendered
-    /// text block's (`renderedTextBlock`), eased in with the overlay's own
-    /// motion and out with it (`CanvasReader.register`), the whole scan
-    /// shown. Without one, the scan is as before.
-    private func registerOverlay() {
-      guard let canvas = shownCanvas else { return }
-      let progress = overlayOn ? overlayProgress : overlayLeaving ? 1 - overlayProgress : 0
-      guard overlayRegistered, overlayOn || overlayLeaving, let zone = overlayZone(), let layer = shownLayer(),
-        let measured = renderedTextBlock(in: layer)
-      else {
-        canvas.clearRegistration()
-        return
-      }
-      let box = shownImageSize.map { laid([measured[0], measured[1], measured[2], measured[5]], zone: zone, size: $0) }
-        ?? [measured[0], measured[1], measured[2], measured[5]]
-      let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
-      root.style.setProperty("--artifact-overlay-progress", doubleToString(progress))
-      canvas.register(zone: zone, onto: target, progress: progress)
-    }
-
     /// The overlay's framing of the shown layer (`OverlayFraming`) in the
     /// pane as it is now: the edition's whole page (`natural` its size
-    /// unzoomed) and as far as the registered scan reaches beyond it, so all
-    /// of the scan shows (user, 2026-10-14); the reader's zoom held between
+    /// unzoomed) and as far as the scan's measured structure, laid by the
+    /// registration, reaches beyond it, so all of it shows (user,
+    /// 2026-10-14); the reader's zoom held between
     /// its fit and the larger of the text's and the scan's actual sizes.
     private func overlayFraming(layer: DOM.Element, natural: (width: Double, height: Double), in pane: DOM.Element)
       -> OverlayFraming
@@ -1989,13 +2004,19 @@
         let box = laid(measured, zone: zone, size: size)
         let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
         let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
-        if let laid = Homography(from: corners, to: target) {
-          for (x, y) in [(0.0, 0.0), (size.width, 0), (size.width, size.height), (0, size.height)] {
-            let point = laid.apply(x: x, y: y)
-            content = (
-              min(content.left, point.x), min(content.top, point.y), max(content.right, point.x),
-              max(content.bottom, point.y)
-            )
+        // The scan's measured structure laid with the page (its blocks'
+        // corners), so all of it shows; never the scan's paper.
+        if let laid = Homography(from: corners, to: target), let page = layer.closest(".tei-page") {
+          for zone in scanLayout(of: page) where zone.kind == 0 {
+            for corner in 0..<4 {
+              let point = laid.apply(
+                x: zone.points[2 * corner] / Self.zoneExtent * size.width,
+                y: zone.points[2 * corner + 1] / Self.zoneExtent * size.height)
+              content = (
+                min(content.left, point.x), min(content.top, point.y), max(content.right, point.x),
+                max(content.bottom, point.y)
+              )
+            }
           }
         }
         let zoneSpan = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
@@ -2007,7 +2028,7 @@
     /// The layer where the overlay frames it (user, 2026-10-14): on its
     /// way in from where the reader had it to its fit, centered, the
     /// edition's page and the scan's reach framed; there, at the reader's
-    /// own zoom and pan, the text and the scan under it moving as one
+    /// own zoom and pan, the text and the structure over it moving as one
     /// (`overlayView`, held to the framing); on its way out at that zoom,
     /// sliding into its own pane with the spot the reader was looking at in
     /// its middle (`overlayFocus`). Set by the layer's scale and its frame's
@@ -2053,7 +2074,7 @@
       }
       lastFit = fit
       matchedScroll = (pane.scrollLeft, pane.scrollTop)
-      registerOverlay()
+      drawStructure()
     }
 
     /// Where the text's pane holds the page at the overlay's zoom, the spot
@@ -2074,7 +2095,7 @@
     }
 
     /// Whether the overlay is at rest, laid by registration: the reader's
-    /// zoom and pan move the text and the scan under it as one (user,
+    /// zoom and pan move the text and the structure over it as one (user,
     /// 2026-10-14).
     private var overlayRests: Bool { overlayRegistered && overlayOn && overlayProgress >= 1 }
 
@@ -2239,7 +2260,7 @@
     /// Two fingers zoom about their midpoint, by how far they spread.
     private func pinch(_ event: Event) {
       // The overlay at rest: one finger pans it, two zoom it, the text and
-      // the scan as one; in its motion no finger moves it.
+      // its structure as one; in its motion no finger moves it.
       if overlayLocked {
         event.preventDefault()
         guard overlayRests, let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
@@ -2311,7 +2332,7 @@
         guard overlayRests, event.button == 0, event.clickCount <= 1, !event.shiftKey,
           !isOnText(x: event.clientX, y: event.clientY), let pane = markupPane
         else { return }
-        // The overlay at rest: a drag pans the text and the scan as one.
+        // The overlay at rest: a drag pans the text and its structure as one.
         event.preventDefault()
         pane.focus(DOM.FocusOptions(preventScroll: true))
         panMoved = false
@@ -2385,7 +2406,7 @@
       let key = event.key
       let middle = (box.width / 2, box.height / 2)
       if overlayLocked {
-        // The overlay at rest: its keys move the text and the scan as one.
+        // The overlay at rest: its keys move the text and its structure as one.
         guard overlayRests else { return }
         if stringEquals(key, "+") || stringEquals(key, "=") {
           zoomOverlay(to: currentZoom() * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), about: middle)
@@ -2773,7 +2794,7 @@
         pane.scrollTop = oldScroll.y
       }
       matchedScroll = (pane.scrollLeft, pane.scrollTop)
-      registerOverlay()
+      drawStructure()
     }
 
     /// Reflow returns to ordinary layout, with its own wrapping and CSS zoom.
@@ -3321,6 +3342,437 @@
       // screen and wasteful for the nine hundred behind it.
       root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
       scheduleZoom()
+    }
+
+    // MARK: - The scan's structure
+
+    /// One zone of the scan's measured layout (`TEIView`'s
+    /// `data-scan-layout`, the tools' zones, never the model's).
+    private struct ScanZone {
+      /// 0 a block, 1 a line, 2 a word.
+      let kind: Int
+      /// Whether it is of the main text: its block's subtype.
+      let main: Bool
+      /// Its four corners, x and y in turn, in the 0–1000 space.
+      let points: [Double]
+    }
+
+    /// A row of the scan's structure laid in the shown layer's own pixels:
+    /// its box, its lines' corners there, and its words, each its box there
+    /// and its box on the scan (left, top, right, bottom in the 0–1000
+    /// space).
+    private struct ScanRow {
+      var box: StructureRow
+      var lines: [[Double]]
+      var words: [(laid: StructureRow, space: [Double])]
+    }
+
+    /// The edition's structure and the scan's, laid in the shown layer's
+    /// own pixels (unzoomed), paired (`StructurePairing`): what the
+    /// structure overlay draws and the word correspondence reads. Measured
+    /// once a page and layer (`key`).
+    private struct Structure {
+      let key: String
+      let leading: Double
+      let editionRows: [StructureRow]
+      let editionBlocks: [StructureRow]
+      let scanRows: [ScanRow]
+      let scanBlocks: [[Double]]
+      /// Each edition row's state and each scan row's: "within", "off",
+      /// "extra" (an edition row the scan lacks), "missing" (a scan row the
+      /// edition lacks).
+      let editionStates: [String]
+      let scanStates: [String]
+      /// Each edition word paired with its scan word's box (the 0–1000
+      /// space): a paired row's words, left to right, where both hold as
+      /// many.
+      let words: [(element: DOM.Element, space: [Double])]
+    }
+
+    private var structure: Structure?
+
+    /// The page's scan layout (`data-scan-layout`): its zones in reading
+    /// order, a line's main-ness its block's.
+    private func scanLayout(of page: DOM.Element) -> [ScanZone] {
+      let text = page.getAttribute(data("scan-layout")) ?? ""
+      guard !stringIsEmpty(text) else { return [] }
+      var zones: [ScanZone] = []
+      var main = true
+      for entry in stringSplit(text, separator: ";") {
+        let parts = stringSplit(entry, separator: " ")
+        guard parts.count == 10 else { continue }
+        var points: [Double] = []
+        for index in 2..<10 {
+          guard let value = parseDouble(parts[index]) else { break }
+          points.append(value)
+        }
+        guard points.count == 8 else { continue }
+        let kind = stringEquals(parts[0], "block") ? 0 : stringEquals(parts[0], "line") ? 1 : 2
+        if kind == 0 { main = !stringEquals(parts[1], "marginalia") }
+        zones.append(ScanZone(kind: kind, main: main, points: points))
+      }
+      return zones
+    }
+
+    /// The scale the shown layer is drawn at now: its box over its own
+    /// layout width, whatever its transform.
+    private func drawnScale(of layer: DOM.Element) -> Double? {
+      guard let box = layer.getBoundingClientRect(), layer.clientWidth > 0, box.width > 0 else { return nil }
+      return box.width / layer.clientWidth
+    }
+
+    /// The overlay's registration as a map from the scan's 0–1000 space
+    /// into the shown layer's own pixels (`registerOverlay`'s homography:
+    /// the text block's corners onto the rendered main text's laid box);
+    /// nil where the page's text block was not measured or its image's
+    /// size is not known.
+    private func scanToLayer(_ layer: DOM.Element, drawnAt scale: Double) -> Homography? {
+      guard let zone = overlayZone(), let size = shownImageSize, let measured = textBlock(in: layer, drawnAt: scale)
+      else { return nil }
+      let box = laid(measured, zone: zone, size: size)
+      let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
+      let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
+      return Homography(from: corners, to: target)
+    }
+
+    /// The page's structure (`Structure`), measured where the rendered page
+    /// is set by its lines (Reflow and Raw off) and its scan is laid by its
+    /// text block; nil elsewhere, or where its scan's layout or its body's
+    /// leading is not given.
+    private func currentStructure() -> Structure? {
+      guard !rawVisible, !reflowOn, let layer = shownLayer(), let page = layer.closest(".tei-page") else { return nil }
+      let key = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
+      if let structure, stringEquals(structure.key, key) { return structure }
+      let zones = scanLayout(of: page)
+      guard !zones.isEmpty, let leadingRem = parseDouble(page.getAttribute(data("body-leading")) ?? ""),
+        let scale = drawnScale(of: layer), let size = shownImageSize, let map = scanToLayer(layer, drawnAt: scale),
+        let box = layer.getBoundingClientRect(), let context = document.createElement("canvas").getContext("2d")
+      else { return nil }
+      // The body's leading in the layer's pixels: the body type's (the
+      // frame's em) times the scale's leading in rem.
+      let frame = layer.querySelector(".tei-text-block")
+      let rem = pixels(window.getComputedStyle(frame ?? layer).getPropertyValue("font-size"))
+      let leading = leadingRem * rem
+      guard leading > 0 else { return nil }
+
+      // The scan's: each zone's corners laid in the layer.
+      func laidPoints(_ points: [Double]) -> [Double] {
+        var out: [Double] = []
+        for corner in 0..<4 {
+          let point = map.apply(
+            x: points[2 * corner] / Self.zoneExtent * size.width, y: points[2 * corner + 1] / Self.zoneExtent * size.height)
+          out.append(point.x)
+          out.append(point.y)
+        }
+        return out
+      }
+      func bounds(_ points: [Double]) -> StructureRow {
+        StructureRow(
+          left: min(points[0], points[2], points[4], points[6]), top: min(points[1], points[3], points[5], points[7]),
+          right: max(points[0], points[2], points[4], points[6]), bottom: max(points[1], points[3], points[5], points[7]))
+      }
+      func spaceBox(_ points: [Double]) -> [Double] {
+        [
+          min(points[0], points[2], points[4], points[6]), min(points[1], points[3], points[5], points[7]),
+          max(points[0], points[2], points[4], points[6]), max(points[1], points[3], points[5], points[7]),
+        ]
+      }
+      var mainLines: [ScanRow] = []
+      var marginLines: [ScanRow] = []
+      var scanBlocks: [[Double]] = []
+      var lineIsMain = true
+      for zone in zones {
+        let points = laidPoints(zone.points)
+        switch zone.kind {
+        case 0:
+          scanBlocks.append(points)
+        case 1:
+          lineIsMain = zone.main
+          let row = ScanRow(box: bounds(points), lines: [points], words: [])
+          if zone.main { mainLines.append(row) } else { marginLines.append(row) }
+        default:
+          let word = (laid: bounds(points), space: spaceBox(zone.points))
+          if lineIsMain, !mainLines.isEmpty {
+            mainLines[mainLines.count - 1].words.append(word)
+          } else if !lineIsMain, !marginLines.isEmpty {
+            marginLines[marginLines.count - 1].words.append(word)
+          }
+        }
+      }
+      // Lines side by side one row (`StructurePairing.rows`), their words
+      // together.
+      func scanRows(_ lines: [ScanRow]) -> [ScanRow] {
+        var rows: [ScanRow] = []
+        for line in lines.sorted(by: { $0.box.top < $1.box.top }) {
+          if let last = rows.last, line.box.top < last.box.bottom {
+            rows[rows.count - 1].box = last.box.joined(line.box)
+            rows[rows.count - 1].lines += line.lines
+            rows[rows.count - 1].words += line.words
+          } else {
+            rows.append(line)
+          }
+        }
+        return rows
+      }
+      let scanMain = scanRows(mainLines)
+      let scanMargin = scanRows(marginLines)
+
+      // The edition's: each line's ink in the layer's own pixels, side by
+      // side one row; each block the box around its lines.
+      let range = document.createRange()
+      var blocks: [(id: Int32, box: StructureRow)] = []
+      func editionRows(of roots: [DOM.Element]) -> [StructureRow] {
+        var lines: [StructureRow] = []
+        for root in roots {
+          let walker = document.createTreeWalker(root, DOM.NodeFilter.SHOW_TEXT)
+          while let next = walker.nextNode() {
+            guard let node = next as? DOM.Text, let parent = node.parentElement else { continue }
+            let block: Int32 = parent.closest(".tei-block").map { $0.id } ?? -1
+            for line in inkLines(of: node, in: parent, context: context, range: range) {
+              let row = StructureRow(
+                left: (line.left - box.x) / scale, top: (line.top - box.y) / scale, right: (line.right - box.x) / scale,
+                bottom: (line.bottom - box.y) / scale)
+              lines.append(row)
+              if block >= 0 {
+                if let index = blocks.firstIndex(where: { $0.id == block }) {
+                  blocks[index].box = blocks[index].box.joined(row)
+                } else {
+                  blocks.append((block, row))
+                }
+              }
+            }
+          }
+        }
+        return StructurePairing.rows(lines)
+      }
+      let editionMain = editionRows(of: [frame ?? layer])
+      let editionMargin = editionRows(of: layer.querySelectorAll(".tei-margin"))
+
+      // Paired, main text and marginalia apart; their states.
+      var editionStates: [String] = []
+      var scanStates: [String] = []
+      var words: [(element: DOM.Element, space: [Double])] = []
+      let wordElements = layer.querySelectorAll(".tei-word")
+      var wordBoxes: [(element: DOM.Element, box: StructureRow)] = []
+      for element in wordElements {
+        guard let rect = element.getBoundingClientRect(), rect.width > 0 else { continue }
+        wordBoxes.append(
+          (
+            element,
+            StructureRow(
+              left: (rect.left - box.x) / scale, top: (rect.top - box.y) / scale, right: (rect.right - box.x) / scale,
+              bottom: (rect.bottom - box.y) / scale)
+          ))
+      }
+      /// An edition row's words, left to right: those whose middle stands in
+      /// its band.
+      func wordsOf(_ row: StructureRow) -> [(element: DOM.Element, box: StructureRow)] {
+        wordBoxes.filter {
+          let middle = ($0.box.top + $0.box.bottom) / 2
+          return middle >= row.top && middle <= row.bottom
+        }.sorted { $0.box.left < $1.box.left }
+      }
+      for (edition, scan) in [(editionMain, scanMain), (editionMargin, scanMargin)] {
+        var editionState = [String](repeating: "within", count: edition.count)
+        var scanState = [String](repeating: "within", count: scan.count)
+        for match in StructurePairing.pair(edition: edition, scan: scan.map { $0.box }, leading: leading) {
+          switch match {
+          case .pair(let e, let s, let within):
+            editionState[e] = within ? "within" : "off"
+            scanState[s] = within ? "within" : "off"
+            // Each word to the word it overlaps most across, both ways
+            // (mutual): the faces' widths differ, the words' order and
+            // place do not.
+            let ours = wordsOf(edition[e])
+            let theirs = scan[s].words
+            func overlap(_ a: StructureRow, _ b: StructureRow) -> Double {
+              min(a.right, b.right) - max(a.left, b.left)
+            }
+            func best(_ word: StructureRow, among others: [StructureRow]) -> Int? {
+              var found: (index: Int, overlap: Double)?
+              for (index, other) in others.enumerated() {
+                let shared = overlap(word, other)
+                if shared > 0, found.map({ shared > $0.overlap }) ?? true { found = (index, shared) }
+              }
+              return found?.index
+            }
+            let ourBoxes = ours.map { $0.box }
+            let theirBoxes = theirs.map { $0.laid }
+            for (index, word) in ours.enumerated() {
+              guard let other = best(word.box, among: theirBoxes), best(theirBoxes[other], among: ourBoxes) == index
+              else { continue }
+              words.append((word.element, theirs[other].space))
+            }
+          case .extra(let e):
+            editionState[e] = "extra"
+          case .missing(let s):
+            scanState[s] = "missing"
+          }
+        }
+        editionStates += editionState
+        scanStates += scanState
+      }
+      let made = Structure(
+        key: key, leading: leading, editionRows: editionMain + editionMargin, editionBlocks: blocks.map { $0.box },
+        scanRows: scanMain + scanMargin, scanBlocks: scanBlocks, editionStates: editionStates, scanStates: scanStates,
+        words: words)
+      structure = made
+      return made
+    }
+
+    /// The structure overlay (user, 2026-10-14): over the edition, its line
+    /// and block structure and the scan's as the tools measured it, laid by
+    /// the overlay's registration, in one scene—the edition's outlines
+    /// solid, the scan's dashed; a pair within the tolerance quiet, one out
+    /// of it orange, an edition line the scan lacks green, a scan line the
+    /// edition lacks red (`StructurePairing`). No scan pixels and no words:
+    /// drawn in the layer's own pixels, so it zooms and pans with the text,
+    /// its strokes at the screen's width. Shown while the overlay is on and
+    /// the page's scan is laid by its text block; gnorium-python's review
+    /// image draws the same scene for the model.
+    private func drawStructure() {
+      let shown = overlayRegistered && overlayOn
+      for drawn in root.querySelectorAll(".artifact-markup .artifact-structure") {
+        if !shown { drawn.remove() }
+      }
+      guard shown, let layer = shownLayer(), let structure = currentStructure() else { return }
+      if let drawn = layer.querySelector(":scope > .artifact-structure"),
+        stringEquals(drawn.getAttribute(data("key")) ?? "", structure.key)
+      {
+        return
+      }
+      layer.querySelector(":scope > .artifact-structure")?.remove()
+      func number(_ value: Double) -> String { doubleToString((value * 100).rounded() / 100) }
+      func rectangle(_ row: StructureRow, side: String, kind: String, state: String, index: Int = -1) -> String {
+        stringJoin(
+          [
+            "<rect data-side=\"", side, "\" data-kind=\"", kind, "\" data-row=\"", intToString(index), "\" data-state=\"",
+            state, "\" x=\"", number(row.left),
+            "\" y=\"", number(row.top), "\" width=\"", number(row.right - row.left), "\" height=\"",
+            number(row.bottom - row.top), "\"/>",
+          ], separator: "")
+      }
+      func polygon(_ points: [Double], kind: String, state: String, index: Int = -1) -> String {
+        var corners: [String] = []
+        for corner in 0..<4 { corners.append(number(points[2 * corner]) + "," + number(points[2 * corner + 1])) }
+        return stringJoin(
+          [
+            "<polygon data-side=\"scan\" data-kind=\"", kind, "\" data-row=\"", intToString(index), "\" data-state=\"",
+            state, "\" points=\"",
+            stringJoin(corners, separator: " "), "\"/>",
+          ], separator: "")
+      }
+      var parts: [String] = []
+      for block in structure.editionBlocks { parts.append(rectangle(block, side: "edition", kind: "block", state: "within")) }
+      for block in structure.scanBlocks { parts.append(polygon(block, kind: "block", state: "within")) }
+      // The quiet first, the marked over them.
+      for quiet in [true, false] {
+        for (index, row) in structure.editionRows.enumerated()
+        where stringEquals(structure.editionStates[index], "within") == quiet {
+          parts.append(rectangle(row, side: "edition", kind: "line", state: structure.editionStates[index], index: index))
+        }
+        for (index, row) in structure.scanRows.enumerated()
+        where stringEquals(structure.scanStates[index], "within") == quiet {
+          // Each of a row's lines, the row's state: lines side by side are
+          // one row (`StructurePairing.rows`).
+          for line in row.lines {
+            parts.append(polygon(line, kind: "line", state: structure.scanStates[index], index: index))
+          }
+        }
+      }
+      let scene = document.createElement(.div)
+      scene.setAttribute("class", "artifact-structure")
+      scene.setAttribute(data("key"), structure.key)
+      scene.setAttribute("aria-hidden", "true")
+      scene.innerHTML = stringJoin(
+        ["<svg xmlns=\"http://www.w3.org/2000/svg\">", stringJoin(parts, separator: ""), "</svg>"], separator: "")
+      layer.appendChild(scene)
+    }
+
+    // MARK: - Word correspondence
+
+    /// The edition's word marked as the scan's under the pointer.
+    private var correspondingWord: DOM.Element?
+
+    /// Whether the word correspondence applies: the scan shown beside the
+    /// rendered page, the overlay off.
+    private var corresponds: Bool { canvasShown && !overlayOn && !overlayLeaving && !rawVisible && shownCanvas != nil }
+
+    /// Hovering or tapping a word of the edition bands its word on the scan
+    /// in the image pane, and a word of the scan marks the edition's (user,
+    /// 2026-10-14): the words of each pair of rows (`Structure.words`), the
+    /// scan's boxes the tools' segmentation (`data-scan-layout`), never a
+    /// reading.
+    private func setupCorrespondence() {
+      guard let pane = markupPane else { return }
+      _ = pane.addEventListener(.mouseover) { [self] event in
+        guard let target = event.target else { return }
+        self.pointEdition(at: target.closest(".tei-word"))
+      }
+      _ = pane.addEventListener(.mouseleave) { [self] _ in self.pointEdition(at: nil) }
+      guard let object else { return }
+      _ = object.addEventListener(.mousemove) { [self] event in self.pointScan(x: event.clientX, y: event.clientY) }
+      _ = object.addEventListener(.mousedown) { [self] event in self.pointScan(x: event.clientX, y: event.clientY) }
+      _ = object.addEventListener(.mouseleave) { [self] _ in self.markEdition(nil) }
+    }
+
+    /// The scan's word for an edition word, banded; none clears it.
+    private func pointEdition(at word: DOM.Element?) {
+      guard let canvas = shownCanvas else { return }
+      guard let word, corresponds, let structure = currentStructure(),
+        let pair = structure.words.first(where: { $0.element.id == word.id })
+      else {
+        canvas.showWord(nil)
+        return
+      }
+      canvas.showWord(pair.space)
+    }
+
+    /// The edition's word for the scan's word under a point of the window,
+    /// marked (and its band on the scan); none clears it.
+    private func pointScan(x: Double, y: Double) {
+      guard corresponds, let canvas = shownCanvas, let point = canvas.spacePoint(clientX: x, clientY: y),
+        let structure = currentStructure(),
+        let pair = structure.words.first(where: {
+          point.x >= $0.space[0] && point.x <= $0.space[2] && point.y >= $0.space[1] && point.y <= $0.space[3]
+        })
+      else {
+        markEdition(nil)
+        return
+      }
+      markEdition(pair.element)
+      canvas.showWord(pair.space)
+    }
+
+    /// An edition word marked as corresponding, brought into the pane's
+    /// view the least it takes; nil unmarks it (and the scan's band).
+    private func markEdition(_ word: DOM.Element?) {
+      if let previous = correspondingWord, word.map({ $0.id != previous.id }) ?? true {
+        previous.removeAttribute(data("corresponding"))
+      }
+      correspondingWord = word
+      guard let word else {
+        shownCanvas?.showWord(nil)
+        return
+      }
+      word.setAttribute(data("corresponding"), "true")
+      guard let pane = markupPane, let paneBox = pane.getBoundingClientRect(), let box = word.getBoundingClientRect()
+      else { return }
+      let top = box.top - paneBox.top - pane.clientTop
+      let left = box.left - paneBox.left - pane.clientLeft
+      let height = pane.clientHeight
+      let width = pane.clientWidth
+      var moved = false
+      if top < 0 || top + box.height > height {
+        pane.scrollTop += top < 0 ? top : top + box.height - height
+        moved = true
+      }
+      if left < 0 || left + box.width > width {
+        pane.scrollLeft += left < 0 ? left : left + box.width - width
+        moved = true
+      }
+      // The pane moved to show the scan's word: no move to match back.
+      if moved { matchedScroll = (pane.scrollLeft, pane.scrollTop) }
     }
 
     private func navigate(_ delta: Int) {

@@ -96,6 +96,16 @@
           pointerEvents(.none)
         }
         descendant(".canvas-crop") { zIndex(5) }
+        // The edition's word the reader points at, on the scan (user,
+        // 2026-10-14): a translucent band, the scan seen through it in
+        // either scheme.
+        descendant(".canvas-word") {
+          position(.absolute)
+          zIndex(1)
+          backgroundColor(colorBlue)
+          opacity(opacityLow)
+          pointerEvents(.none)
+        }
         descendant(".canvas-region") { zIndex(4) }
         // The 0–1000 space drawn over the image while a region is: lines
         // every 100, 50, 10, 5 and 1, each finer level fainter and drawn
@@ -156,7 +166,7 @@
           cursor(.neswResize)
         }
         selector(
-          "& .canvas-crop[hidden]", "& .canvas-region[hidden]", "& .canvas-region-dim[hidden]", "& .canvas-grid[hidden]",
+          "& .canvas-crop[hidden]", "& .canvas-word[hidden]", "& .canvas-region[hidden]", "& .canvas-region-dim[hidden]", "& .canvas-grid[hidden]",
           "& .canvas-readout[hidden]"
         ) {
           display(.none)
@@ -336,11 +346,6 @@
       vp?.observeResize { [self] w, h in
         guard w > 0, h > 0 else { return }
         guard w != viewportW || h != viewportH else { return }
-        // Laid under the text, it is the registration's to place.
-        if let last = lastRegistration, registering {
-          register(zone: last.zone, onto: last.target, progress: last.progress)
-          return
-        }
         viewportW = w
         viewportH = h
         guard imageW > 0, imageH > 0 else { return }
@@ -440,10 +445,10 @@
     }
 
     /// Whether the reader's overlay holds the scan still (user,
-    /// 2026-10-14): on, or laying it under the text; no wheel, drag,
-    /// pinch, touch or key pans or zooms it.
+    /// 2026-10-14): while it is on, no wheel, drag, pinch, touch or key
+    /// pans or zooms it.
     private var locked: Bool {
-      registering || stringEquals(root.closest(".artifact-view")?.getAttribute(data("overlay-active")) ?? "", "true")
+      stringEquals(root.closest(".artifact-view")?.getAttribute(data("overlay-active")) ?? "", "true")
     }
 
     private func clampPan() {
@@ -467,134 +472,87 @@
       compositor?.update(panX: panX, panY: panY, zoom: zoom, viewportW: viewportW, viewportH: viewportH)
       drawCrop()
       drawRegion()
+      drawWord()
     }
 
-    // MARK: - Registration
+    // MARK: - A spot, a word
 
-    /// What the scan showed when the overlay began laying it under the text
-    /// (its region, and whether at its fit): the motion leaves from it and,
-    /// the overlay off, comes back to it. Nil while the scan is its own.
-    private var registrationStart: (region: ViewerZoom.Region, atFit: Bool)?
-    /// The registration last set, set again when the viewport resizes.
-    private var lastRegistration: (zone: [Double], target: [Double], progress: Double)?
-    /// Whether the overlay lays the scan under the text now.
-    var registering: Bool {
-      if let _ = registrationStart { return true }
-      return false
-    }
-
-    /// The overlay begins laying the scan under the text, from what it
-    /// shows now.
-    func beginRegistration() {
-      guard !registering, let region else { return }
-      registrationStart = (region, atFit)
-    }
-
-    /// Where the overlay off takes the scan (user, 2026-10-14): the point
-    /// of the image the reader was looking at (fractions of it) at the
-    /// viewport's middle, at the zoom it was seen at (the viewport's pixels
-    /// per image pixel). Nil: back to where it was before the overlay.
-    private var registrationEnd: (centerX: Double, centerY: Double, zoom: Double)?
-
-    /// The overlay off takes the scan to `centerX`, `centerY` (fractions of
-    /// the image) at the viewport's middle, at `zoom`: where the reader was
-    /// looking in the overlay, at its zoom (`registrationEnd`).
-    func endRegistration(centerX: Double, centerY: Double, zoom: Double) {
-      registrationEnd = (centerX, centerY, zoom)
-    }
-
-    /// The scan laid under the text (the reader's overlay, user,
-    /// 2026-10-13, 2026-10-14): the projective transform (`Homography`)
-    /// that takes the corners of its main text block (`zone`, x and y in
-    /// turn in the 0–1000 space, clockwise from the top-left) to the
-    /// rendered main text block's (`target`, the same four in the window's
-    /// coordinates), `progress` (eased) of the way there from none, set on
-    /// the tile surface with CSS `matrix3d()`; the whole image shown, its
-    /// margins and marginalia with it. Its own view goes, on the way, from
-    /// where the reader left it (or, the overlay going off, to where it is
-    /// to be left: `registrationEnd`) to the registered view—the image at
-    /// the scale and place that put its zone on the target—so its tiles are
-    /// drawn at the resolution they are seen at, whatever the overlay's
-    /// zoom, and the warp left is the page's skew and keystone alone.
-    func register(zone: [Double], onto target: [Double], progress: Double) {
-      guard zone.count == 8, target.count == 8, imageW > 0, imageH > 0, let start = registrationStart,
-        let surface = viewport?.querySelector(".canvas-tile-surface"),
-        let box = viewport?.getBoundingClientRect(), box.width > 0, box.height > 0
-      else { return }
-      let progress = max(0, min(1, progress))
-      lastRegistration = (zone, target, progress)
-      viewportW = box.width
-      viewportH = box.height
-      minZoom = min(viewportW / Double(imageW), viewportH / Double(imageH))
-      var corners: [(x: Double, y: Double)] = []
-      var aims: [(x: Double, y: Double)] = []
-      for corner in 0..<4 {
-        corners.append((zone[2 * corner] / Self.zoneExtent * Double(imageW), zone[2 * corner + 1] / Self.zoneExtent * Double(imageH)))
-        aims.append((target[2 * corner] - box.x, target[2 * corner + 1] - box.y))
-      }
-      // The registered view: the zone's top edge as long as the target's,
-      // its top-left corner on the target's.
-      let zoneSpan = ((corners[1].x - corners[0].x) * (corners[1].x - corners[0].x)
-        + (corners[1].y - corners[0].y) * (corners[1].y - corners[0].y)).squareRoot()
-      let targetSpan = ((aims[1].x - aims[0].x) * (aims[1].x - aims[0].x)
-        + (aims[1].y - aims[0].y) * (aims[1].y - aims[0].y)).squareRoot()
-      guard zoneSpan > 0, targetSpan > 0 else { return }
-      let laidZoom = targetSpan / zoneSpan
-      let laidX = aims[0].x - corners[0].x * laidZoom
-      let laidY = aims[0].y - corners[0].y * laidZoom
-      // The scan's own view at this end of the motion.
-      let own: (zoom: Double, x: Double, y: Double)
-      if let end = registrationEnd {
-        own = (end.zoom, viewportW / 2 - end.centerX * Double(imageW) * end.zoom,
-               viewportH / 2 - end.centerY * Double(imageH) * end.zoom)
-      } else {
-        let zoom = minZoom * start.region.scale
-        own = (zoom, viewportW / 2 - start.region.centerX * Double(imageW) * zoom,
-               viewportH / 2 - start.region.centerY * Double(imageH) * zoom)
-      }
-      zoom = own.zoom + (laidZoom - own.zoom) * progress
-      panX = own.x + (laidX - own.x) * progress
-      panY = own.y + (laidY - own.y) * progress
-      updateTransform()
-      var source: [Double] = []
-      var destination: [Double] = []
-      for corner in 0..<4 {
-        source.append(panX + corners[corner].x * zoom)
-        source.append(panY + corners[corner].y * zoom)
-        destination.append(aims[corner].x)
-        destination.append(aims[corner].y)
-      }
-      guard let homography = Homography(from: source, to: destination) else { return }
-      let matrix = homography.eased(progress).cssMatrix3D.map(doubleToString)
-      surface.style.setProperty("transform-origin", "0 0")
-      surface.style.setProperty("transform", "matrix3d(" + stringJoin(matrix, separator: ", ") + ")")
-    }
-
-    /// The scan where its own pan and zoom alone set it: where the overlay
-    /// off left it (`registrationEnd`), else back at what it showed before
-    /// the overlay.
-    func clearRegistration() {
-      guard let start = registrationStart else { return }
-      registrationStart = nil
-      lastRegistration = nil
-      let end = registrationEnd
-      registrationEnd = nil
-      if let surface = viewport?.querySelector(".canvas-tile-surface") {
-        for property in ["transform", "transform-origin"] {
-          _ = surface.style.removeProperty(property)
-        }
-      }
+    /// The image at `centerX`, `centerY` (fractions of it) at the
+    /// viewport's middle, at `zoom` (the viewport's pixels per image pixel),
+    /// within its own zoom's reach: where the reader was looking in the
+    /// overlay as it goes off (user, 2026-10-14). Told to no one: it is the
+    /// text's spot, matched.
+    func showSpot(centerX: Double, centerY: Double, zoom value: Double) {
       guard imageW > 0, imageH > 0, minZoom > 0 else { return }
-      if let end {
-        zoom = max(minZoom, min(max(maxZoom, end.zoom), end.zoom))
-        atFit = zoom <= minZoom
-        panX = viewportW / 2 - end.centerX * Double(imageW) * zoom
-        panY = viewportH / 2 - end.centerY * Double(imageH) * zoom
-        clampPan()
-        updateTransform()
+      zoom = max(minZoom, min(max(maxZoom, value), value))
+      atFit = zoom <= minZoom
+      panX = viewportW / 2 - centerX * Double(imageW) * zoom
+      panY = viewportH / 2 - centerY * Double(imageH) * zoom
+      clampPan()
+      updateTransform()
+    }
+
+    /// The edition's word the reader points at, on the scan (user,
+    /// 2026-10-14): its box (`left`, `top`, `right`, `bottom` in the 0–1000
+    /// space) a translucent band over it, as the image is panned and
+    /// zoomed; the image moved the least that brings it into view where it
+    /// is outside it. Nil clears it.
+    func showWord(_ box: [Double]?) {
+      guard let box, box.count == 4, imageW > 0, imageH > 0 else {
+        wordBox = []
+        drawWord()
         return
       }
-      show(region: start.region)
+      wordBox = [
+        box[0] / Self.zoneExtent * Double(imageW), box[1] / Self.zoneExtent * Double(imageH),
+        box[2] / Self.zoneExtent * Double(imageW), box[3] / Self.zoneExtent * Double(imageH),
+      ]
+      // Into view: each axis moved by the least that shows the word, its
+      // near edge first where it is larger than the view.
+      let left = panX + wordBox[0] * zoom
+      let right = panX + wordBox[2] * zoom
+      let top = panY + wordBox[1] * zoom
+      let bottom = panY + wordBox[3] * zoom
+      var moved = false
+      if left < 0 || right > viewportW {
+        panX += left < 0 || right - left > viewportW ? -left : viewportW - right
+        moved = true
+      }
+      if top < 0 || bottom > viewportH {
+        panY += top < 0 || bottom - top > viewportH ? -top : viewportH - bottom
+        moved = true
+      }
+      if moved {
+        clampPan()
+        updateTransform()
+      } else {
+        drawWord()
+      }
+    }
+
+    /// The word's box in image pixels (left, top, right, bottom); empty for
+    /// none.
+    private var wordBox: [Double] = []
+    private var wordBand: DOM.Element?
+
+    private func drawWord() {
+      guard wordBox.count == 4 else {
+        wordBand?.setAttribute(.hidden, "")
+        return
+      }
+      if case .none = wordBand { wordBand = overlay("canvas-word") }
+      guard let band = wordBand else { return }
+      place(band, x: wordBox[0], y: wordBox[1], width: wordBox[2] - wordBox[0], height: wordBox[3] - wordBox[1])
+    }
+
+    /// A point of the viewport in the 0–1000 space over the image; nil off
+    /// it or before the image has a size.
+    func spacePoint(clientX: Double, clientY: Double) -> (x: Double, y: Double)? {
+      guard imageW > 0, imageH > 0, zoom > 0, let rect = viewport?.getBoundingClientRect() else { return nil }
+      let x = (clientX - rect.x - panX) / zoom
+      let y = (clientY - rect.y - panY) / zoom
+      guard x >= 0, y >= 0, x <= Double(imageW), y <= Double(imageH) else { return nil }
+      return (x / Double(imageW) * Self.zoneExtent, y / Double(imageH) * Self.zoneExtent)
     }
 
     /// The space a zone's corners are in, over the whole image.
