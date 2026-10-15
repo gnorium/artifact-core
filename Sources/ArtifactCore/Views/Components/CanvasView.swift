@@ -559,26 +559,35 @@
     }
 
     /// The edition's word the reader points at, on the scan (user,
-    /// 2026-10-14): its box (`left`, `top`, `right`, `bottom` in the 0–1000
-    /// space) a translucent band over it, as the image is panned and
-    /// zoomed; the image moved the least that brings it into view where it
-    /// is outside it. Nil clears it.
-    func showWord(_ box: [Double]?) {
-      guard let box, box.count == 4, imageW > 0, imageH > 0 else {
-        wordBox = []
+    /// 2026-10-14): each of its zones (`left`, `top`, `right`, `bottom` in
+    /// the 0–1000 space; a word the print spaces apart, or broken over
+    /// lines, has several, user, 2026-10-15) a translucent band over it, as
+    /// the image is panned and zoomed; the image moved the least that
+    /// brings them all into view where they are outside it. None clears
+    /// them.
+    func showWord(_ boxes: [[Double]]) {
+      let boxes = boxes.filter { $0.count == 4 }
+      guard !boxes.isEmpty, imageW > 0, imageH > 0 else {
+        wordBoxes = []
         drawWord()
         return
       }
-      wordBox = [
-        box[0] / Self.zoneExtent * Double(imageW), box[1] / Self.zoneExtent * Double(imageH),
-        box[2] / Self.zoneExtent * Double(imageW), box[3] / Self.zoneExtent * Double(imageH),
-      ]
-      // Into view: each axis moved by the least that shows the word, its
-      // near edge first where it is larger than the view.
-      let left = panX + wordBox[0] * zoom
-      let right = panX + wordBox[2] * zoom
-      let top = panY + wordBox[1] * zoom
-      let bottom = panY + wordBox[3] * zoom
+      wordBoxes = boxes.map { box in
+        [
+          box[0] / Self.zoneExtent * Double(imageW), box[1] / Self.zoneExtent * Double(imageH),
+          box[2] / Self.zoneExtent * Double(imageW), box[3] / Self.zoneExtent * Double(imageH),
+        ]
+      }
+      // Into view: each axis moved by the least that shows the word's
+      // zones, their near edge first where they are larger than the view.
+      var reach = wordBoxes[0]
+      for box in wordBoxes {
+        reach = [min(reach[0], box[0]), min(reach[1], box[1]), max(reach[2], box[2]), max(reach[3], box[3])]
+      }
+      let left = panX + reach[0] * zoom
+      let right = panX + reach[2] * zoom
+      let top = panY + reach[1] * zoom
+      let bottom = panY + reach[3] * zoom
       var moved = false
       if left < 0 || right > viewportW {
         panX += left < 0 || right - left > viewportW ? -left : viewportW - right
@@ -596,19 +605,22 @@
       }
     }
 
-    /// The word's box in image pixels (left, top, right, bottom); empty for
-    /// none.
-    private var wordBox: [Double] = []
-    private var wordBand: DOM.Element?
+    /// The word's zones in image pixels (each left, top, right, bottom);
+    /// empty for none.
+    private var wordBoxes: [[Double]] = []
+    /// One band a zone, made as they are first needed.
+    private var wordBands: [DOM.Element] = []
 
     private func drawWord() {
-      guard wordBox.count == 4 else {
-        wordBand?.setAttribute(.hidden, "")
-        return
+      while wordBands.count < wordBoxes.count, let band = overlay("canvas-word") { wordBands.append(band) }
+      for (index, band) in wordBands.enumerated() {
+        guard index < wordBoxes.count else {
+          band.setAttribute(.hidden, "")
+          continue
+        }
+        let box = wordBoxes[index]
+        place(band, x: box[0], y: box[1], width: box[2] - box[0], height: box[3] - box[1])
       }
-      if case .none = wordBand { wordBand = overlay("canvas-word") }
-      guard let band = wordBand else { return }
-      place(band, x: wordBox[0], y: wordBox[1], width: wordBox[2] - wordBox[0], height: wordBox[3] - wordBox[1])
     }
 
     /// A point of the viewport in the 0–1000 space over the image; nil off

@@ -1576,8 +1576,12 @@
       guard let toggle = root.querySelector(".artifact-overlay-toggle") else { return }
       _ = toggle.addEventListener("toggle-button-update") { [self] event in
         let on = stringEquals(event.detail, "true")
-        // The word correspondence is side by side's alone.
-        if on { self.markEdition(nil) }
+        // The word correspondence is side by side's alone. The structure is
+        // measured here, the layer at rest, before the motion scales it.
+        if on {
+          self.markEdition([])
+          _ = self.currentStructure()
+        }
         if on && !self.overlayOn {
           self.overlayTarget = ("", [], false)
           self.overlayView = nil
@@ -3401,18 +3405,17 @@
       let kind: Int
       /// Whether it is of the main text: its block's subtype.
       let main: Bool
+      /// A word's id, which its `<w>`'s `@facs` names; "" for the others.
+      let id: String
       /// Its four corners, x and y in turn, in the 0–1000 space.
       let points: [Double]
     }
 
     /// A row of the scan's structure laid in the shown layer's own pixels:
-    /// its box, its lines' corners there, and its words, each its box there
-    /// and its box on the scan (left, top, right, bottom in the 0–1000
-    /// space).
+    /// its box and its lines' corners there.
     private struct ScanRow {
       var box: StructureRow
       var lines: [[Double]]
-      var words: [(laid: StructureRow, space: [Double])]
     }
 
     /// The edition's structure and the scan's, laid in the shown layer's
@@ -3431,10 +3434,6 @@
       /// edition lacks).
       let editionStates: [String]
       let scanStates: [String]
-      /// Each edition word paired with its scan word's box (the 0–1000
-      /// space): a paired row's words, left to right, where both hold as
-      /// many.
-      let words: [(element: DOM.Element, space: [Double])]
     }
 
     private var structure: Structure?
@@ -3448,16 +3447,16 @@
       var main = true
       for entry in stringSplit(text, separator: ";") {
         let parts = stringSplit(entry, separator: " ")
-        guard parts.count == 10 else { continue }
+        guard parts.count == 11 else { continue }
         var points: [Double] = []
-        for index in 2..<10 {
+        for index in 3..<11 {
           guard let value = parseDouble(parts[index]) else { break }
           points.append(value)
         }
         guard points.count == 8 else { continue }
         let kind = stringEquals(parts[0], "block") ? 0 : stringEquals(parts[0], "line") ? 1 : 2
         if kind == 0 { main = !stringEquals(parts[1], "marginalia") }
-        zones.append(ScanZone(kind: kind, main: main, points: points))
+        zones.append(ScanZone(kind: kind, main: main, id: stringEquals(parts[2], "-") ? "" : parts[2], points: points))
       }
       return zones
     }
@@ -3519,50 +3518,32 @@
           left: min(points[0], points[2], points[4], points[6]), top: min(points[1], points[3], points[5], points[7]),
           right: max(points[0], points[2], points[4], points[6]), bottom: max(points[1], points[3], points[5], points[7]))
       }
-      func spaceBox(_ points: [Double]) -> [Double] {
-        [
-          min(points[0], points[2], points[4], points[6]), min(points[1], points[3], points[5], points[7]),
-          max(points[0], points[2], points[4], points[6]), max(points[1], points[3], points[5], points[7]),
-        ]
-      }
       var mainLines: [ScanRow] = []
       // The scan's marginalia block by block (each a block zone, its lines
       // after it): a note pairs with blocks, never with lines alone.
       var marginBlocks: [(box: StructureRow, lines: [ScanRow])] = []
       var scanBlocks: [[Double]] = []
-      var lineIsMain = true
-      for zone in zones {
+      for zone in zones where zone.kind < 2 {
         let points = laidPoints(zone.points)
-        switch zone.kind {
-        case 0:
+        if zone.kind == 0 {
           scanBlocks.append(points)
           if !zone.main { marginBlocks.append((bounds(points), [])) }
-        case 1:
-          lineIsMain = zone.main
-          let row = ScanRow(box: bounds(points), lines: [points], words: [])
-          if zone.main {
-            mainLines.append(row)
-          } else if !marginBlocks.isEmpty {
-            marginBlocks[marginBlocks.count - 1].lines.append(row)
-          }
-        default:
-          let word = (laid: bounds(points), space: spaceBox(zone.points))
-          if lineIsMain, !mainLines.isEmpty {
-            mainLines[mainLines.count - 1].words.append(word)
-          } else if !lineIsMain, let last = marginBlocks.indices.last, !marginBlocks[last].lines.isEmpty {
-            marginBlocks[last].lines[marginBlocks[last].lines.count - 1].words.append(word)
-          }
+          continue
+        }
+        let row = ScanRow(box: bounds(points), lines: [points])
+        if zone.main {
+          mainLines.append(row)
+        } else if !marginBlocks.isEmpty {
+          marginBlocks[marginBlocks.count - 1].lines.append(row)
         }
       }
-      // Lines side by side one row (`StructurePairing.rows`), their words
-      // together.
+      // Lines side by side one row (`StructurePairing.rows`).
       func scanRows(_ lines: [ScanRow]) -> [ScanRow] {
         var rows: [ScanRow] = []
         for line in lines.sorted(by: { $0.box.top < $1.box.top }) {
           if let last = rows.last, line.box.top < last.box.bottom {
             rows[rows.count - 1].box = last.box.joined(line.box)
             rows[rows.count - 1].lines += line.lines
-            rows[rows.count - 1].words += line.words
           } else {
             rows.append(line)
           }
@@ -3676,27 +3657,6 @@
       // Paired, main text and marginalia apart; their states.
       var editionStates: [String] = []
       var scanStates: [String] = []
-      var words: [(element: DOM.Element, space: [Double])] = []
-      let wordElements = layer.querySelectorAll(".tei-word")
-      var wordBoxes: [(element: DOM.Element, box: StructureRow)] = []
-      for element in wordElements {
-        guard let rect = element.getBoundingClientRect(), rect.width > 0 else { continue }
-        wordBoxes.append(
-          (
-            element,
-            StructureRow(
-              left: (rect.left - box.x) / scale, top: (rect.top - box.y) / scale, right: (rect.right - box.x) / scale,
-              bottom: (rect.bottom - box.y) / scale)
-          ))
-      }
-      /// An edition row's words, left to right: those whose middle stands in
-      /// its band.
-      func wordsOf(_ row: StructureRow) -> [(element: DOM.Element, box: StructureRow)] {
-        wordBoxes.filter {
-          let middle = ($0.box.top + $0.box.bottom) / 2
-          return middle >= row.top && middle <= row.bottom
-        }.sorted { $0.box.left < $1.box.left }
-      }
       // The main text's rows paired where they stand; each note's with the
       // scan's it gathered, each side from its own box's top-left (its
       // lines within it: gnorium-python `layout_measure.compare`'s
@@ -3747,29 +3707,6 @@
             let within = StructurePairing.within(edition[e], scan[s].box, leading: leading)
             editionState[e] = within ? "within" : "off"
             scanState[s] = within ? "within" : "off"
-            // Each word to the word it overlaps most across, both ways
-            // (mutual): the faces' widths differ, the words' order and
-            // place do not.
-            let ours = wordsOf(edition[e])
-            let theirs = scan[s].words
-            func overlap(_ a: StructureRow, _ b: StructureRow) -> Double {
-              min(a.right, b.right) - max(a.left, b.left)
-            }
-            func best(_ word: StructureRow, among others: [StructureRow]) -> Int? {
-              var found: (index: Int, overlap: Double)?
-              for (index, other) in others.enumerated() {
-                let shared = overlap(word, other)
-                if shared > 0, found.map({ shared > $0.overlap }) ?? true { found = (index, shared) }
-              }
-              return found?.index
-            }
-            let ourBoxes = ours.map { moved($0.box, by: from) }
-            let theirBoxes = theirs.map { moved($0.laid, by: to) }
-            for (index, word) in ours.enumerated() {
-              guard let other = best(ourBoxes[index], among: theirBoxes), best(theirBoxes[other], among: ourBoxes) == index
-              else { continue }
-              words.append((word.element, theirs[other].space))
-            }
           case .extra(let e):
             editionState[e] = "extra"
           case .missing(let s):
@@ -3781,8 +3718,7 @@
       }
       let made = Structure(
         key: key, leading: leading, editionRows: editionRowsAll, editionBlocks: blocks.map { $0.box },
-        scanRows: scanRowsAll, scanBlocks: scanBlocks, editionStates: editionStates, scanStates: scanStates,
-        words: words)
+        scanRows: scanRowsAll, scanBlocks: scanBlocks, editionStates: editionStates, scanStates: scanStates)
       structure = made
       return made
     }
@@ -3858,18 +3794,75 @@
 
     // MARK: - Word correspondence
 
-    /// The edition's word marked as the scan's under the pointer.
-    private var correspondingWord: DOM.Element?
+    /// The shown page's words and their zones on the scan, as the tools
+    /// linked them (user, 2026-10-15): each `<w>`'s `@facs` names its word
+    /// zones (`data-word-zones`), whose corners the scan's layout gives
+    /// (`data-scan-layout`). Read once a page and layer (`key`); never
+    /// worked out again in the reader.
+    private struct WordLinks {
+      let key: String
+      /// Each linked word: its parts in the shown layer (a word broken over
+      /// lines has one a line) and its zones' boxes on the scan (left, top,
+      /// right, bottom in the 0–1000 space; a word the print spaces apart
+      /// has several, words whose space the print closes share one).
+      let words: [(parts: [DOM.Element], boxes: [[Double]])]
+    }
+
+    private var wordLinks: WordLinks?
+
+    /// The shown page's word links (`WordLinks`); nil where Raw is shown or
+    /// no page is.
+    private func currentWordLinks() -> WordLinks? {
+      guard !rawVisible, let layer = shownLayer(), let page = layer.closest(".tei-page") else { return nil }
+      let key = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
+      if let wordLinks, stringEquals(wordLinks.key, key) { return wordLinks }
+      // The word zones' boxes, by their ids.
+      var zones: [(id: String, box: [Double])] = []
+      for zone in scanLayout(of: page) where zone.kind == 2 && !stringIsEmpty(zone.id) {
+        let p = zone.points
+        zones.append(
+          (zone.id, [min(p[0], p[2], p[4], p[6]), min(p[1], p[3], p[5], p[7]), max(p[0], p[2], p[4], p[6]), max(p[1], p[3], p[5], p[7])]))
+      }
+      // Each word's zones, by its place ("line:word").
+      var named: [(place: String, boxes: [[Double]])] = []
+      for entry in stringSplit(page.getAttribute(data("word-zones")) ?? "", separator: ";") {
+        let parts = stringSplit(entry, separator: " ")
+        guard parts.count > 1 else { continue }
+        var boxes: [[Double]] = []
+        for id in parts[1...] {
+          if let zone = zones.first(where: { stringEquals($0.id, id) }) { boxes.append(zone.box) }
+        }
+        if !boxes.isEmpty { named.append((parts[0], boxes)) }
+      }
+      // Its parts in the layer, in order.
+      var words: [(parts: [DOM.Element], boxes: [[Double]])] = []
+      var places: [String] = []
+      for element in layer.querySelectorAll(".tei-word") {
+        let place = (element.getAttribute(data("line")) ?? "") + ":" + (element.getAttribute(data("word")) ?? "")
+        if let index = places.firstIndex(where: { stringEquals($0, place) }) {
+          words[index].parts.append(element)
+        } else if let word = named.first(where: { stringEquals($0.place, place) }) {
+          places.append(place)
+          words.append(([element], word.boxes))
+        }
+      }
+      let made = WordLinks(key: key, words: words)
+      wordLinks = made
+      return made
+    }
+
+    /// The edition's words marked as the scan's under the pointer.
+    private var correspondingWords: [DOM.Element] = []
 
     /// Whether the word correspondence applies: the scan shown beside the
     /// rendered page, the overlay off.
     private var corresponds: Bool { canvasShown && !overlayOn && !overlayLeaving && !rawVisible && shownCanvas != nil }
 
-    /// Hovering or tapping a word of the edition bands its word on the scan
-    /// in the image pane, and a word of the scan marks the edition's (user,
-    /// 2026-10-14): the words of each pair of rows (`Structure.words`), the
-    /// scan's boxes the tools' segmentation (`data-scan-layout`), never a
-    /// reading.
+    /// Hovering or tapping a word of the edition bands its zones on the
+    /// scan in the image pane, and a word of the scan marks the edition's
+    /// (user, 2026-10-14): each word's zones as the tools linked them
+    /// (`WordLinks`), never a reading. A word broken over lines is one: either
+    /// part bands both its zones, and either zone marks both its parts.
     private func setupCorrespondence() {
       guard let pane = markupPane else { return }
       _ = pane.addEventListener(.mouseover) { [self] event in
@@ -3880,49 +3873,63 @@
       guard let object else { return }
       _ = object.addEventListener(.mousemove) { [self] event in self.pointScan(x: event.clientX, y: event.clientY) }
       _ = object.addEventListener(.mousedown) { [self] event in self.pointScan(x: event.clientX, y: event.clientY) }
-      _ = object.addEventListener(.mouseleave) { [self] _ in self.markEdition(nil) }
+      _ = object.addEventListener(.mouseleave) { [self] _ in self.markEdition([]) }
     }
 
-    /// The scan's word for an edition word, banded; none clears it.
+    /// The scan's zones of an edition word, banded, and its other parts
+    /// marked; none clears them.
     private func pointEdition(at word: DOM.Element?) {
       guard let canvas = shownCanvas else { return }
-      guard let word, corresponds, let structure = currentStructure(),
-        let pair = structure.words.first(where: { $0.element.id == word.id })
+      guard let word, corresponds, let links = currentWordLinks(),
+        let linked = links.words.first(where: { $0.parts.contains { $0.id == word.id } })
       else {
-        canvas.showWord(nil)
+        mark([])
+        canvas.showWord([])
         return
       }
-      canvas.showWord(pair.space)
+      mark(linked.parts.filter { $0.id != word.id })
+      canvas.showWord(linked.boxes)
     }
 
-    /// The edition's word for the scan's word under a point of the window,
-    /// marked (and its band on the scan); none clears it.
+    /// The edition's words of the scan's word under a point of the window
+    /// (each word whose zones hold it: words whose space the print closes
+    /// share one), marked, and their zones banded; none clears them.
     private func pointScan(x: Double, y: Double) {
       guard corresponds, let canvas = shownCanvas, let point = canvas.spacePoint(clientX: x, clientY: y),
-        let structure = currentStructure(),
-        let pair = structure.words.first(where: {
-          point.x >= $0.space[0] && point.x <= $0.space[2] && point.y >= $0.space[1] && point.y <= $0.space[3]
-        })
+        let links = currentWordLinks()
       else {
-        markEdition(nil)
+        markEdition([])
         return
       }
-      markEdition(pair.element)
-      canvas.showWord(pair.space)
+      let found = links.words.filter { word in
+        word.boxes.contains { point.x >= $0[0] && point.x <= $0[2] && point.y >= $0[1] && point.y <= $0[3] }
+      }
+      guard !found.isEmpty else {
+        markEdition([])
+        return
+      }
+      markEdition(found.flatMap { $0.parts })
+      canvas.showWord(found.flatMap { $0.boxes })
     }
 
-    /// An edition word marked as corresponding, brought into the pane's
-    /// view the least it takes; nil unmarks it (and the scan's band).
-    private func markEdition(_ word: DOM.Element?) {
-      if let previous = correspondingWord, word.map({ $0.id != previous.id }) ?? true {
+    /// Edition words marked as corresponding; the others unmarked.
+    private func mark(_ words: [DOM.Element]) {
+      for previous in correspondingWords where !words.contains(where: { $0.id == previous.id }) {
         previous.removeAttribute(data("corresponding"))
       }
-      correspondingWord = word
-      guard let word else {
-        shownCanvas?.showWord(nil)
+      for word in words { word.setAttribute(data("corresponding"), "true") }
+      correspondingWords = words
+    }
+
+    /// Edition words marked as corresponding, the first brought into the
+    /// pane's view the least it takes; none unmarks them (and the scan's
+    /// bands).
+    private func markEdition(_ words: [DOM.Element]) {
+      mark(words)
+      guard let word = words.first else {
+        shownCanvas?.showWord([])
         return
       }
-      word.setAttribute(data("corresponding"), "true")
       guard let pane = markupPane, let paneBox = pane.getBoundingClientRect(), let box = word.getBoundingClientRect()
       else { return }
       let top = box.top - paneBox.top - pane.clientTop
