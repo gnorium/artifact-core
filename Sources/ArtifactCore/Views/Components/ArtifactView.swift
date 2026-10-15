@@ -71,6 +71,12 @@
     /// (`data-open="true"` on `.artifact-header-bar`). Closed, it takes no
     /// room: an empty row still took the header's gap under the controls.
     let bar: [DOM.Node]
+    /// What the host shows under the markup pane, in its column (a page's
+    /// diff, the markup's and not the image's: user 2026-10-15): beside the
+    /// image when the two stand side by side, above it when they are
+    /// stacked; one layout whether the reader is on the page or
+    /// fullscreen, which only enlarges it. Empty, nothing is drawn.
+    let underMarkup: [DOM.Node]
     /// How many pages the markup has, when the host knows: the pager
     /// counts them from the start, before a manifest is read (which may
     /// count its canvases instead). Nil: unknown until the reader counts
@@ -98,7 +104,8 @@
       @HTMLBuilder markup: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
       @HTMLBuilder actions: () -> [DOM.Node] = { [] },
-      @HTMLBuilder bar: () -> [DOM.Node] = { [] }
+      @HTMLBuilder bar: () -> [DOM.Node] = { [] },
+      @HTMLBuilder underMarkup: () -> [DOM.Node] = { [] }
     ) {
       self.manifestURL = manifestURL
       self.style = style
@@ -113,6 +120,7 @@
       self.canvas = canvas()
       self.actions = actions()
       self.bar = bar()
+      self.underMarkup = underMarkup()
     }
 
     /// Whether the header shows the page-images switch: only when there are
@@ -198,9 +206,19 @@
           // page together and fullscreen carries both.
           if !markup.isEmpty {
             div {
-              div { markup }
-                .id("artifact-markup")
-                .class("artifact-markup")
+              // The pane in a box of its own, which a host's ring around the
+              // pane is drawn on (gnorium-web `TestamentView`), clear of
+              // what stands under it.
+              div {
+                div { markup }
+                  .id("artifact-markup")
+                  .class("artifact-markup")
+              }
+              .class("artifact-markup-box")
+              if !underMarkup.isEmpty {
+                div { underMarkup }
+                  .class("artifact-under-markup")
+              }
             }
             .class("artifact-markup-frame")
             // A sheet opened from the text (a gloss) covers the pane's box
@@ -464,10 +482,32 @@
           minWidth(0)
           minHeight(0)
           overflow(.hidden)
+          // The pane, then what the host shows under it (`underMarkup`).
+          display(.flex)
+          flexDirection(.column)
         }
-        descendant(".artifact-markup-frame > .artifact-markup") {
+        descendant(".artifact-markup-box") {
+          position(.relative)
+          display(.flex)
+          flexDirection(.column)
+          flex("1 1 auto")
+          minHeight(0)
+          minWidth(0)
+        }
+        descendant(".artifact-markup-box > .artifact-markup") {
           width(perc(100))
-          height(perc(100))
+          flex("1 1 auto")
+          minHeight(0)
+        }
+        // Under the markup pane, in its column, a zone as the pane is: one
+        // scrollport, both ways, at the pane's level (user, 2026-10-15);
+        // what it holds never scrolls within it. The pane keeps the rest of
+        // the column.
+        descendant(".artifact-under-markup") {
+          flexShrink(0)
+          minWidth(0)
+          maxHeight(perc(40))
+          overflow(.auto)
         }
         descendant(".artifact-markup") {
           // Half the surface, whichever way the two are laid out. Without the
@@ -561,7 +601,11 @@
         }
         // Reflowed, it is a text pane that scrolls (user, 2026-10-14): the
         // browser's own cursor, the I-beam over its text; nothing pans.
-        selector("&[data-reflow='true'] .artifact-markup") {
+        // So is its code (user, 2026-10-15): XML on, the browser's own
+        // cursor, the I-beam over the code, the arrow elsewhere; nothing
+        // pans. `data-raw` is the hydrated state (`showLayers`), never a
+        // `:has()` the browser may not reevaluate.
+        selector("&[data-reflow='true'] .artifact-markup", "&[data-raw='true'] .artifact-markup") {
           cursor(.auto)
         }
         // The same two positioned frames interpolate into an overlay,
@@ -1111,10 +1155,12 @@
     private static let rawCode = ".artifact-markup .tei-page[data-active='true'] .tei-page-raw .code-code"
 
     private func setupRegions() {
-      selectionListener = document.addEventListener("selectionchange") { [self] _ in self.followCaret() }
+      // Once a frame at most (user, 2026-10-15): typing fires an input and
+      // a selection change a key, and each read the whole page's code.
+      selectionListener = document.addEventListener("selectionchange") { [self] _ in self.followCaretSoon() }
       // Typing moves the caret, and changes what it is on even where it
       // stays.
-      _ = root.addEventListener(.input) { [self] _ in self.followCaret() }
+      _ = root.addEventListener(.input) { [self] _ in self.followCaretSoon() }
       _ = root.addEventListener(.mousemove) { [self] e in self.followPointer(x: e.clientX, y: e.clientY) }
       _ = root.addEventListener(.mouseleave) { [self] _ in self.setRegion(hover: nil) }
       // Before the editor's own keys, which keep the arrows to themselves.
@@ -1128,6 +1174,24 @@
         }, capture: true)
     }
 
+    private var caretFollowing = false
+
+    private func followCaretSoon() {
+      guard !caretFollowing else { return }
+      caretFollowing = true
+      _ = window.requestAnimationFrame { [self] in
+        self.caretFollowing = false
+        self.followCaret()
+      }
+    }
+
+    /// Whether a region named in `code` can be drawn: the scan shown.
+    /// Otherwise the code is not read for one—a whole page's text at every
+    /// key and every move of the pointer (user, 2026-10-15).
+    private func drawsRegions(of code: DOM.Element) -> Bool {
+      canvasShown
+    }
+
     private func followCaret() {
       // A drag writes the value as it goes; the drag is what it says.
       if case .some = dragNode { return }
@@ -1136,6 +1200,10 @@
         return
       }
       for code in root.querySelectorAll(Self.rawCode) where code.contains(node) {
+        guard drawsRegions(of: code) else {
+          setRegion(caret: nil, editor: code.hasAttribute("data-code-editing") ? code : nil)
+          return
+        }
         let caret = offset(in: code, node: node, offset: selection.focusOffset)
         caretOffset = caret
         setRegion(
@@ -1151,6 +1219,7 @@
         return
       }
       for code in root.querySelectorAll(Self.rawCode) where !code.hasAttribute("data-code-editing") && code.contains(node) {
+        guard drawsRegions(of: code) else { break }
         setRegion(hover: region(in: code, caret: offset(in: code, node: node, offset: position.offset)))
         return
       }
@@ -1475,6 +1544,16 @@
     /// translation, Raw picks either's text or its code. A page with no
     /// translation shows nothing under either: emptiness, never a dash.
     private func showLayers() {
+      // XML on or off, said on the reader (`data-raw`): its cursor, and the
+      // page's diff under it (gnorium-web `TestamentView`), read it there
+      // rather than by `:has()`, which Safari did not reevaluate as the
+      // toggle was pressed (user, 2026-10-15).
+      root.setAttribute(data("raw"), rawVisible ? "true" : "false")
+      if rawVisible {
+        markupPane?.removeAttribute(data("over-text"))
+        endPan()
+        panStart = nil
+      }
       reflectSyncApplies()
       let layer = shownLayerName
       for pane in root.querySelectorAll(".artifact-markup .tei-page") {
@@ -2230,7 +2309,7 @@
       _ = pane.addEventListener(
         "mousemove",
         { [self] e in
-          guard self.panStart == nil, !self.reflowOn, let pane = self.markupPane else { return }
+          guard self.panStart == nil, !self.reflowOn, !self.rawVisible, let pane = self.markupPane else { return }
           let over = self.isOnText(x: e.clientX, y: e.clientY) ? "true" : "false"
           if !stringEquals(pane.getAttribute(data("over-text")) ?? "", over) { pane.setAttribute(data("over-text"), over) }
         }, capture: false, passive: true)
@@ -2405,7 +2484,7 @@
         return
       }
       // Reflowed, a press selects text as in any text pane: nothing pans.
-      guard !reflowOn, let pane = markupPane, event.button == 0, event.clickCount <= 1, !event.shiftKey,
+      guard !reflowOn, !rawVisible, let pane = markupPane, event.button == 0, event.clickCount <= 1, !event.shiftKey,
         !isOnText(x: event.clientX, y: event.clientY)
       else { return }
       // Code being edited takes its own presses: its caret, its selection.
@@ -2481,8 +2560,9 @@
         event.stopPropagation()
         return
       }
-      // Reflowed, the arrows scroll the text pane as the browser's own.
-      if reflowOn && stringStartsWith(key, "Arrow") { return }
+      // Reflowed or as code, the arrows scroll the text pane as the
+      // browser's own.
+      if (reflowOn || rawVisible) && stringStartsWith(key, "Arrow") { return }
       textMatchAnimation += 1
       if stringEquals(key, "+") || stringEquals(key, "=") {
         zoom(to: currentZoom() * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), about: middle)
@@ -3352,6 +3432,11 @@
       guard !stringIsEmpty(service) else { return nil }
       for (index, id) in serviceIDs.enumerated() where stringEquals(id, service) {
         return index
+      }
+      // A manifest that names it not (unread, or failed): the pane that
+      // reads it, at its own place.
+      for (position, pane) in markupPanes.enumerated() where stringEquals(pane.dataset["service-id"] ?? "", service) {
+        return windowed ? (parseInt(pane.dataset["page-index"] ?? "") ?? position) : position
       }
       return nil
     }
