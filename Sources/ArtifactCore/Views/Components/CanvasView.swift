@@ -337,24 +337,35 @@
       if let vp, let spinner = root.querySelector(".canvas-spinner") {
         compositor = TileCompositor(viewport: vp, spinner: spinner)
       }
-      // Recenter whenever the viewport resizes (a sidebar toggled, the window
-      // resized). A canvas put away measures nothing, and some browsers call
-      // back on scroll with the size unchanged.
-      // The fit is found again: an image at its fit follows it (a pane
-      // made shorter fits the whole image again, not its width alone);
-      // any other zoom is clamped to it.
+      // Whenever the viewport resizes (a sidebar toggled, the window
+      // resized, the panes sliding into the overlay and apart), the image
+      // keeps what it shows: the same point at the viewport's middle and the
+      // same zoom over its fit, found again (a pane made shorter fits the
+      // whole image again, not its width alone), so it scales with its pane
+      // at its fit or zoomed in alike (user, 2026-10-14: a zoomed image
+      // held its size as the overlay's panes parted). A canvas put away
+      // measures nothing, and some browsers call back on scroll with the
+      // size unchanged.
       vp?.observeResize { [self] w, h in
         guard w > 0, h > 0 else { return }
         guard w != viewportW || h != viewportH else { return }
         // Moving with the overlay, it is the overlay's to place.
         guard !blending else { return }
+        let kept = region
         viewportW = w
         viewportH = h
         guard imageW > 0, imageH > 0 else { return }
         minZoom = min(viewportW / Double(imageW), viewportH / Double(imageH))
-        zoom = atFit ? minZoom : max(minZoom, min(maxZoom, zoom))
-        panX = (viewportW - Double(imageW) * zoom) / 2
-        panY = (viewportH - Double(imageH) * zoom) / 2
+        if let kept, !atFit {
+          zoom = max(minZoom, min(maxZoom, minZoom * kept.scale))
+          atFit = zoom <= minZoom
+          panX = viewportW / 2 - kept.centerX * Double(imageW) * zoom
+          panY = viewportH / 2 - kept.centerY * Double(imageH) * zoom
+        } else {
+          zoom = minZoom
+          panX = (viewportW - Double(imageW) * zoom) / 2
+          panY = (viewportH - Double(imageH) * zoom) / 2
+        }
         clampPan()
         updateTransform()
       }
