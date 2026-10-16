@@ -54,6 +54,10 @@
     /// `zones`: "id x y w h" in the 0–1000 space, one a ";" (`TEIView`'s
     /// `data-zones` on a page).
     static func at(_ text: [UInt8], caret: Int, zones: String) -> MarkupRegion? {
+      // The zones written in the code first, as they stand while edited
+      // (user, 2026-10-16), then the page's.
+      let written = writtenZones(text)
+      let zones = stringIsEmpty(written) ? zones : stringJoin([written, zones], separator: ";")
       var stack: [Tag] = []
       var candidates: [Tag] = []
       var onTag = false
@@ -210,16 +214,61 @@
       }
       let name = String(decoding: text[tag.nameStart..<tag.nameEnd], as: UTF8.self)
       guard stringEquals(name, "zone") else { return .nothing }
+      // As it is written now (user, 2026-10-16): its corners, else its
+      // points; listed by its id only where it writes neither.
+      if case .some(let own) = written(attributes) { return own }
       if let id = value(of: "xml:id", in: attributes), let id {
         let listed = zone(String(decoding: id.bytes, as: UTF8.self), in: zones)
         if case .region = listed { return listed }
       }
-      guard let ulx = value(of: "ulx", in: attributes), let ulx, let left = numbers(ulx.bytes), left.count == 1,
-        let uly = value(of: "uly", in: attributes), let uly, let top = numbers(uly.bytes), top.count == 1,
-        let lrx = value(of: "lrx", in: attributes), let lrx, let right = numbers(lrx.bytes), right.count == 1,
-        let lry = value(of: "lry", in: attributes), let lry, let bottom = numbers(lry.bytes), bottom.count == 1
-      else { return .invalid }
-      return checked(x: left[0], y: top[0], width: right[0] - left[0], height: bottom[0] - top[0])
+      return .invalid
+    }
+
+    /// A zone's region as its tag writes it: its corners (`ulx uly lrx
+    /// lry`), else the box around its `points` ("x,y x,y …"); nil where it
+    /// writes neither.
+    static func written(_ attributes: [(name: [UInt8], value: Value?)]) -> Named? {
+      if let ulx = value(of: "ulx", in: attributes) {
+        guard let ulx, let left = numbers(ulx.bytes), left.count == 1,
+          let uly = value(of: "uly", in: attributes), let uly, let top = numbers(uly.bytes), top.count == 1,
+          let lrx = value(of: "lrx", in: attributes), let lrx, let right = numbers(lrx.bytes), right.count == 1,
+          let lry = value(of: "lry", in: attributes), let lry, let bottom = numbers(lry.bytes), bottom.count == 1
+        else { return .invalid }
+        return checked(x: left[0], y: top[0], width: right[0] - left[0], height: bottom[0] - top[0])
+      }
+      if let points = value(of: "points", in: attributes) {
+        // Each pair's comma read as a space: "x y x y …".
+        guard let points,
+          let values = numbers(points.bytes.map { $0 == 44 ? 32 : $0 }), values.count >= 6, values.count % 2 == 0
+        else { return .invalid }
+        var left = values[0], top = values[1], right = values[0], bottom = values[1]
+        var index = 2
+        while index < values.count {
+          left = min(left, values[index]); right = max(right, values[index])
+          top = min(top, values[index + 1]); bottom = max(bottom, values[index + 1])
+          index += 2
+        }
+        return checked(x: left, y: top, width: right - left, height: bottom - top)
+      }
+      return nil
+    }
+
+    /// The zones the code writes, each with an id and a region: "id x y w h"
+    /// a ";", as a page's `data-zones` lists them.
+    static func writtenZones(_ text: [UInt8]) -> String {
+      var entries: [String] = []
+      for tag in tags(text) where tag.kind != .close {
+        let name = String(decoding: text[tag.nameStart..<tag.nameEnd], as: UTF8.self)
+        guard stringEquals(name, "zone") else { continue }
+        let attributes = self.attributes(of: tag, in: text)
+        guard let id = value(of: "xml:id", in: attributes), let id, !id.bytes.isEmpty,
+          case .some(.region(let region)) = written(attributes)
+        else { continue }
+        entries.append(stringJoin(
+          [String(decoding: id.bytes, as: UTF8.self), intToString(region.x), intToString(region.y),
+           intToString(region.width), intToString(region.height)], separator: " "))
+      }
+      return stringJoin(entries, separator: ";")
     }
 
     /// A box inside the image, of some size; anything else names nothing.
