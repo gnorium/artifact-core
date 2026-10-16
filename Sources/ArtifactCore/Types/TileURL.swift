@@ -32,10 +32,14 @@ public enum TileURL {
     let regionY = y * scaledH
     let regionW = min(scaledW, imageWidth - regionX)
     let regionH = min(scaledH, imageHeight - regionY)
+    // The tile at its level: the region's width over the scale factor,
+    // rounded up (IIIF's canonical tile size). The region's full width
+    // was an upscale the server refuses, or renders at `scaleFactor`
+    // times the pixels.
     return url(
       serviceID: serviceID,
       region: .xywh(regionX, regionY, regionW, regionH),
-      size: .exact(scaledW, nil),
+      size: .exact((regionW + scaleFactor - 1) / scaleFactor, nil),
       quality: "default",
       format: format
     )

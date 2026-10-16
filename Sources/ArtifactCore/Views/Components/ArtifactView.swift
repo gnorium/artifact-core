@@ -3251,14 +3251,22 @@
       if syncs, let region = canvas.region { matchText(to: region) }
       drawRegion()
       // The four either side, nearest first: images are what a turn waits
-      // for (user, 2026-10-11).
-      for distance in 1...4 {
-        for neighbor in [idx + distance, idx - distance]
-        where neighbor >= 0 && neighbor < serviceIDs.count
-          && (neighbor >= plainImages.count || stringIsEmpty(plainImages[neighbor])) {
-          CanvasReader.preload(
-            serviceID: serviceIDs[neighbor], width: imageWidths[neighbor], zoom: canvas.fittedZoom)
+      // for (user, 2026-10-11). Once this page has what it shows, so they
+      // never queue before it; in one batch, since a batch stops the last
+      // one's loads (a call each kept only the last neighbor's).
+      canvas.whenSettled { [self] in
+        guard let shown = shownCanvas, shown === canvas else { return }
+        var urls: [String] = []
+        for distance in 1...4 {
+          for neighbor in [idx + distance, idx - distance]
+          where neighbor >= 0 && neighbor < serviceIDs.count
+            && (neighbor >= plainImages.count || stringIsEmpty(plainImages[neighbor])) {
+            urls.append(
+              contentsOf: canvas.openingURLs(
+                serviceID: serviceIDs[neighbor], width: imageWidths[neighbor], height: imageHeights[neighbor]))
+          }
         }
+        preloadImages(urls: urls)
       }
     }
 

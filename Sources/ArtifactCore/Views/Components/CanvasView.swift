@@ -398,7 +398,6 @@
       imageW = width
       imageH = height
       fitToViewport()
-      compositor?.showSpinner()
       compositor?.setCanvas(serviceID: serviceID, width: width, height: height, image: image)
       updateTransform()
     }
@@ -424,22 +423,25 @@
       compositor?.detach()
     }
 
-    /// What showing a canvas fetches first, fetched ahead for a canvas next
-    /// to the one on screen: its low-resolution copy, and the image at the
-    /// size the one on screen is fitted to.
-    static func preload(serviceID: String, width: Int, zoom: Double) {
-      let base = stringEndsWith(serviceID, "/") ? stringSubstring(serviceID, from: 0, to: serviceID.utf8.count - 1) : serviceID
-      let format = TileCompositor.format(forService: base)
-      let fitted = min(width, max(64, Int(Double(width) * zoom)))
-      preloadImages(urls: [
-        "\(base)/full/256,/0/default.\(format)",
-        "\(base)/full/\(fitted),/0/default.\(format)",
-      ])
+    /// What showing a canvas of `width` by `height` in this canvas's
+    /// viewport asks for first (its low-resolution copy, and the whole image
+    /// at the level its opening zoom shows), fetched ahead for the canvases
+    /// beside the one on screen: the URLs it then asks for, so they come
+    /// from the browser's cache.
+    func openingURLs(serviceID: String, width: Int, height: Int) -> [String] {
+      guard width > 0, height > 0, viewportW > 0, viewportH > 0 else { return [] }
+      let fit = min(viewportW / Double(width), viewportH / Double(height))
+      let opening = parseDouble(sessionStorage.getItem(ViewerZoom.imageKey) ?? "").map {
+        max(fit, min(max(fit, ViewerZoom.actualSize), $0))
+      } ?? fit
+      return TileCompositor.openingURLs(
+        serviceID: serviceID, width: width, height: height, zoom: opening, viewportW: viewportW, viewportH: viewportH)
     }
 
-    /// The zoom that fits this canvas to its viewport, which a neighbor's
-    /// preload borrows.
-    var fittedZoom: Double { minZoom }
+    /// `callback`, once the canvas shows all its view needs.
+    func whenSettled(_ callback: @escaping () -> Void) {
+      compositor?.whenSettled(callback)
+    }
 
     private func fitToViewport() {
       guard let vp = viewport, let rect = vp.getBoundingClientRect() else { return }
