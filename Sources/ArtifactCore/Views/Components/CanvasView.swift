@@ -74,14 +74,22 @@
           backgroundColor(backgroundColorBase)
         }
         descendant(".canvas-spinner[data-visible='true']") { display(.flex) }
+        // The tile layer is the viewport's own size, user units its CSS
+        // pixels, and clips what it draws: the tiles' group carries the
+        // pan and zoom and is itself clipped to the image's rectangle
+        // (`TileCompositor`), so nothing is drawn beside the image. It is
+        // not composited (no `will-change`): WebKit left strips of the
+        // image's edge at earlier positions on a composited SVG group as
+        // the zoom changed, and a layer of that size is its own cost.
         descendant(".canvas-tile-surface") {
           position(.absolute)
           inset(0)
-          overflow(.visible)
+          width(perc(100))
+          height(perc(100))
+          overflow(.hidden)
         }
         descendant(".canvas-tile-compositor") {
           transformOrigin(px(0), px(0))
-          willChange(.transform)
         }
         // Drawing a crop box: a crosshair, not a hand.
         descendant(".canvas-viewport[data-cropping='true']") { cursor(.crosshair) }
@@ -186,44 +194,6 @@
   import WebComponents
   import WebTypes
 
-  /// How a reader's views zoom, the image's and the text's alike (user,
-  /// 2026-10-12): from the fit of the whole page to its actual size, the
-  /// wheel zooming in proportion to its travel. A double-click is the
-  /// browser's own (it selects, and Live Text reads it): no zoom.
-  enum ViewerZoom {
-    /// The actual size: one pixel of the image (its full resolution), or
-    /// of the text, to one CSS pixel. The most a view zooms in, unless its
-    /// fit is larger still.
-    static let actualSize = 1.0
-    /// The session's image zoom: "fit", or a zoom.
-    static let imageKey = "gnorium:artifact-zoom:image"
-
-    /// What a view shows of its page (pane sync, a dev experiment, user
-    /// 2026-10-12): the point at the view's middle as fractions of the
-    /// page's width and height, and its zoom over its fit—so two views of
-    /// one page, the image and its text, show the same part of it, each by
-    /// its own fit.
-    struct Region {
-      let centerX: Double
-      let centerY: Double
-      let scale: Double
-      /// The most its zoom over its fit can be (the image's actual size
-      /// over its fit), which the text mirrors while matched.
-      let maxScale: Double
-    }
-    /// A wheel's travel counted in one event, at most, so a mouse wheel's
-    /// notch is not too fast.
-    static let wheelTravel = 40.0
-    /// The zoom one unit of the wheel's travel makes.
-    static let wheelStep = 0.005
-
-    /// What one wheel event multiplies the zoom by: in proportion to its
-    /// travel (`deltaY`), capped.
-    static func wheelFactor(_ deltaY: Double) -> Double {
-      1.0 - max(-wheelTravel, min(wheelTravel, deltaY)) * wheelStep
-    }
-  }
-
   /// One canvas, read: its tiles, its zoom and pan, the gestures that change
   /// them. Made by the viewer the first time the canvas is shown.
   final class CanvasReader: @unchecked Sendable {
@@ -232,52 +202,79 @@
     private var viewport: DOM.Element?
     private var compositor: TileCompositor?
 
-    private var imageW = 0
-    private var imageH = 0
-    private var zoom: Double = 1.0
-    private var minZoom: Double = 0.01
+    /// The image's zoom and pan: the model every image zoomed where it
+    /// stands shares (`ViewerZoom.Surface`), read and set here by the names
+    /// this reader has always used.
+    private var surface = ViewerZoom.Surface()
+    private var imageW: Int {
+      get { Int(surface.imageWidth) }
+      set { surface.imageWidth = Double(newValue) }
+    }
+    private var imageH: Int {
+      get { Int(surface.imageHeight) }
+      set { surface.imageHeight = Double(newValue) }
+    }
+    private var zoom: Double {
+      get { surface.zoom }
+      set { surface.zoom = newValue }
+    }
+    private var minZoom: Double {
+      get { surface.minZoom }
+      set { surface.minZoom = newValue }
+    }
     /// Whether the image is at its fit, which it follows as the viewport
     /// changes size; any other zoom is clamped.
-    private var atFit = true
+    private var atFit: Bool {
+      get { surface.atFit }
+      set { surface.atFit = newValue }
+    }
     /// The most it zooms in: its actual size, or its fit where that is
     /// larger.
-    private var maxZoom: Double { max(minZoom, ViewerZoom.actualSize) }
-    /// The zoom a Safari pinch began at (WebKit's `gesturestart`).
-    private var gestureStartZoom = 1.0
+    private var maxZoom: Double { surface.maxZoom }
+    private var panX: Double {
+      get { surface.panX }
+      set { surface.panX = newValue }
+    }
+    private var panY: Double {
+      get { surface.panY }
+      set { surface.panY = newValue }
+    }
+    private var viewportW: Double {
+      get { surface.viewportWidth }
+      set { surface.viewportWidth = newValue }
+    }
+    private var viewportH: Double {
+      get { surface.viewportHeight }
+      set { surface.viewportHeight = newValue }
+    }
+    /// The wheel and Safari's pinch on the viewport.
+    private var zoomInput: ViewerZoom.Input?
     /// Told what the image shows whenever the reader moves it—a drag, a
     /// wheel, a double-click—never when it is moved to match the text
     /// (pane sync).
     var onRegion: ((ViewerZoom.Region) -> Void)?
 
-    /// What the image shows now, nil until it has a size.
-    var region: ViewerZoom.Region? {
-      guard imageW > 0, imageH > 0, minZoom > 0 else { return nil }
-      let width = Double(imageW) * zoom
-      let height = Double(imageH) * zoom
-      return .init(
-        centerX: (viewportW / 2 - panX) / width, centerY: (viewportH / 2 - panY) / height, scale: zoom / minZoom,
-        maxScale: maxZoom / minZoom)
+    /// Told when the canvas is left with no image: every copy of what was
+    /// sent failed to load, and its service's image now may not stand in
+    /// (`TileCompositor.onNoImage`).
+    var onNoImage: (() -> Void)? {
+      didSet { compositor?.onNoImage = onNoImage }
     }
+
+    /// What the image shows now, nil until it has a size.
+    var region: ViewerZoom.Region? { surface.region }
 
     /// The image at `region`: its zoom over its fit, clamped, the point at
     /// its middle. Told to no one: it is the text's move, matched.
     func show(region: ViewerZoom.Region) {
       guard imageW > 0, imageH > 0 else { return }
-      zoom = max(minZoom, min(maxZoom, minZoom * region.scale))
-      atFit = zoom <= minZoom
-      panX = viewportW / 2 - region.centerX * Double(imageW) * zoom
-      panY = viewportH / 2 - region.centerY * Double(imageH) * zoom
-      clampPan()
+      surface.show(region: region)
       updateTransform()
     }
 
     private func tellRegion() {
       if let onRegion, let region { onRegion(region) }
     }
-    private var panX: Double = 0
-    private var panY: Double = 0
-    private var viewportW: Double = 0
-    private var viewportH: Double = 0
 
     private var dragStartX: Double = 0
     private var dragStartY: Double = 0
@@ -351,22 +348,11 @@
         guard w != viewportW || h != viewportH else { return }
         // Moving with the overlay, it is the overlay's to place.
         guard !blending else { return }
-        let kept = region
-        viewportW = w
-        viewportH = h
+        surface.resize(
+          viewportWidth: w, viewportHeight: h,
+          fit: ViewerZoom.Surface.fit(
+            imageWidth: surface.imageWidth, imageHeight: surface.imageHeight, viewportWidth: w, viewportHeight: h))
         guard imageW > 0, imageH > 0 else { return }
-        minZoom = min(viewportW / Double(imageW), viewportH / Double(imageH))
-        if let kept, !atFit {
-          zoom = max(minZoom, min(maxZoom, minZoom * kept.scale))
-          atFit = zoom <= minZoom
-          panX = viewportW / 2 - kept.centerX * Double(imageW) * zoom
-          panY = viewportH / 2 - kept.centerY * Double(imageH) * zoom
-        } else {
-          zoom = minZoom
-          panX = (viewportW - Double(imageW) * zoom) / 2
-          panY = (viewportH - Double(imageH) * zoom) / 2
-        }
-        clampPan()
         updateTransform()
       }
       setupGestures()
@@ -392,13 +378,15 @@
     }
 
     /// The image, fitted to the viewport: its low-resolution copy, then the
-    /// detail the fit asks for; or `image`, a plain image shown whole in
-    /// place of the service (an archived copy).
-    func show(width: Int, height: Int, image: String = "") {
+    /// detail the fit asks for; or the first of `images` that loads, a plain
+    /// image shown whole in place of the service (the archived copy of what
+    /// was sent)—the service where none loads only as
+    /// `live` lets it, else no image (`onNoImage`).
+    func show(width: Int, height: Int, images: [String] = [], live: Bool = true) {
       imageW = width
       imageH = height
       fitToViewport()
-      compositor?.setCanvas(serviceID: serviceID, width: width, height: height, image: image)
+      compositor?.setCanvas(serviceID: serviceID, width: width, height: height, images: images, live: live)
       updateTransform()
     }
 
@@ -424,18 +412,20 @@
     }
 
     /// What showing a canvas of `width` by `height` in this canvas's
-    /// viewport asks for first (its low-resolution copy, and the whole image
-    /// at the level its opening zoom shows), fetched ahead for the canvases
-    /// beside the one on screen: the URLs it then asks for, so they come
-    /// from the browser's cache.
+    /// viewport asks for first (its first copies, at the viewport's fit),
+    /// fetched ahead for the canvases beside the one on screen: the URLs it
+    /// then asks for, so they come from the browser's cache. Its service's:
+    /// only for a canvas that reads its service (`ArtifactView`'s
+    /// `readsService`), never one changed at its source.
     func openingURLs(serviceID: String, width: Int, height: Int) -> [String] {
-      guard width > 0, height > 0, viewportW > 0, viewportH > 0 else { return [] }
-      let fit = min(viewportW / Double(width), viewportH / Double(height))
-      let opening = parseDouble(sessionStorage.getItem(ViewerZoom.imageKey) ?? "").map {
-        max(fit, min(max(fit, ViewerZoom.actualSize), $0))
-      } ?? fit
-      return TileCompositor.openingURLs(
-        serviceID: serviceID, width: width, height: height, zoom: opening, viewportW: viewportW, viewportH: viewportH)
+      TileCompositor.openingURLs(
+        serviceID: serviceID, width: width, height: height, viewportW: viewportW, viewportH: viewportH)
+    }
+
+    /// How long a preload of `serviceID`'s images may wait: its host's
+    /// timeout for whole images; nil for the browser's own.
+    func preloadTimeout(serviceID: String) -> Double? {
+      TileCompositor.preloadTimeout(serviceID: serviceID)
     }
 
     /// `callback`, once the canvas shows all its view needs.
@@ -445,18 +435,16 @@
 
     private func fitToViewport() {
       guard let vp = viewport, let rect = vp.getBoundingClientRect() else { return }
-      viewportW = rect.width > 0 ? rect.width : 900
-      viewportH = rect.height > 0 ? rect.height : 500
-      let imageW = Double(self.imageW)
-      let imageH = Double(self.imageH)
-      minZoom = min(viewportW / imageW, viewportH / imageH)
+      let width = rect.width > 0 ? rect.width : 900
+      let height = rect.height > 0 ? rect.height : 500
       // At its fit, unless the session zoomed the images in (a reload keeps
       // it).
-      let kept = parseDouble(sessionStorage.getItem(ViewerZoom.imageKey) ?? "")
-      zoom = kept.map { max(minZoom, min(maxZoom, $0)) } ?? minZoom
-      atFit = zoom <= minZoom
-      panX = (viewportW - imageW * zoom) / 2
-      panY = (viewportH - imageH * zoom) / 2
+      surface.lay(
+        viewportWidth: width, viewportHeight: height,
+        fit: ViewerZoom.Surface.fit(
+          imageWidth: surface.imageWidth, imageHeight: surface.imageHeight, viewportWidth: width,
+          viewportHeight: height),
+        zoom: parseDouble(sessionStorage.getItem(ViewerZoom.imageKey) ?? ""))
     }
 
     /// Whether the reader's overlay holds the scan still (user,
@@ -466,21 +454,10 @@
       stringEquals(root.closest(".artifact-view")?.getAttribute(data("overlay-active")) ?? "", "true")
     }
 
+    /// Smaller than the viewport: centered, no panning. Larger: no empty
+    /// gap at any edge.
     private func clampPan() {
-      let iw = Double(imageW) * zoom
-      let ih = Double(imageH) * zoom
-      // Smaller than the viewport: centered, no panning. Larger: no empty
-      // gap at any edge.
-      if iw <= viewportW {
-        panX = (viewportW - iw) / 2
-      } else {
-        panX = min(0, max(viewportW - iw, panX))
-      }
-      if ih <= viewportH {
-        panY = (viewportH - ih) / 2
-      } else {
-        panY = min(0, max(viewportH - ih, panY))
-      }
+      surface.clampPan()
     }
 
     private func updateTransform() {
@@ -1115,22 +1092,16 @@
 
       vp.addEventListener(.mouseleave) { [self] _ in readout?.setAttribute(.hidden, "") }
 
-      // Safari's trackpad pinch: WebKit's gesture events, not the ctrl+wheel
-      // other browsers send (which the wheel above zooms by). Zoomed about
-      // the gesture's point from the zoom it began at, by its scale; the
-      // page itself never zoomed. Other browsers never send them.
-      vp.addEventListener("gesturestart") { [self] e in
-        e.preventDefault()
-        gestureStartZoom = zoom
-      }
-      vp.addEventListener("gesturechange") { [self] e in
-        e.preventDefault()
-        guard imageW > 0, imageH > 0, !locked else { return }
-        let box = viewport?.getBoundingClientRect()
-        zoom(
-          to: gestureStartZoom * e.webKitGestureScale, aboutX: e.clientX - (box?.x ?? 0), y: e.clientY - (box?.y ?? 0))
-      }
-      vp.addEventListener("gestureend") { e in e.preventDefault() }
+      // The wheel, and Safari's trackpad pinch (WebKit's gesture events, not
+      // the ctrl+wheel other browsers send, which the wheel zooms by): the
+      // model every image zoomed where it stands shares. Always taken: the
+      // page never scrolls or zooms over the canvas.
+      zoomInput = ViewerZoom.Input(
+        on: vp, takes: { true }, current: { [self] in zoom },
+        zoomTo: { [self] value, x, y in
+          guard imageW > 0, imageH > 0, !locked else { return }
+          zoom(to: value, aboutX: x, y: y)
+        })
 
       // Focused, the keys move it as the text's do (user, 2026-10-12): the
       // arrows pan by a wheel's travel, + and − zoom by a wheel's step about
@@ -1143,35 +1114,19 @@
           return
         }
         guard imageW > 0, imageH > 0, !locked else { return }
-        let key = e.key
-        if stringEquals(key, "+") || stringEquals(key, "=") {
-          zoom(to: zoom * ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel), aboutX: viewportW / 2, y: viewportH / 2)
-        } else if stringEquals(key, "-") {
-          zoom(to: zoom * ViewerZoom.wheelFactor(ViewerZoom.wheelTravel), aboutX: viewportW / 2, y: viewportH / 2)
-        } else if stringEquals(key, "0") {
+        guard let command = ViewerZoom.command(forKey: e.key) else { return }
+        switch command {
+        case .zoomIn, .zoomOut:
+          zoom(to: zoom * command.factor, aboutX: viewportW / 2, y: viewportH / 2)
+        case .fit:
           zoom(to: minZoom, aboutX: viewportW / 2, y: viewportH / 2)
-        } else if stringEquals(key, "ArrowLeft") || stringEquals(key, "ArrowRight") || stringEquals(key, "ArrowUp")
-          || stringEquals(key, "ArrowDown")
-        {
-          panX += stringEquals(key, "ArrowLeft") ? ViewerZoom.wheelTravel : stringEquals(key, "ArrowRight") ? -ViewerZoom.wheelTravel : 0
-          panY += stringEquals(key, "ArrowUp") ? ViewerZoom.wheelTravel : stringEquals(key, "ArrowDown") ? -ViewerZoom.wheelTravel : 0
-          clampPan()
+        case .pan(let x, let y):
+          surface.pan(by: x, y)
           updateTransform()
           tellRegion()
-        } else {
-          return
         }
         e.preventDefault()
         e.stopPropagation()
-      }
-
-      vp.addEventListener(.wheel) { [self] e in
-        e.preventDefault()
-        guard imageW > 0, imageH > 0, !locked else { return }
-        let dz = ViewerZoom.wheelFactor(e.deltaY)
-        let cx = e.clientX - (viewport?.getBoundingClientRect()?.x ?? 0)
-        let cy = e.clientY - (viewport?.getBoundingClientRect()?.y ?? 0)
-        zoom(to: zoom * dz, aboutX: cx, y: cy)
       }
     }
 
@@ -1180,13 +1135,8 @@
     private func zoom(to value: Double, aboutX cx: Double, y cy: Double) {
       // Held still by the overlay.
       guard !locked else { return }
-      let newZoom = max(minZoom, min(maxZoom, value))
-      panX = cx - (cx - panX) * (newZoom / zoom)
-      panY = cy - (cy - panY) * (newZoom / zoom)
-      zoom = newZoom
-      atFit = zoom <= minZoom
+      surface.zoom(to: value, aboutX: cx, y: cy)
       sessionStorage.setItem(ViewerZoom.imageKey, atFit ? "fit" : doubleToString(zoom))
-      clampPan()
       updateTransform()
       tellRegion()
     }

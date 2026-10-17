@@ -42,6 +42,33 @@ final class StructurePairingTests: XCTestCase {
       [.pair(edition: 0, scan: 0, within: true), .extra(edition: 1), .pair(edition: 2, scan: 1, within: true)])
   }
 
+  /// Typeface is not parity (user, 2026-10-17): a print line reaching 6px
+  /// higher and 4px lower than the edition's (its capitals, its
+  /// descenders), its letters on the same baseline, is within; the same
+  /// boxes on baselines 6px apart are off (gnorium-python
+  /// `test_the_faces_ascenders_and_descenders_are_no_difference`).
+  func testTheFacesAscendersAndDescendersAreNoDifference() {
+    var edition = StructureRow(left: 10, top: 10, right: 30, bottom: 22)
+    edition.baseline = 20
+    var print = StructureRow(left: 10, top: 4, right: 30, bottom: 26)
+    print.baseline = 20
+    XCTAssertTrue(StructurePairing.within(edition, print, leading: Self.leading))
+    print.baseline = 26
+    XCTAssertFalse(StructurePairing.within(edition, print, leading: Self.leading))
+    // A row with no baseline is placed by its ink's bottom.
+    XCTAssertEqual(Self.row(0, 12).seated, 12)
+  }
+
+  /// A row's baseline is its largest type's, the lower of equal ones.
+  func testARowsBaselineIsItsLargestTypes() {
+    let body = StructureRow(left: 0, top: 0, right: 40, bottom: 12, em: 16, baseline: 10, baselineEm: 16)
+    let superscript = StructureRow(left: 40, top: -4, right: 46, bottom: 4, em: 10, baseline: 3, baselineEm: 10)
+    XCTAssertEqual(superscript.joined(body).baseline, 10)
+    XCTAssertEqual(body.joined(superscript).baseline, 10)
+    let lower = StructureRow(left: 50, top: 0, right: 90, bottom: 13, em: 16, baseline: 11, baselineEm: 16)
+    XCTAssertEqual(body.joined(lower).baseline, 11)
+  }
+
   func testLinesSideBySideAreOneRow() {
     let rows = StructurePairing.rows([
       StructureRow(left: 50, top: 1, right: 90, bottom: 11), StructureRow(left: 0, top: 0, right: 40, bottom: 10),

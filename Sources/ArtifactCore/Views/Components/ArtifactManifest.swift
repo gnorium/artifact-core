@@ -12,10 +12,22 @@ struct ArtifactManifest {
     let width: Int
     let height: Int
     let label: String
-    /// A plain image shown for the canvas in place of its image service:
-    /// for a page changed at its source, the archived copy of the image a
-    /// run was sent (`"img"`, user 2026-10-11); empty for the live service.
-    var image: String = ""
+    /// Plain images shown for the canvas in place of its image service,
+    /// tried in order, the next where one does not load: for a page changed
+    /// at its source, the archived copy of the image a run was sent—Gnorium
+    /// keeps no copy of a source's image (`"imgs"`, user 2026-10-11,
+    /// 2026-10-17); empty for the live service.
+    var images: [String] = []
+    /// Whether the image service may stand in where no plain image loads
+    /// (`"live":false` where it may not): never for a page changed at its
+    /// source, whose image now is not what was sent (user, 2026-10-17)—it
+    /// shows a copy of what was sent or none.
+    var live = true
+    /// Whether the canvas is shown with no image (`"blank":true`): a page
+    /// changed at its source with no copy of what a run was sent kept, whose
+    /// image now is not what was sent (user, 2026-10-17). Its size stays, for
+    /// the text's page frame.
+    var blank = false
   }
 
   /// What the page-images switch does with an answer (user, 2026-10-10):
@@ -60,7 +72,8 @@ struct ArtifactManifest {
         manifest.pages.append(
           Page(
             serviceID: id, width: width, height: height, label: extractJSONString(entry, key: "l") ?? "",
-            image: extractJSONString(entry, key: "img") ?? ""))
+            images: images(of: entry), live: !stringContains(entry, "\"live\":false"),
+            blank: stringContains(entry, "\"blank\":true")))
       }
     }
     if manifest.pages.isEmpty {
@@ -68,6 +81,17 @@ struct ArtifactManifest {
       manifest.unread = stringContains(json, "\"unread\":true")
     }
     return manifest
+  }
+
+  /// The strings of a canvas's `"imgs"`, in order; none where it names none.
+  private static func images(of entry: String) -> [String] {
+    let parts = stringSplit(entry, separator: "\"imgs\":")
+    guard parts.count > 1 else { return [] }
+    var images: [String] = []
+    for element in jsonArrayElements(parts[1]) {
+      if let image = jsonStringLiteral(element), !stringIsEmpty(image) { images.append(image) }
+    }
+    return images
   }
 
   var canvasSwitch: CanvasSwitch {

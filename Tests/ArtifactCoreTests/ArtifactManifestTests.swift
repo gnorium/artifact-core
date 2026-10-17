@@ -31,6 +31,41 @@ final class ArtifactManifestTests: XCTestCase {
     XCTAssertEqual(ArtifactManifest.retryDelay(after: 20), 30000)
   }
 
+  /// A page changed at its source whose image that was sent isn't archived
+  /// is shown with no image (user, 2026-10-17), its size kept; an archived
+  /// copy is shown in place of the service; the rest read their service.
+  func testAPageShownBlankKeepsItsSizeAndNamesNoImage() {
+    let manifest = ArtifactManifest.parse(
+      #"{"canvases":[{"h":600,"id":"https://h/i1","l":"p. 1","w":400},{"blank":true,"h":600,"id":"https://h/i2","l":"p. 2","w":400},{"h":600,"id":"https://h/i3","imgs":["https://web.archive.org/web/20261016154929id_/https://h/i3/full/max/0/default.jpg"],"l":"p. 3","live":false,"w":400}],"label":"Lear"}"#)
+    XCTAssertEqual(manifest.pages.map(\.blank), [false, true, false])
+    XCTAssertEqual(
+      manifest.pages.map(\.images), [[], [], ["https://web.archive.org/web/20261016154929id_/https://h/i3/full/max/0/default.jpg"]])
+    XCTAssertEqual(manifest.pages[1].width, 400)
+    XCTAssertEqual(manifest.pages[1].height, 600)
+    XCTAssertEqual(manifest.canvasSwitch, .confirmed)
+  }
+
+  /// A changed page's copies of what was sent, in the order the reader tries
+  /// them—archived copies only: Gnorium keeps none of its own—and never its
+  /// service where none loads (`"live":false`, user, 2026-10-17); a page
+  /// unchanged, or a plain image with no such word, may fall back to its
+  /// service.
+  func testAChangedPageListsItsCopiesInOrderAndRefusesItsService() {
+    let manifest = ArtifactManifest.parse(
+      #"{"canvases":[{"h":600,"id":"https://h/i1","imgs":["https://web.archive.org/web/20261016154929id_/https://h/i1/full/max/0/default.jpg","https://web.archive.org/web/20261011000000id_/https://h/i1/full/!1300,1300/0/default.jpg"],"l":"p. 1","live":false,"w":400},{"h":600,"id":"https://h/i2","l":"p. 2","w":400},{"h":600,"id":"/scan","imgs":["/scan.svg"],"w":400}],"label":"Lear"}"#)
+    XCTAssertEqual(manifest.pages.map(\.serviceID), ["https://h/i1", "https://h/i2", "/scan"])
+    XCTAssertEqual(
+      manifest.pages[0].images,
+      [
+        "https://web.archive.org/web/20261016154929id_/https://h/i1/full/max/0/default.jpg",
+        "https://web.archive.org/web/20261011000000id_/https://h/i1/full/!1300,1300/0/default.jpg",
+      ])
+    XCTAssertEqual(manifest.pages.map(\.live), [false, true, true])
+    XCTAssertEqual(manifest.pages[1].images, [])
+    XCTAssertEqual(manifest.pages[2].images, ["/scan.svg"])
+    XCTAssertEqual(manifest.pages.map(\.blank), [false, false, false])
+  }
+
   func testAManifestThatNamesNoImageDropsTheSwitch() {
     XCTAssertEqual(ArtifactManifest.parse(#"{"canvases":[],"error":"The source URL can't be read."}"#).canvasSwitch, .none)
     XCTAssertEqual(ArtifactManifest.parse(#"{"canvases":[{"h":0,"id":"https://h/i1","l":"","w":0}]}"#).canvasSwitch, .none)

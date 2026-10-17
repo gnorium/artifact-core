@@ -1,136 +1,274 @@
 import EmbeddedSwiftUtilities
 
-/// An image service's tiles as IIIF lays them out (Image API 2 and 3): level
-/// `k` is the image at `1/2^k` of its full size, cut into tiles of
-/// `tileSize` of its own pixels, so a tile at level `k` covers
-/// `tileSize << k` pixels of the full image and is asked for at
-/// `ceil(width / 2^k)` wide. Every URL it makes is the one the service's
-/// `info.json` describes (its `tiles` and `sizes`), so a tile asked for
-/// twice—while preloading, after a zoom, by the next reader—is one cached
-/// response, not a fresh crop the server renders again.
+/// What an image service's `info.json` advertises (IIIF Image API 2 and
+/// 3): the image's size, its tiles' side and the scale factors they are cut
+/// at, the whole-image sizes it lists, the largest request it serves, and
+/// whether it serves WebP.
+struct ServiceInfo {
+  let width: Int
+  let height: Int
+  /// Its tiles' side; nil where it advertises none (whole images only).
+  let tileWidth: Int?
+  /// The scale factors its tiles are cut at (`tiles[0].scaleFactors`).
+  let scaleFactors: [Int]
+  /// The widths of the sizes it lists (`sizes`).
+  let sizes: [Int]
+  /// The largest request it serves (`maxWidth`, `maxHeight`, `maxArea`).
+  let maxWidth: Int?
+  let maxHeight: Int?
+  let maxArea: Int?
+  let format: String
+
+  /// The format every IIIF image service serves (the API requires `jpg`
+  /// at every compliance level).
+  static let defaultFormat = "jpg"
+
+  /// What `json` advertises; nil where it is not an `info.json` (a refusal,
+  /// a network error the fetch bridge answers with an error object).
+  static func parse(_ json: String) -> ServiceInfo? {
+    // Its arrays are read apart and taken out, so the top level's own
+    // keys are read from what is left.
+    let sizes = array(json, key: "sizes")
+    let afterSizes = sizes?.rest ?? json
+    let tiles = array(afterSizes, key: "tiles")
+    let top = tiles?.rest ?? afterSizes
+    guard let width = extractJSONInt(top, key: "width"), let height = extractJSONInt(top, key: "height"),
+      width > 0, height > 0
+    else { return nil }
+    var sizeWidths: [Int] = []
+    if let sizes {
+      let pieces = stringSplit(sizes.content, separator: "\"width\":")
+      for (index, piece) in pieces.enumerated() where index > 0 {
+        if let value = leadingInt(piece), value > 0 { sizeWidths.append(value) }
+      }
+    }
+    var tileWidth: Int?
+    var factors: [Int] = []
+    if let tiles {
+      if let side = extractJSONInt(tiles.content, key: "width"), side > 0 { tileWidth = side }
+      if let scale = array(tiles.content, key: "scaleFactors") {
+        for piece in stringSplit(scale.content, separator: ",") {
+          if let value = leadingInt(piece), value > 0 { factors.append(value) }
+        }
+      }
+    }
+    return ServiceInfo(
+      width: width, height: height, tileWidth: tileWidth, scaleFactors: factors, sizes: sizeWidths,
+      maxWidth: extractJSONInt(top, key: "maxWidth"), maxHeight: extractJSONInt(top, key: "maxHeight"),
+      maxArea: extractJSONInt(top, key: "maxArea"),
+      format: stringContains(json, "\"webp\"") ? "webp" : defaultFormat)
+  }
+
+  /// The array `key` holds (the text between its brackets), and the JSON
+  /// without it; nil where there is none.
+  static func array(_ json: String, key: String) -> (content: String, rest: String)? {
+    let bytes = Array(json.utf8)
+    let pattern = Array("\"\(key)\":".utf8)
+    guard bytes.count > pattern.count else { return nil }
+    var start = -1
+    var at = 0
+    while at + pattern.count <= bytes.count {
+      var match = true
+      for offset in 0..<pattern.count where bytes[at + offset] != pattern[offset] {
+        match = false
+        break
+      }
+      if match {
+        start = at
+        break
+      }
+      at += 1
+    }
+    guard start >= 0 else { return nil }
+    var open = start + pattern.count
+    while open < bytes.count, bytes[open] == 32 { open += 1 }
+    // `[` opens it.
+    guard open < bytes.count, bytes[open] == 91 else { return nil }
+    var depth = 0
+    var close = open
+    while close < bytes.count {
+      if bytes[close] == 91 { depth += 1 }
+      if bytes[close] == 93 {
+        depth -= 1
+        if depth == 0 { break }
+      }
+      close += 1
+    }
+    guard close < bytes.count else { return nil }
+    let content = String(decoding: bytes[(open + 1)..<close], as: UTF8.self)
+    var rest = Array(bytes[0..<start])
+    if close + 1 < bytes.count { rest.append(contentsOf: bytes[(close + 1)...]) }
+    return (content, String(decoding: rest, as: UTF8.self))
+  }
+
+  /// The whole number `text` begins with, spaces before it skipped.
+  static func leadingInt(_ text: String) -> Int? {
+    var value = 0
+    var digits = 0
+    for byte in text.utf8 {
+      if byte == 32 && digits == 0 { continue }
+      guard byte >= 48 && byte <= 57 else { break }
+      value = value * 10 + Int(byte - 48)
+      digits += 1
+    }
+    return digits > 0 ? value : nil
+  }
+}
+
+/// An image service's image as IIIF lays it out: tiles cut at the scale
+/// factors the service advertises (a tile at scale factor `s` covers
+/// `tileWidth · s` pixels of the full image and is asked for at
+/// `ceil(width / s)` wide), and whole images at the sizes it lists. Every
+/// URL it makes is one the service's `info.json` describes, so a tile asked
+/// for twice—while preloading, after a zoom, by the next reader—is one
+/// cached response, not a fresh crop the server renders again.
+///
+/// Nothing here is a tuned constant: the levels, the sizes and the limits
+/// are the service's own, and where its `info.json` is not read, the whole
+/// image is asked for at the powers of two of its width (the convention
+/// IIIF pyramids are cut by), with no tiles.
 ///
 /// Pure arithmetic, shared by the client's compositor and its tests.
 struct TilePyramid {
   /// The full image, in pixels.
   let width: Int
   let height: Int
-  /// A tile's side, in its level's pixels (`info.json`'s `tiles[0].width`).
-  let tileSize: Int
+  /// What its service advertises; nil before (or without) its `info.json`.
+  let info: ServiceInfo?
 
-  /// The side a service's tiles have when its `info.json` is not yet read.
-  static let defaultTileSize = 512
-  /// How far a level may be stretched past one of its pixels a device
-  /// pixel before the next finer one is asked for: a fit 2% short of a
-  /// level's size shows that level, not four times its tiles.
-  static let stretchAllowance = 1.15
-  /// The widest a low-resolution copy needs to be: it is seen only while
-  /// the detail loads.
-  static let backdropWidth = 256
-  /// The longest side a whole level is asked for in one image; past it,
-  /// tiles (servers cap a request's size).
-  static let wholeLimit = 4096
-
-  init(width: Int, height: Int, tileSize: Int = TilePyramid.defaultTileSize) {
+  init(width: Int, height: Int, info: ServiceInfo? = nil) {
     self.width = max(1, width)
     self.height = max(1, height)
-    self.tileSize = max(1, tileSize)
+    self.info = info
   }
 
-  /// `ceil(value / 2^level)`.
-  static func scaled(_ value: Int, _ level: Int) -> Int {
-    let scale = 1 << level
-    return (value + scale - 1) / scale
+  /// `ceil(value / factor)`.
+  static func scaled(_ value: Int, by factor: Int) -> Int {
+    let factor = max(1, factor)
+    return (value + factor - 1) / factor
   }
 
-  /// The coarsest level: the whole image in one tile.
-  var coarsestLevel: Int {
-    var level = 0
-    while Self.scaled(width, level) > tileSize || Self.scaled(height, level) > tileSize { level += 1 }
-    return level
+  /// The side of its tiles; 0 where the service advertises none.
+  var tileWidth: Int { info?.tileWidth ?? 0 }
+
+  /// Whether the service advertises tiles.
+  var hasTiles: Bool { tileWidth > 0 }
+
+  /// Its scale factors, finest first: the service's own, else the powers of
+  /// two down to a level one pixel wide.
+  var scaleFactors: [Int] {
+    if let info, !info.scaleFactors.isEmpty { return info.scaleFactors.sorted() }
+    var factors = [1]
+    while Self.scaled(width, by: factors[factors.count - 1]) > 1 { factors.append(factors[factors.count - 1] * 2) }
+    return factors
   }
 
-  /// The coarsest level whose pixels are no larger than a device pixel,
-  /// give or take `stretchAllowance`, at `devicePixels` device pixels to
-  /// one image pixel (the zoom times the device pixel ratio).
-  func level(devicePixels: Double) -> Int {
-    guard devicePixels > 0 else { return coarsestLevel }
-    let reach = Self.stretchAllowance / devicePixels
-    var level = 0
-    while level < coarsestLevel, Double(1 << (level + 1)) <= reach { level += 1 }
-    return level
+  /// The height of the image shown `w` wide.
+  func height(atWidth w: Int) -> Int {
+    (height * w + width - 1) / width
   }
 
-  /// The level the low-resolution copy is: the coarsest at least
-  /// `backdropWidth` wide (or the whole image, if it is narrower).
-  var backdropLevel: Int {
-    let wanted = min(Self.backdropWidth, width)
-    var level = 0
-    while Self.scaled(width, level + 1) >= wanted, level + 1 <= coarsestLevel { level += 1 }
-    return level
+  /// Whether the service serves the whole image `w` wide: no wider than the
+  /// image (no upscaling) and within the largest request it advertises.
+  func serves(width w: Int) -> Bool {
+    guard w > 0, w <= width else { return false }
+    let h = height(atWidth: w)
+    if let most = info?.maxWidth, w > most { return false }
+    if let most = info?.maxHeight, h > most { return false }
+    if let most = info?.maxArea, w * h > most { return false }
+    return true
   }
 
-  /// A level's image size, in its own pixels.
-  func size(atLevel level: Int) -> (width: Int, height: Int) {
-    (Self.scaled(width, level), Self.scaled(height, level))
+  /// The widths the whole image is asked for at, widest first: the sizes
+  /// the service lists, else its levels' widths; only those it serves.
+  var wholeLadder: [Int] {
+    var widths: [Int] = []
+    if let info, !info.sizes.isEmpty {
+      widths = info.sizes
+    } else {
+      for factor in scaleFactors { widths.append(Self.scaled(width, by: factor)) }
+    }
+    var ladder: [Int] = []
+    for candidate in widths.sorted(by: >) where serves(width: candidate) {
+      var seen = false
+      for held in ladder where held == candidate { seen = true }
+      if !seen { ladder.append(candidate) }
+    }
+    return ladder
   }
 
-  /// A level's tile grid.
-  func columns(atLevel level: Int) -> Int {
-    let span = tileSize << level
+  /// The width to ask for to show `needed` pixels across: the narrowest
+  /// the service serves that is at least that wide and is not `unusable`,
+  /// else the widest that is not; nil if every one is. Only widths under
+  /// `below` when it is given.
+  func wholeWidth(atLeast needed: Int, below: Int = Int.max, unusable: (Int) -> Bool) -> Int? {
+    var enough: Int?
+    var widest: Int?
+    for rung in wholeLadder where rung < below && !unusable(rung) {
+      if widest == nil { widest = rung }
+      if rung >= needed { enough = rung }
+    }
+    return enough ?? widest
+  }
+
+  /// The scale factor the tiles are asked for at to show `needed` pixels
+  /// across: the coarsest at which the image is at least that wide—never
+  /// coarser than the screen—else the finest.
+  func tileScale(needed: Int) -> Int {
+    let factors = scaleFactors
+    var chosen = factors.first ?? 1
+    for factor in factors where Self.scaled(width, by: factor) >= needed && factor > chosen { chosen = factor }
+    return chosen
+  }
+
+  /// The tile grid at a scale factor.
+  func columns(scale: Int) -> Int {
+    guard hasTiles else { return 0 }
+    let span = tileWidth * scale
     return (width + span - 1) / span
   }
 
-  func rows(atLevel level: Int) -> Int {
-    let span = tileSize << level
+  func rows(scale: Int) -> Int {
+    guard hasTiles else { return 0 }
+    let span = tileWidth * scale
     return (height + span - 1) / span
   }
 
   /// A tile's region of the full image (the last row and column are cut
   /// at its edge).
-  func region(level: Int, column: Int, row: Int) -> (x: Int, y: Int, width: Int, height: Int) {
-    let span = tileSize << level
+  func region(scale: Int, column: Int, row: Int) -> (x: Int, y: Int, width: Int, height: Int) {
+    let span = tileWidth * scale
     let x = column * span
     let y = row * span
     return (x, y, min(span, width - x), min(span, height - y))
   }
 
-  /// A tile's URL: its region in full-image pixels, its width at its level.
-  func tileURL(service: String, level: Int, column: Int, row: Int, format: String) -> String {
-    let box = region(level: level, column: column, row: row)
+  /// A tile's URL: its region in full-image pixels, its width at its scale.
+  func tileURL(service: String, scale: Int, column: Int, row: Int, format: String) -> String {
+    let box = region(scale: scale, column: column, row: row)
     return stringJoin(
       [
         Self.base(service), "/", intToString(box.x), ",", intToString(box.y), ",", intToString(box.width), ",",
-        intToString(box.height), "/", intToString(Self.scaled(box.width, level)), ",/0/default.", format,
+        intToString(box.height), "/", intToString(Self.scaled(box.width, by: scale)), ",/0/default.", format,
       ], separator: "")
   }
 
-  /// The whole image at a level, in one request.
-  func wholeURL(service: String, level: Int, format: String) -> String {
-    stringJoin(
-      [Self.base(service), "/full/", intToString(Self.scaled(width, level)), ",/0/default.", format], separator: "")
+  /// The whole image at a width, in one request.
+  func wholeURL(service: String, width: Int, format: String) -> String {
+    stringJoin([Self.base(service), "/full/", intToString(width), ",/0/default.", format], separator: "")
   }
 
-  /// Whether a level is drawn whole rather than in tiles: the image lies
-  /// entirely in the view (each of its tiles would be asked for anyway) and
-  /// the level is small enough for one request, or it is one tile.
-  func drawsWhole(level: Int, zoom: Double, viewportWidth: Double, viewportHeight: Double) -> Bool {
-    if level >= coarsestLevel { return true }
-    let size = size(atLevel: level)
-    guard size.width <= Self.wholeLimit, size.height <= Self.wholeLimit else { return false }
-    return Double(width) * zoom <= viewportWidth + 1 && Double(height) * zoom <= viewportHeight + 1
-  }
-
-  /// The tiles of a level the view shows (`panX`, `panY`: where the
-  /// image's corner is in the viewport; `zoom`: viewport pixels to one
-  /// image pixel), nearest its middle first: the order they are asked for,
-  /// so what the reader looks at arrives first.
+  /// The tiles at a scale factor the view shows (`panX`, `panY`: where the
+  /// image's corner is in the viewport; `zoom`: viewport pixels to one image
+  /// pixel), nearest its middle first: the order they are asked for, so
+  /// what the reader looks at arrives first.
   func visibleTiles(
-    level: Int, panX: Double, panY: Double, zoom: Double, viewportWidth: Double, viewportHeight: Double
+    scale: Int, panX: Double, panY: Double, zoom: Double, viewportWidth: Double, viewportHeight: Double
   ) -> [(column: Int, row: Int)] {
-    guard zoom > 0, viewportWidth > 0, viewportHeight > 0 else { return [] }
-    let span = Double(tileSize << level) * zoom
-    let columns = columns(atLevel: level)
-    let rows = rows(atLevel: level)
+    guard hasTiles, zoom > 0, viewportWidth > 0, viewportHeight > 0 else { return [] }
+    let span = Double(tileWidth * scale) * zoom
+    let columns = columns(scale: scale)
+    let rows = rows(scale: scale)
     let firstColumn = max(0, Int(((0 - panX) / span).rounded(.down)))
     let lastColumn = min(columns - 1, Int(((viewportWidth - panX) / span).rounded(.up)) - 1)
     let firstRow = max(0, Int(((0 - panY) / span).rounded(.down)))
@@ -141,7 +279,7 @@ struct TilePyramid {
     var found: [(column: Int, row: Int, distance: Double)] = []
     for row in firstRow...lastRow {
       for column in firstColumn...lastColumn {
-        let box = region(level: level, column: column, row: row)
+        let box = region(scale: scale, column: column, row: row)
         let dx = (Double(box.x) + Double(box.width) / 2) * zoom - middleX
         let dy = (Double(box.y) + Double(box.height) / 2) * zoom - middleY
         found.append((column, row, dx * dx + dy * dy))
@@ -154,19 +292,5 @@ struct TilePyramid {
   /// The service's base: its id without a trailing slash.
   static func base(_ service: String) -> String {
     stringEndsWith(service, "/") ? stringSubstring(service, from: 0, to: service.utf8.count - 1) : service
-  }
-
-  /// The tile side an `info.json` gives (`tiles[0].width`), if any.
-  static func tileSize(infoJSON json: String) -> Int? {
-    let parts = stringSplit(json, separator: "\"tiles\":")
-    guard parts.count > 1, let side = extractJSONInt(parts[1], key: "width"), side >= 64 else { return nil }
-    return side
-  }
-
-  /// The format a service is read in: WebP where its `info.json` lists it
-  /// among its formats (`formats`, `extraFormats`, or a level 2 profile's
-  /// `formats`), JPEG otherwise.
-  static func format(infoJSON json: String) -> String {
-    stringContains(json, "\"webp\"") ? "webp" : "jpg"
   }
 }

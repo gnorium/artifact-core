@@ -5,7 +5,11 @@
 /// structure image): a change here is made there too.
 ///
 /// A row is a line's ink box, left, top, right and bottom, in one frame (the
-/// rendered page's, the scan's laid in it by the overlay's registration).
+/// rendered page's, the scan's laid in it by the overlay's registration),
+/// and its baseline: where its letters sit, what its place down the page
+/// is judged by (user, 2026-10-17: typeface is not parity—the edition is
+/// set in Noto on purpose, so how far the print's face and Noto reach above
+/// the x-height or below the baseline is no difference).
 struct StructureRow: Equatable {
   var left: Double
   var top: Double
@@ -19,14 +23,38 @@ struct StructureRow: Equatable {
   /// The block it is a line of (an id; -1 none): a justified block's last
   /// line is set from its start alone.
   var block: Int32 = -1
+  /// Its baseline: an edition's line's face's alphabetic baseline (its font
+  /// box's top plus the font's ascent), a scan's line's stored
+  /// `<path type="baseline">`, laid as its zone is; nil where there is none
+  /// (a scan line with no x-height measured), then its ink's bottom
+  /// (`seated`). `baselineEm`: the em of the line it is the baseline of.
+  var baseline: Double? = nil
+  var baselineEm: Double = 0
 
-  /// The box around both, the first's setting kept.
+  /// Where its letters sit: its baseline, else its ink's bottom
+  /// (gnorium-python `layout_measure.baseline`).
+  var seated: Double { baseline ?? bottom }
+
+  /// The box around both, the first's setting kept; the baseline the
+  /// larger type's (a superscript's or a small note's is not the row's),
+  /// the lower of equal ones (gnorium-python `layout_preview._LINES`).
   func joined(_ other: StructureRow) -> StructureRow {
     var joined = self
     joined.left = min(left, other.left)
     joined.top = min(top, other.top)
     joined.right = max(right, other.right)
     joined.bottom = max(bottom, other.bottom)
+    if let theirs = other.baseline {
+      if let ours = baseline {
+        if other.baselineEm > baselineEm || (other.baselineEm == baselineEm && theirs > ours) {
+          joined.baseline = theirs
+          joined.baselineEm = other.baselineEm
+        }
+      } else {
+        joined.baseline = theirs
+        joined.baselineEm = other.baselineEm
+      }
+    }
     return joined
   }
 }
@@ -68,15 +96,14 @@ enum StructurePairing {
     return rows
   }
 
-  /// Whether a pair is within the tolerance: its tops and its bottoms each
+  /// Whether a pair is within the tolerance: its baselines (`seated`)
   /// within a quarter of the body's leading (`leading`), half a half-line,
   /// where the gap grid's rounding (gnorium-python `type_scale`: a gap is a
   /// whole number of half-lines) puts a gap on another step; and across,
   /// each edge the edition's line is set by (`aligned`) within an em of
   /// its type.
   static func within(_ edition: StructureRow, _ scan: StructureRow, leading: Double) -> Bool {
-    abs(edition.top - scan.top) <= leading / 4 && abs(edition.bottom - scan.bottom) <= leading / 4
-      && aligned(edition, scan)
+    abs(edition.seated - scan.seated) <= leading / 4 && aligned(edition, scan)
   }
 
   /// Whether an edition's line stands across where its scan line does, by
@@ -116,9 +143,9 @@ enum StructurePairing {
   }
 
   /// The two structures' rows paired in order by dynamic programming
-  /// (Needleman–Wunsch): a pair costs its tops' and its bottoms' distance,
-  /// a row left unpaired the body's leading (`leading`)—a row off by a whole
-  /// line is no pair of it. The matches top to bottom.
+  /// (Needleman–Wunsch): a pair costs twice its baselines' distance
+  /// (`seated`), a row left unpaired the body's leading (`leading`)—a row
+  /// off by a whole line is no pair of it. The matches top to bottom.
   static func pair(edition: [StructureRow], scan: [StructureRow], leading: Double) -> [Match] {
     let n = edition.count
     let m = scan.count
@@ -133,7 +160,7 @@ enum StructurePairing {
         if i > 0 && j > 0 {
           let a = edition[i - 1]
           let b = scan[j - 1]
-          best = cost[i - 1][j - 1] + abs(a.top - b.top) + abs(a.bottom - b.bottom)
+          best = cost[i - 1][j - 1] + 2 * abs(a.seated - b.seated)
         }
         if i > 0, cost[i - 1][j] + leading < best {
           best = cost[i - 1][j] + leading
