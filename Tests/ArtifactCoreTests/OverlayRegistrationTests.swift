@@ -121,4 +121,47 @@ final class OverlayRegistrationTests: XCTestCase {
     let box = [100.0, 50.0, 526.4, 163.2]
     XCTAssertEqual(OverlayRegistration.laid(box, zone: Self.textBlock, size: Self.size, spans: true, typeScale: 0), box)
   }
+
+  /// The title's "OF THE" on prod madrigal dd5cc0b2's page 3 (2026-10-18),
+  /// letter-spaced, a zone a letter: its `<w>`s name `p3-wz27 p3-wz28
+  /// p3-wz29` and `p3-wz30`–`p3-wz33`, on one scan line; and a word broken
+  /// over two lines (`p3-wz26`, the line before, and `p3-wz34`).
+  static let titleLayout =
+    "block main - 141.21 385.12 897.24 386.72 897.16 408.67 141.13 407.07;"
+    + "line - - 141.21 385.12 897.24 386.72 897.16 408.67 141.13 407.07 141.13 406.49 897.16 408.09;"
+    + "word - p3-wz26 746.18 386.4 897.24 386.72 897.16 408.67 746.1 408.35;"
+    + "block main - 484.57 455.14 553.36 455.28 553.33 463.22 484.54 463.07;"
+    + "line - - 484.57 455.14 553.36 455.28 553.33 463.22 484.54 463.07 484.54 462.96 553.33 463.11;"
+    + "word - p3-wz27 484.57 455.14 488.47 455.15 488.44 463.08 484.54 463.07;"
+    + "word - p3-wz28 492.01 455.15 494.5 455.16 494.47 463.09 491.98 463.09;"
+    + "word - p3-wz29 496.98 455.16 505.49 455.18 505.46 463.12 496.95 463.1;"
+    + "word - p3-wz30 519.67 455.21 529.25 455.23 529.22 463.17 519.64 463.15;"
+    + "word - p3-wz31 531.73 455.24 534.92 455.24 534.89 463.18 531.7 463.17;"
+    + "word - p3-wz32 538.47 455.25 541.66 455.26 541.63 463.19 538.44 463.19;"
+    + "word - p3-wz33 544.85 455.27 553.36 455.28 553.33 463.22 544.82 463.2;"
+    + "block main - 283.28 513.43 755.27 514.43 755.18 536.11 283.2 535.11;"
+    + "line - - 283.28 513.43 755.27 514.43 755.18 536.11 283.2 535.11 283.2 534.66 755.19 535.66;"
+    + "word - p3-wz34 283.28 513.43 418.39 513.71 418.3 535.4 283.2 535.11"
+
+  /// A word whose `@facs` names several zones on one scan line is one box,
+  /// their union, never its letters apart (user, 2026-10-18).
+  func testALetterSpacedWordIsOneBoxTheUnionOfItsZones() {
+    let zones = OverlayRegistration.wordZones(OverlayRegistration.scanLayout(Self.titleLayout))
+    XCTAssertEqual(zones.map(\.line), [0, 1, 1, 1, 1, 1, 1, 1, 2])
+    let of = OverlayRegistration.wordBoxes(["p3-wz27", "p3-wz28", "p3-wz29"], in: zones)
+    XCTAssertEqual(of.count, 1)
+    XCTAssertEqual(of[0], [484.54, 455.14, 505.49, 463.12])
+    let the = OverlayRegistration.wordBoxes(["p3-wz30", "p3-wz31", "p3-wz32", "p3-wz33"], in: zones)
+    XCTAssertEqual(the, [[519.64, 455.21, 553.36, 463.22]])
+  }
+
+  /// A word whose zones stand on two scan lines (broken over them) is a
+  /// box a line, in reading order; a zone the layout lacks is left out.
+  func testAWordBrokenOverLinesIsABoxALine() {
+    let zones = OverlayRegistration.wordZones(OverlayRegistration.scanLayout(Self.titleLayout))
+    XCTAssertEqual(
+      OverlayRegistration.wordBoxes(["p3-wz26", "p3-wz34", "p3-wz99"], in: zones),
+      [[746.1, 386.4, 897.24, 408.67], [283.2, 513.43, 418.39, 535.4]])
+    XCTAssertEqual(OverlayRegistration.wordBoxes(["p3-wz99"], in: zones), [])
+  }
 }

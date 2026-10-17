@@ -486,8 +486,12 @@
           display(.flex)
           flexDirection(.column)
         }
+        // Its 1px edge is always there, transparent until the pane is ringed
+        // (the host colors it): ringed or not, the text stands in the same
+        // place, under the header's label.
         descendant(".artifact-markup-box") {
           position(.relative)
+          border(borderWidthBase, .solid, borderColorTransparent)
           display(.flex)
           flexDirection(.column)
           flex("1 1 auto")
@@ -727,6 +731,17 @@
         descendant(".artifact-markup .tei-word[data-corresponding='true']") {
           backgroundColor(backgroundColorBlueSubtle)
         }
+        // Hugging the word: the fill drawn as one band at the glyphs'
+        // extent (`band`), the span's own box left clear.
+        descendant(".artifact-markup .tei-word[data-corresponding='true'][data-band='true']") {
+          backgroundColor(.transparent)
+          CSS.Property(
+            "background-image",
+            "linear-gradient(" + backgroundColorBlueSubtle.value + ", " + backgroundColorBlueSubtle.value + ")")
+          CSS.Property("background-repeat", "no-repeat")
+          CSS.Property("background-size", "var(--artifact-band-width) var(--artifact-band-height)")
+          CSS.Property("background-position", "var(--artifact-band-x) var(--artifact-band-y)")
+        }
         // The code in the pane on the page's ground, gutter and all, as an
         // editor's (Xcode's) is (user, 2026-10-12); a code block in prose
         // keeps the code's gray, to stand apart from it.
@@ -767,7 +782,8 @@
         }
         // Its text where the rendered text starts below when left-aligned
         // (user, 2026-10-12): the text's 16 inset in its layer, inside the
-        // TEI view's 1px ring padding and the pane's 1px, less the row's 8.
+        // TEI view's 1px ring padding inside the box's 1px edge (ringed or
+        // not), less the row's 8.
         descendant(".artifact-canvas-label") {
           fontSize(fontSizeMedium16)
           color(colorSubtle)
@@ -1440,14 +1456,42 @@
     /// it reads the session's choice when it is.
     func setCanvasShown(_ shown: Bool) {
       guard let _ = canvasToggle, canvasConfirmed, shown != canvasShown else { return }
+      // The images put away take the overlay with them, as its own switch
+      // does (user, 2026-10-18): the overlay lays the text on the scan, and
+      // with no scan the pane is the text's own again. Back on, the overlay
+      // comes back as it was.
+      if !shown, overlayOn {
+        overlayBeforeImagesOff = true
+        pressOverlay(false)
+        setOverlay(false)
+      }
       canvasShown = shown
       reflectCanvasShown()
       if shown {
         if canvasIndex < serviceIDs.count { showCanvas(canvasIndex) }
+        if overlayBeforeImagesOff {
+          overlayBeforeImagesOff = false
+          if overlayApplies && !rawVisible && !reflowOn {
+            pressOverlay(true)
+            setOverlay(true)
+          }
+        }
       } else {
         shownCanvas?.hide()
         shownCanvas = nil
       }
+    }
+
+    /// Whether the overlay was on when the images were put away: turned
+    /// back on with them (`setCanvasShown`).
+    private var overlayBeforeImagesOff = false
+
+    /// The overlay's switch shown as `on`, as the reader sets the overlay
+    /// itself (`setCanvasShown`, `reflectPageMarkup`), never by a press.
+    private func pressOverlay(_ on: Bool) {
+      guard let toggle = root.querySelector(".artifact-overlay-toggle") else { return }
+      toggle.setAttribute("aria-pressed", on ? "true" : "false")
+      toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
     }
 
     /// Whether the page on screen has an image to show: none on a page
@@ -1735,9 +1779,8 @@
     /// with an image, the images show as the switch was left
     /// (`reflectCanvasShown`, user, 2026-10-17).
     private func reflectPageMarkup() {
-      if overlayOn && !overlayApplies, let toggle = root.querySelector(".artifact-overlay-toggle") {
-        toggle.setAttribute("aria-pressed", "false")
-        toggle.querySelector("button")?.setAttribute("aria-pressed", "false")
+      if overlayOn && !overlayApplies {
+        pressOverlay(false)
         // Its image left as the page's turn showed it: the spot the overlay
         // came on at was the last page's.
         scanOwn = nil
@@ -3091,6 +3134,13 @@
     /// keeps the text under it in place. Nothing is clamped before the
     /// layer has a size: a page not yet drawn is left as it is.
     private func applyZoom(about anchor: (x: Double, y: Double)?, matching: Bool = false) {
+      applyZoomLayout(about: anchor, matching: matching)
+      // The words marked as the scan's wear bands measured at the zoom and
+      // size before (`band`): drawn again where the layer now is.
+      for word in correspondingWords { band(word) }
+    }
+
+    private func applyZoomLayout(about anchor: (x: Double, y: Double)?, matching: Bool = false) {
       guard let pane = markupPane, let layer = shownLayer() else { return }
       if rawVisible {
         // Source code has one readable size on every page, independent of
@@ -3722,8 +3772,17 @@
     /// The scale the shown layer is drawn at now: its box over its own
     /// layout width, whatever its transform.
     private func drawnScale(of layer: DOM.Element) -> Double? {
-      guard let box = layer.getBoundingClientRect(), layer.clientWidth > 0, box.width > 0 else { return nil }
-      return box.width / layer.clientWidth
+      // Over its layout width to the fraction (`clientWidth` is rounded to a
+      // pixel: a page's rows a fifth of a pixel off at its foot).
+      let style = window.getComputedStyle(layer)
+      var width = pixels(style.getPropertyValue("width"))
+      if !stringEquals(style.getPropertyValue("box-sizing"), "border-box") {
+        for side in ["padding-left", "padding-right", "border-left-width", "border-right-width"] {
+          width += pixels(style.getPropertyValue(side))
+        }
+      }
+      guard let box = layer.getBoundingClientRect(), width > 0, box.width > 0 else { return nil }
+      return box.width / width
     }
 
     /// The overlay's registration as a map from the scan's 0–1000 space
@@ -4072,9 +4131,10 @@
     private struct WordLinks {
       let key: String
       /// Each linked word: its parts in the shown layer (a word broken over
-      /// lines has one a line) and its zones' boxes on the scan (left, top,
-      /// right, bottom in the 0–1000 space; a word the print spaces apart
-      /// has several, words whose space the print closes share one).
+      /// lines has one a line) and its boxes on the scan (left, top, right,
+      /// bottom in the 0–1000 space): its zones' union a scan line, so a
+      /// word the print spaces apart is one box (user, 2026-10-18); words
+      /// whose space the print closes share one.
       let words: [(parts: [DOM.Element], boxes: [[Double]])]
     }
 
@@ -4086,22 +4146,15 @@
       guard !rawVisible, let layer = shownLayer(), let page = layer.closest(".tei-page") else { return nil }
       let key = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
       if let wordLinks, stringEquals(wordLinks.key, key) { return wordLinks }
-      // The word zones' boxes, by their ids.
-      var zones: [(id: String, box: [Double])] = []
-      for zone in scanLayout(of: page) where zone.kind == 2 && !stringIsEmpty(zone.id) {
-        let p = zone.points
-        zones.append(
-          (zone.id, [min(p[0], p[2], p[4], p[6]), min(p[1], p[3], p[5], p[7]), max(p[0], p[2], p[4], p[6]), max(p[1], p[3], p[5], p[7])]))
-      }
-      // Each word's zones, by its place ("line:word").
+      // The word zones' boxes, by their ids and lines.
+      let zones = OverlayRegistration.wordZones(scanLayout(of: page))
+      // Each word's boxes, by its place ("line:word"): its zones' union a
+      // scan line (`OverlayRegistration.wordBoxes`).
       var named: [(place: String, boxes: [[Double]])] = []
       for entry in stringSplit(page.getAttribute(data("word-zones")) ?? "", separator: ";") {
         let parts = stringSplit(entry, separator: " ")
         guard parts.count > 1 else { continue }
-        var boxes: [[Double]] = []
-        for id in parts[1...] {
-          if let zone = zones.first(where: { stringEquals($0.id, id) }) { boxes.append(zone.box) }
-        }
+        let boxes = OverlayRegistration.wordBoxes(Array(parts[1...]), in: zones)
         if !boxes.isEmpty { named.append((parts[0], boxes)) }
       }
       // Its parts in the layer, in order.
@@ -4142,8 +4195,37 @@
       _ = pane.addEventListener(.mouseleave) { [self] _ in self.pointEdition(at: nil) }
       guard let object else { return }
       _ = object.addEventListener(.mousemove) { [self] event in self.pointScan(x: event.clientX, y: event.clientY) }
-      _ = object.addEventListener(.mousedown) { [self] event in self.pointScan(x: event.clientX, y: event.clientY) }
+      _ = object.addEventListener(.mousedown) { [self] event in
+        self.scanPress = (event.clientX, event.clientY)
+        self.pointScan(x: event.clientX, y: event.clientY)
+      }
+      // A click on a word's band opens the word's gloss, as a click on the
+      // word in the text does (user, 2026-10-18).
+      _ = object.addEventListener(.click) { [self] event in self.openScanWord(x: event.clientX, y: event.clientY) }
       _ = object.addEventListener(.mouseleave) { [self] _ in self.markEdition([]) }
+    }
+
+    /// Where the press on the scan began: a click that ends elsewhere was a
+    /// pan, as the text pane's (`panMoved`).
+    private var scanPress: (x: Double, y: Double)?
+
+    /// The edition's word of the scan's word at a point of the window, as a
+    /// click on it in the text: the pane brought to it the least it takes,
+    /// then the word itself clicked, so whatever a click on a word does (its
+    /// gloss opens, in the pane it is in) is done, never a copy of it. A
+    /// press that moved panned the image: nothing opens.
+    private func openScanWord(x: Double, y: Double) {
+      guard let press = scanPress, press.x == x, press.y == y else { return }
+      scanPress = nil
+      guard corresponds, let canvas = shownCanvas, let point = canvas.spacePoint(clientX: x, clientY: y),
+        let links = currentWordLinks(),
+        let word = links.words.first(where: { linked in
+          linked.boxes.contains { point.x >= $0[0] && point.x <= $0[2] && point.y >= $0[1] && point.y <= $0[3] }
+        }),
+        let part = word.parts.first
+      else { return }
+      markEdition(word.parts)
+      part.click()
     }
 
     /// The scan's zones of an edition word, banded, and its other parts
@@ -4186,9 +4268,112 @@
     private func mark(_ words: [DOM.Element]) {
       for previous in correspondingWords where !words.contains(where: { $0.id == previous.id }) {
         previous.removeAttribute(data("corresponding"))
+        unband(previous)
       }
-      for word in words { word.setAttribute(data("corresponding"), "true") }
+      for word in words {
+        word.setAttribute(data("corresponding"), "true")
+        band(word)
+      }
       correspondingWords = words
+    }
+
+    /// A face's ink envelope at the reference size, measured once per face
+    /// (`faceEnvelope`): the font's ascent above the baseline, and the ink
+    /// of the tallest ascenders and deepest descenders it draws.
+    private struct FaceEnvelope {
+      let face: String
+      let fontAscent: Double
+      let inkAscent: Double
+      let inkDescent: Double
+    }
+
+    private var faceEnvelopes: [FaceEnvelope] = []
+
+    /// The size a face is measured at, large enough that its metrics are not
+    /// rounded to pixels; an envelope scales linearly from it.
+    private static let envelopeSize = 200.0
+
+    /// Characters whose ink reaches the face's highest and lowest: accented
+    /// capitals and tall letters above the baseline, descenders and the bar
+    /// below it.
+    private static let envelopeProbe = "ÉÅfhgjpqy|"
+
+    /// The face's envelope, from `measureText` of the probe at the reference
+    /// size, kept per face (style, weight, family, caps) so every word of a
+    /// face shares it.
+    private func faceEnvelope(style: String, weight: String, family: String, caps: String) -> FaceEnvelope? {
+      let face = style + " " + weight + " " + family + " " + caps
+      if let known = faceEnvelopes.first(where: { stringEquals($0.face, face) }) { return known }
+      guard let context = document.createElement("canvas").getContext("2d") else { return nil }
+      context.font = style + " " + weight + " " + doubleToString(Self.envelopeSize) + "px " + family
+      context.fontVariantCaps = caps
+      let metrics = context.measureText(Self.envelopeProbe)
+      guard metrics.fontBoundingBoxAscent > 0, metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent > 0
+      else { return nil }
+      let made = FaceEnvelope(
+        face: face, fontAscent: metrics.fontBoundingBoxAscent, inkAscent: metrics.actualBoundingBoxAscent,
+        inkDescent: metrics.actualBoundingBoxDescent)
+      faceEnvelopes.append(made)
+      return made
+    }
+
+    /// The band a corresponding word wears, drawn to hug the word (user,
+    /// 2026-10-18): across, the glyphs' extent (the word's box, less the
+    /// letter-spacing that trails its last letter); down, a constant of the
+    /// typeface scaled by the word's own font size—the face's ink envelope
+    /// (`faceEnvelope`) set on the baseline—so words of one size on a line
+    /// share one band whatever letters they hold, and a smaller or larger
+    /// span's band is proportionally smaller or larger.
+    /// Set as the word's `--artifact-band-*` in its own pixels (the layer's
+    /// zoom taken out), which the viewer's rule paints; a word set on more
+    /// than one line keeps the plain fill.
+    private func band(_ word: DOM.Element) {
+      unband(word)
+      let range = document.createRange()
+      range.setStart(word, 0)
+      range.setEnd(word, word.childNodes.count)
+      let rects = range.getClientRects().filter { $0.width > 0 && $0.height > 0 }
+      guard let first = rects.first, let own = word.getBoundingClientRect(), word.offsetWidth > 0,
+        rects.allSatisfy({ $0.top < first.bottom && first.top < $0.bottom })
+      else { return }
+      let scale = own.width / word.offsetWidth
+      guard scale > 0 else { return }
+      var left = first.left, right = first.right, top = first.top, bottom = first.bottom
+      for rect in rects {
+        left = min(left, rect.left)
+        right = max(right, rect.right)
+        top = min(top, rect.top)
+        bottom = max(bottom, rect.bottom)
+      }
+      let style = window.getComputedStyle(word)
+      // Down: the face's envelope at the word's font size, as drawn (the
+      // layer's zoom taken in), placed on the baseline the inline box's top
+      // sits a font ascent above.
+      let size = pixels(style.getPropertyValue("font-size")) * scale
+      if size > 0, let face = faceEnvelope(
+        style: style.getPropertyValue("font-style"), weight: style.getPropertyValue("font-weight"),
+        family: style.getPropertyValue("font-family"), caps: style.getPropertyValue("font-variant-caps"))
+      {
+        let unit = size / Self.envelopeSize
+        let baseline = first.top + face.fontAscent * unit
+        top = baseline - face.inkAscent * unit
+        bottom = baseline + face.inkDescent * unit
+      }
+      let spacing = max(0, pixels(style.getPropertyValue("letter-spacing"))) * scale
+      if stringEquals(style.getPropertyValue("direction"), "rtl") { left += spacing } else { right -= spacing }
+      guard right > left else { return }
+      func local(_ value: Double) -> String { doubleToString(value / scale) + "px" }
+      word.style.setProperty("--artifact-band-x", local(left - own.left))
+      word.style.setProperty("--artifact-band-y", local(top - own.top))
+      word.style.setProperty("--artifact-band-width", local(right - left))
+      word.style.setProperty("--artifact-band-height", local(bottom - top))
+      word.setAttribute(data("band"), "true")
+    }
+
+    private func unband(_ word: DOM.Element) {
+      guard word.hasAttribute(data("band")) else { return }
+      word.removeAttribute(data("band"))
+      for name in ["x", "y", "width", "height"] { _ = word.style.removeProperty("--artifact-band-" + name) }
     }
 
     /// Edition words marked as corresponding, the first brought into the

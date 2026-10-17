@@ -539,8 +539,9 @@
 
     /// The edition's word the reader points at, on the scan (user,
     /// 2026-10-14): each of its zones (`left`, `top`, `right`, `bottom` in
-    /// the 0–1000 space; a word the print spaces apart, or broken over
-    /// lines, has several, user, 2026-10-15) a translucent band over it, as
+    /// the 0–1000 space; one a scan line, its zones' union: a word broken
+    /// over lines has several, one the print spaces apart one, user,
+    /// 2026-10-18) a translucent band over it, as
     /// the image is panned and zoomed; the image moved the least that
     /// brings them all into view where they are outside it. None clears
     /// them.

@@ -90,6 +90,49 @@ enum OverlayRegistration {
     return zones
   }
 
+  /// The scan layout's word zones, each with the line it is on (the line
+  /// zone before it in reading order, by its place among the lines; -1
+  /// before any) and its box (left, top, right, bottom, 0–1000): what a
+  /// word's `@facs` names (`wordBoxes`).
+  static func wordZones(_ zones: [ScanZone]) -> [(id: String, line: Int, box: [Double])] {
+    var out: [(id: String, line: Int, box: [Double])] = []
+    var line = -1
+    for zone in zones {
+      if zone.kind == 1 { line += 1 }
+      guard zone.kind == 2, !stringIsEmpty(zone.id), zone.points.count == 8 else { continue }
+      let p = zone.points
+      out.append(
+        (zone.id, line,
+         [min(p[0], p[2], p[4], p[6]), min(p[1], p[3], p[5], p[7]), max(p[0], p[2], p[4], p[6]), max(p[1], p[3], p[5], p[7])]))
+    }
+    return out
+  }
+
+  /// A word's boxes on the scan, as its `<w>`'s `@facs` names its zones
+  /// (`ids`; the model's grouping is the authority, never a merging of
+  /// ours): one box a scan line its zones are on, their union (bounding
+  /// box), in reading order. A word the print letter-spaces ("O F", a
+  /// zone a letter) is one box, never its letters apart (user,
+  /// 2026-10-18); a word broken over lines one a line. A zone the layout
+  /// does not hold is left out.
+  static func wordBoxes(_ ids: [String], in zones: [(id: String, line: Int, box: [Double])]) -> [[Double]] {
+    var lines: [Int] = []
+    var boxes: [[Double]] = []
+    for id in ids {
+      guard let zone = zones.first(where: { stringEquals($0.id, id) }) else { continue }
+      if let index = lines.firstIndex(of: zone.line) {
+        let box = boxes[index]
+        boxes[index] = [
+          min(box[0], zone.box[0]), min(box[1], zone.box[1]), max(box[2], zone.box[2]), max(box[3], zone.box[3]),
+        ]
+      } else {
+        lines.append(zone.line)
+        boxes.append(zone.box)
+      }
+    }
+    return boxes
+  }
+
   /// The work's em on the page's scan (`data-scan-em`,
   /// `TEIView.scanEmData`) in the scan's pixels, its image `width` pixels
   /// wide; 0 where it is not given.
