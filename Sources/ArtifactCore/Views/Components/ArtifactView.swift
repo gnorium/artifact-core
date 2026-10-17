@@ -1757,7 +1757,7 @@
         _ = self.currentStructure()
       }
       if on && !self.overlayOn {
-        self.overlayTarget = ("", [], false)
+        self.overlayTarget = ("", [], false, 0)
         self.overlayView = nil
         self.overlayZoomed = false
         self.overlayLeavesToFit = false
@@ -1889,7 +1889,9 @@
       guard let canvas = shownCanvas, let own = scanOwn, overlayRegistered, overlayOn || overlayLeaving,
         let zone = overlayZone(), let measured = renderedTextBlock(in: layer)
       else { return }
-      let box = shownImageSize.map { laid([measured[0], measured[1], measured[2], measured[5]], zone: zone, size: $0) }
+      let box = shownImageSize.map {
+        laid([measured[0], measured[1], measured[2], measured[5]], zone: zone, size: $0, unit: currentZoom())
+      }
         ?? [measured[0], measured[1], measured[2], measured[5]]
       canvas.blend(own: own, zone: zone, target: box, progress: overlayOn ? overlayProgress : 1 - overlayProgress)
     }
@@ -1909,25 +1911,18 @@
       return (point.x / size.width, point.y / size.height, zoom * (box[2] - box[0]) / zoneSpan)
     }
 
-    /// Where registration lays the zone (gnorium-python
-    /// `layout_measure.laid_on`, user, 2026-10-14): onto the rendered main
-    /// text block's box (`box`: left, top, right, bottom) by its height,
-    /// centered across it, the scan's own proportions kept. A line's width
-    /// is the face's, so a centered block's width is no measure of the
-    /// scan's, and is never stretched to it. A block spanning the frame's
-    /// measure (`overlayTarget.spans`: its lines justified to it) is laid
-    /// on by its width too: its measure is the print's, so a scanner's
-    /// stretch across the page is absorbed by the one affine map, never a
-    /// local warp.
-    private func laid(_ box: [Double], zone: [Double], size: (width: Double, height: Double)) -> [Double] {
-      if overlayTarget.spans { return box }
-      let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
-      let across = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
-      let down = ((corners[6] - corners[0]) * (corners[6] - corners[0]) + (corners[7] - corners[1]) * (corners[7] - corners[1])).squareRoot()
-      guard down > 0 else { return box }
-      let half = across * (box[3] - box[1]) / down / 2
-      let middle = (box[0] + box[2]) / 2
-      return [middle - half, box[1], middle + half, box[3]]
+    /// Where registration lays the zone on the rendered main text block's
+    /// box (`box`: left, top, right, bottom, in the layer's own pixels
+    /// times `unit`), `OverlayRegistration.laid`'s rule: where the work's
+    /// frame is declared, always at the type's scale—the rendered em
+    /// (`overlayTarget.em`) over the work's em on the scan
+    /// (`data-scan-em`)—never by the block's height, which is the edition's
+    /// typesetting; with none declared, by the block.
+    private func laid(_ box: [Double], zone: [Double], size: (width: Double, height: Double), unit: Double = 1) -> [Double] {
+      let page = root.querySelector(".artifact-markup .tei-page[data-active='true']")
+      let scanEm = OverlayRegistration.scanEm(page?.getAttribute(data("scan-em")) ?? "", width: size.width)
+      let typeScale = scanEm > 0 && overlayTarget.em > 0 ? overlayTarget.em * unit / scanEm : 0
+      return OverlayRegistration.laid(box, zone: zone, size: size, spans: overlayTarget.spans, typeScale: typeScale)
     }
 
     /// The shown layer's size unzoomed, its scale's frame's.
@@ -2036,6 +2031,9 @@
       let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
       if !stringEquals(overlayTarget.page, id) || overlayTarget.box.count != 4 {
         let frame = layer.querySelector(".tei-text-block") ?? layer
+        // Its em in its own pixels (a transform scales the layer, never its
+        // type): the registration's type scale (`laid`).
+        let em = pixels(window.getComputedStyle(frame).getPropertyValue("font-size"))
         // A derived text block (a page with no main text: the work frame
         // placed on its scan, gnorium-python `layout_measure.derived_corners`)
         // is the frame itself, laid on it whole; its marginalia keep their
@@ -2049,7 +2047,8 @@
               (edges.left - box.x) / zoom, (edges.top - box.y) / zoom, (edges.right - box.x) / zoom,
               (edges.bottom - box.y) / zoom,
             ],
-            true
+            true,
+            em
           )
           return overlayTarget.box
         }
@@ -2095,7 +2094,8 @@
             (measured[0] - box.x) / zoom, (measured[1] - box.y) / zoom, (measured[2] - box.x) / zoom,
             (measured[3] - box.y) / zoom,
           ],
-          spans
+          spans,
+          em
         )
       }
       return overlayTarget.box
@@ -2223,7 +2223,9 @@
 
     /// The shown page's rendered text block in its layer's own pixels
     /// (left, top, right, bottom), by its page's image and its layer.
-    private var overlayTarget: (page: String, box: [Double], spans: Bool) = ("", [], false)
+    /// Its em there too (its frame's type, the work's body): the
+    /// registration's type scale (`laid`).
+    private var overlayTarget: (page: String, box: [Double], spans: Bool, em: Double) = ("", [], false, 0)
 
     /// The overlay's framing of the shown layer (`OverlayFraming`) in the
     /// pane's room as it is now (`overlayRoom`): the edition's whole page
@@ -3683,21 +3685,6 @@
 
     // MARK: - The scan's structure
 
-    /// One zone of the scan's measured layout (`TEIView`'s
-    /// `data-scan-layout`, the tools' zones, never the model's).
-    private struct ScanZone {
-      /// 0 a block, 1 a line, 2 a word.
-      let kind: Int
-      /// Whether it is of the main text: its block's subtype.
-      let main: Bool
-      /// A word's id, which its `<w>`'s `@facs` names; "" for the others.
-      let id: String
-      /// Its four corners, x and y in turn, in the 0–1000 space.
-      let points: [Double]
-      /// A line's baseline's two ends, the same way; empty where it has none.
-      var baseline: [Double] = []
-    }
-
     /// A row of the scan's structure laid in the shown layer's own pixels:
     /// its box and its lines' corners there.
     private struct ScanRow {
@@ -3725,33 +3712,11 @@
 
     private var structure: Structure?
 
-    /// The page's scan layout (`data-scan-layout`): its zones in reading
-    /// order, a line's main-ness its block's.
+    /// The page's scan layout (`data-scan-layout`,
+    /// `OverlayRegistration.scanLayout`): its zones in reading order, a
+    /// line's main-ness its block's.
     private func scanLayout(of page: DOM.Element) -> [ScanZone] {
-      let text = page.getAttribute(data("scan-layout")) ?? ""
-      guard !stringIsEmpty(text) else { return [] }
-      var zones: [ScanZone] = []
-      var main = true
-      for entry in stringSplit(text, separator: ";") {
-        let parts = stringSplit(entry, separator: " ")
-        // Its corners, and a line's baseline's two ends after them where it
-        // has one (`TEIView.scanLayoutData`).
-        guard parts.count == 11 || parts.count == 15 else { continue }
-        var points: [Double] = []
-        for index in 3..<parts.count {
-          guard let value = parseDouble(parts[index]) else { break }
-          points.append(value)
-        }
-        guard points.count == parts.count - 3 else { continue }
-        let baseline = points.count == 12 ? Array(points[8..<12]) : []
-        points = Array(points[0..<8])
-        let kind = stringEquals(parts[0], "block") ? 0 : stringEquals(parts[0], "line") ? 1 : 2
-        if kind == 0 { main = !stringEquals(parts[1], "marginalia") }
-        zones.append(
-          ScanZone(
-            kind: kind, main: main, id: stringEquals(parts[2], "-") ? "" : parts[2], points: points, baseline: baseline))
-      }
-      return zones
+      OverlayRegistration.scanLayout(page.getAttribute(data("scan-layout")) ?? "")
     }
 
     /// The scale the shown layer is drawn at now: its box over its own
