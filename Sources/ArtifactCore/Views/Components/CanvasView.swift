@@ -31,7 +31,7 @@
         div {
           // Shown while the image loads, hidden once it has.
           div {
-            RotatingRingSectorView(ariaHidden: true)
+            RotatingDottedRingSectorView(ariaHidden: true)
           }
           .class("canvas-spinner")
           .data("visible", "false")
@@ -106,11 +106,13 @@
         descendant(".canvas-crop") { zIndex(5) }
         // The edition's word the reader points at, on the scan (user,
         // 2026-10-14): a translucent band, the scan seen through it in
-        // either scheme.
+        // either scheme. Yellow, as the quotation highlight and the find
+        // bar's matches are (user, 2026-10-18), the edition's marked word
+        // wearing the same yellow at the same opacity.
         descendant(".canvas-word") {
           position(.absolute)
           zIndex(1)
-          backgroundColor(colorBlue)
+          backgroundColor(colorYellow)
           opacity(opacityLow)
           pointerEvents(.none)
         }
@@ -371,7 +373,7 @@
       let spinner = document.createElement(.div)
       spinner.className = "canvas-spinner"
       spinner.setAttribute(data("visible"), "false")
-      spinner.appendChild(RotatingRingSectorFactory.createElement())
+      spinner.appendChild(RotatingDottedRingSectorFactory.createElement())
       viewport.appendChild(spinner)
       canvas.appendChild(viewport)
       return canvas

@@ -48,6 +48,13 @@
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
     /// say—an editor that takes its edits in the code says so here.
     let rawSwitchInfo: String?
+    /// Whether the footer carries an English switch, beside the code switch
+    /// (user, 2026-10-18): for markup that has an English layer, the
+    /// translation of a non-English page. The viewer's own, off by default,
+    /// never the page's: each viewer is switched alone, and the viewer wears
+    /// its state as `data-translated` for what the host draws within it. The
+    /// host draws it only where there is a layer to show.
+    let englishSwitch: Bool
     /// The object's images, one per canvas, each naming its image service in
     /// `data-service-id`: shown, like the markup, only while its canvas
     /// is on screen, and read only then.
@@ -98,6 +105,7 @@
       startService: String? = nil,
       rawSwitch: Bool = false,
       rawSwitchInfo: String? = nil,
+      englishSwitch: Bool = false,
       canvasSwitch: Bool = false,
       pageCount: Int? = nil,
       windowed: Bool = false,
@@ -113,6 +121,7 @@
       self.startService = startService
       self.rawSwitch = rawSwitch
       self.rawSwitchInfo = rawSwitchInfo
+      self.englishSwitch = englishSwitch
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.windowed = windowed
@@ -253,6 +262,19 @@
               // 2026-10-12): the code (`</>`), its lines' flow, and the panes
               // unlinked.
               XMLToggleButtonView(class: "artifact-xml-toggle")
+              // The English layer of a non-English page, the viewer's own.
+              if englishSwitch {
+                ToggleButtonView(
+                  label: "English",
+                  icon: nil as HTML.HTMLSpanElement?,
+                  modelValue: false,
+                  weight: .subtle,
+                  buttonColor: .gray,
+                  ariaLabel: "Read in English",
+                  size: .medium,
+                  class: "artifact-english-toggle"
+                )
+              }
               // Both layers' lines (user, 2026-10-12). Off: the rendered
               // page's lines as the scan breaks them (each `<lb/>` a line)
               // and the code's as stored, never wrapped, scrolling
@@ -357,6 +379,9 @@
       .data("pages-known", pageCount != nil)
       .data("windowed", windowed)
       .data("page-count", pageCount ?? 0)
+      // The English switch's state, which a host's rules within the viewer
+      // follow; a viewer with no switch leaves the page's to its ancestors.
+      .data("english-switch", englishSwitch)
       .style {
         selector("&") {
           display(.flex)
@@ -429,7 +454,7 @@
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
         }
-        selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle", "& .artifact-overlay-toggle") {
+        selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-english-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle", "& .artifact-overlay-toggle") {
           flexShrink(0)
         }
         // Its total unknown, the pager waits unseen rather than read "of —".
@@ -727,9 +752,10 @@
         descendant(".artifact-structure [data-state='extra']") { CSS.Property("stroke", colorGreen.value) }
         descendant(".artifact-structure [data-state='missing']") { CSS.Property("stroke", colorRed.value) }
         // The edition's word the scan's under the pointer is (user,
-        // 2026-10-14), as the scan's band marks it.
+        // 2026-10-14), as the scan's band marks it: the band's yellow at its
+        // opacity (user, 2026-10-18), a pair.
         descendant(".artifact-markup .tei-word[data-corresponding='true']") {
-          backgroundColor(backgroundColorBlueSubtle)
+          CSS.Property("background-color", "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)")
         }
         // Hugging the word: the fill drawn as one band at the glyphs'
         // extent (`band`), the span's own box left clear.
@@ -737,7 +763,7 @@
           backgroundColor(.transparent)
           CSS.Property(
             "background-image",
-            "linear-gradient(" + backgroundColorBlueSubtle.value + ", " + backgroundColorBlueSubtle.value + ")")
+            "linear-gradient(" + "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ", " + "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ")")
           CSS.Property("background-repeat", "no-repeat")
           CSS.Property("background-size", "var(--artifact-band-width) var(--artifact-band-height)")
           CSS.Property("background-position", "var(--artifact-band-x) var(--artifact-band-y)")
@@ -1142,6 +1168,19 @@
       _ = root.addEventListener("markup-translated") { [self] (event: Event) in
         self.translationVisible = stringEquals(event.detail, "true")
         self.showLayers()
+      }
+      // A viewer with an English switch of its own is switched by it alone
+      // (user, 2026-10-18): off at first, whatever the page around it says,
+      // and told to the host as the page's switch tells it.
+      if let english = root.querySelector(".artifact-english-toggle") {
+        translationVisible = stringEquals(english.getAttribute("aria-pressed") ?? "false", "true")
+        root.setAttribute(data("translated"), translationVisible ? "true" : "false")
+        showLayers()
+        _ = english.addEventListener("toggle-button-update") { [self] (event: Event) in
+          let state = stringEquals(event.detail, "true") ? "true" : "false"
+          self.root.setAttribute(data("translated"), state)
+          self.root.dispatchEvent(CustomEvent(type: "markup-translated", detail: state))
+        }
       }
     }
 
