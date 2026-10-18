@@ -48,13 +48,13 @@
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
     /// say—an editor that takes its edits in the code says so here.
     let rawSwitchInfo: String?
-    /// Whether the footer carries an English switch, beside the code switch
-    /// (user, 2026-10-18): for markup that has an English layer, the
-    /// translation of a non-English page. The viewer's own, off by default,
-    /// never the page's: each viewer is switched alone, and the viewer wears
-    /// its state as `data-translated` for what the host draws within it. The
-    /// host draws it only where there is a layer to show.
-    let englishSwitch: Bool
+    /// Switches the host adds to the footer, after the code switch (the
+    /// testament's English switch, user 2026-10-18): the host draws them
+    /// only where they apply. A switch that shows a layer of the markup
+    /// has the class `artifact-english-toggle`, is off by default, and is
+    /// the viewer's own, never the page's: each viewer is switched alone,
+    /// and the viewer wears its state as `data-translated`.
+    let footerSwitches: [DOM.Node]
     /// The object's images, one per canvas, each naming its image service in
     /// `data-service-id`: shown, like the markup, only while its canvas
     /// is on screen, and read only then.
@@ -105,12 +105,12 @@
       startService: String? = nil,
       rawSwitch: Bool = false,
       rawSwitchInfo: String? = nil,
-      englishSwitch: Bool = false,
       canvasSwitch: Bool = false,
       pageCount: Int? = nil,
       windowed: Bool = false,
       @HTMLBuilder markup: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
+      @HTMLBuilder footerSwitches: () -> [DOM.Node] = { [] },
       @HTMLBuilder actions: () -> [DOM.Node] = { [] },
       @HTMLBuilder bar: () -> [DOM.Node] = { [] },
       @HTMLBuilder underMarkup: () -> [DOM.Node] = { [] }
@@ -121,12 +121,12 @@
       self.startService = startService
       self.rawSwitch = rawSwitch
       self.rawSwitchInfo = rawSwitchInfo
-      self.englishSwitch = englishSwitch
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.windowed = windowed
       self.markup = markup()
       self.canvas = canvas()
+      self.footerSwitches = footerSwitches()
       self.actions = actions()
       self.bar = bar()
       self.underMarkup = underMarkup()
@@ -263,18 +263,7 @@
               // unlinked.
               XMLToggleButtonView(class: "artifact-xml-toggle")
               // The English layer of a non-English page, the viewer's own.
-              if englishSwitch {
-                ToggleButtonView(
-                  label: "English",
-                  icon: nil as HTML.HTMLSpanElement?,
-                  modelValue: false,
-                  weight: .subtle,
-                  buttonColor: .gray,
-                  ariaLabel: "Read in English",
-                  size: .medium,
-                  class: "artifact-english-toggle"
-                )
-              }
+              footerSwitches
               // Both layers' lines (user, 2026-10-12). Off: the rendered
               // page's lines as the scan breaks them (each `<lb/>` a line)
               // and the code's as stored, never wrapped, scrolling
@@ -381,7 +370,6 @@
       .data("page-count", pageCount ?? 0)
       // The English switch's state, which a host's rules within the viewer
       // follow; a viewer with no switch leaves the page's to its ancestors.
-      .data("english-switch", englishSwitch)
       .style {
         selector("&") {
           display(.flex)
