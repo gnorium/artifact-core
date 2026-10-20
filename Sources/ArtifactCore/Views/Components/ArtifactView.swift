@@ -59,7 +59,7 @@
     /// yet explicated testament) shows the header in that column beside
     /// them while the switch is on, and the images take the whole width
     /// while it is off.
-    let header: String?
+    let documentHeader: String?
     /// Switches the host adds to the footer, after the code switch (the
     /// testament's English switch, user 2026-10-18): the host draws them
     /// only where they apply. A switch that shows a layer of the markup
@@ -134,7 +134,7 @@
       self.startService = startService
       self.rawSwitch = rawSwitch
       self.rawSwitchInfo = rawSwitchInfo
-      self.header = header
+      self.documentHeader = header
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.windowed = windowed
@@ -229,15 +229,15 @@
           // The markup of the object, beside the object. It is a sibling of
           // the object rather than a block under the viewer so that the two
           // page together and fullscreen carries both.
-          if !markup.isEmpty || header != nil {
+          if !markup.isEmpty || documentHeader != nil {
             div {
               // The document's header, as code alone, under its switch
               // (user, 2026-10-21): a pane of its own at the column's top,
               // so the markup's pane (its zoom, its scroll, the image
               // kept beside it) is the same with it shown or not.
-              if let header {
+              if let documentHeader {
                 div {
-                  CodeView(header, showLineNumbers: false, lined: true)
+                  CodeView(documentHeader, showLineNumbers: false, lined: true)
                 }
                 .class("artifact-document-header")
                 .role("region")
@@ -299,7 +299,7 @@
             // The document's header, after the code switch where there is
             // one, yet never tied to it (user, 2026-10-21): offered wherever
             // there is a header, with no markup too.
-            if header != nil {
+            if documentHeader != nil {
               HeaderToggleButtonView(class: "artifact-header-toggle")
             }
             if rawSwitch, !markup.isEmpty {
