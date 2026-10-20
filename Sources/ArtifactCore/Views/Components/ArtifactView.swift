@@ -189,7 +189,7 @@
                 ToggleButtonView(
                   label: "Image",
                   icon: IconView(
-                    icon: { s in ImageIconView(size: s) }, size: sizeIconSmall),
+                    icon: { s in ImageIconView(size: s) }, size: ButtonView.ButtonSize.medium.iconSize),
                   modelValue: false,
                   weight: .subtle,
                   buttonColor: .gray,
@@ -314,7 +314,7 @@
               // code wrapped as plain text.
               ToggleButtonView(
                 label: "Reflow",
-                icon: IconView(icon: { s in TextWrapIconView(size: s) }, size: sizeIconSmall),
+                icon: IconView(icon: { s in TextWrapIconView(size: s) }, size: ButtonView.ButtonSize.medium.iconSize),
                 modelValue: false,
                 weight: .subtle,
                 buttonColor: .gray,
@@ -332,7 +332,7 @@
               if switchesCanvas {
                 ToggleButtonView(
                   label: "Detach",
-                  icon: IconView(icon: { s in RefreshClockwiseOffIconView(size: s) }, size: sizeIconSmall),
+                  icon: IconView(icon: { s in RefreshClockwiseOffIconView(size: s) }, size: ButtonView.ButtonSize.medium.iconSize),
                   modelValue: false,
                   weight: .subtle,
                   buttonColor: .gray,
@@ -343,18 +343,18 @@
                 )
                 ToggleButtonView(
                   label: "Overlay",
-                  icon: IconView(icon: { s in LayersIconView(size: s) }, size: sizeIconSmall),
+                  icon: IconView(icon: { s in LayersIconView(size: s) }, size: ButtonView.ButtonSize.medium.iconSize),
                   modelValue: false, weight: .subtle, buttonColor: .gray,
                   iconOnly: true, ariaLabel: "Overlay", size: .medium,
                   class: "artifact-overlay-toggle"
                 )
               }
               if let info = rawSwitchInfo {
-                // An icon on its own, on par with the row's 16px text, takes
-                // the text's size, as the bars' other icons (user,
-                // 2026-10-09).
+                // An icon on its own, on par with the row's text, as tall
+                // as its 22px line, as the bars' other icons (user,
+                // 2026-10-21).
                 TooltipView(tooltip: info, class: "artifact-raw-info") {
-                  IconView(icon: { size in [InfoIconView(size: size)] }, size: sizeIconSmall)
+                  IconView(icon: { size in [InfoIconView(size: size)] }, size: lineHeightSmall22)
                 }
               }
             }
@@ -382,10 +382,10 @@
           // leaves it, and shows minimize.
           button {
             IconView(
-              icon: { size in [MaximizeIconView(size: size)] }, size: sizeIconSmall,
+              icon: { size in [MaximizeIconView(size: size)] }, size: lineHeightSmall22,
               class: "artifact-fullscreen-enter")
             IconView(
-              icon: { size in [MinimizeIconView(size: size)] }, size: sizeIconSmall,
+              icon: { size in [MinimizeIconView(size: size)] }, size: lineHeightSmall22,
               class: "artifact-fullscreen-exit")
           }
           .id("artifact-fullscreen-btn")
@@ -940,11 +940,10 @@
           // its unwrapped lines) is as wide as the viewer, whatever it holds.
           selector("& > :not(.artifact-footer)") { CSS.Property("contain", "inline-size") }
           // Option B (`ButtonView.phoneStep`): fullscreen small with every
-          // medium button, its icon the small type's size as theirs is.
+          // medium button; its icon stays on the 22px line, as theirs does.
           selector("\(ButtonView.phoneStep) & .artifact-fullscreen-button") {
             width(ButtonView.smallMinSize).important()
             height(ButtonView.smallMinSize).important()
-            customProperty("--size-icon-small", fontSizeSmall14.value).important()
           }
         }
       }
