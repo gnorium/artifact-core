@@ -48,6 +48,13 @@
     /// What the switch is for, behind an ⓘ beside it, where the page needs to
     /// say—an editor that takes its edits in the code says so here.
     let rawSwitchInfo: String?
+    /// Whether the footer carries a Header switch right of the code switch
+    /// (user, 2026-10-20): where the document declares a header, its lines
+    /// at the top of the code pane, read-only. Off by default and per
+    /// viewer; enabled only while the code shows, and the code switched off
+    /// switches it off. The viewer wears its state as `data-header`; the
+    /// markup draws the lines and shows them under it.
+    let headerSwitch: Bool
     /// Switches the host adds to the footer, after the code switch (the
     /// testament's English switch, user 2026-10-18): the host draws them
     /// only where they apply. A switch that shows a layer of the markup
@@ -105,6 +112,7 @@
       startService: String? = nil,
       rawSwitch: Bool = false,
       rawSwitchInfo: String? = nil,
+      headerSwitch: Bool = false,
       canvasSwitch: Bool = false,
       pageCount: Int? = nil,
       windowed: Bool = false,
@@ -121,6 +129,7 @@
       self.startService = startService
       self.rawSwitch = rawSwitch
       self.rawSwitchInfo = rawSwitchInfo
+      self.headerSwitch = headerSwitch
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.windowed = windowed
@@ -168,12 +177,14 @@
               actions
               // An image switch is distinct from the adjacent page-navigation arrows.
               if switchesCanvas {
+                // Drawn as the footer's switches are (user, 2026-10-20):
+                // subtle, bordered, gray.
                 ToggleButtonView(
                   label: "Resemblance",
                   icon: IconView(
                     icon: { s in ImageIconView(size: s) }, size: sizeIconSmall),
                   modelValue: false,
-                  weight: .plain,
+                  weight: .subtle,
                   buttonColor: .gray,
                   iconOnly: true,
                   ariaLabel: "Resemblance",
@@ -262,6 +273,11 @@
               // 2026-10-12): the code (`</>`), its lines' flow, and the panes
               // unlinked.
               XMLToggleButtonView(class: "artifact-xml-toggle")
+              // The document's header over the code, right of its switch;
+              // disabled until the code shows.
+              if headerSwitch {
+                HeaderToggleButtonView(disabled: true, class: "artifact-header-toggle")
+              }
               // The English layer of a non-English page, the viewer's own.
               footerSwitches
               // Both layers' lines (user, 2026-10-12). Off: the rendered
@@ -442,7 +458,7 @@
         descendant(".artifact-header-bar[data-open='false']") {
           display(.none)
         }
-        selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-english-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle", "& .artifact-overlay-toggle") {
+        selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-header-toggle", "& .artifact-english-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle", "& .artifact-overlay-toggle") {
           flexShrink(0)
         }
         // Its total unknown, the pager waits unseen rather than read "of —".
@@ -877,6 +893,7 @@
   import HTMLBuilder
   import WebAPIs
   import WebTypes
+  import WebComponents
 
   public final class ArtifactHydration: @unchecked Sendable {
     public static nonisolated(unsafe) var instance: ArtifactHydration?
@@ -1063,6 +1080,7 @@
 
       setupControls()
       setupLayers()
+      setupHeaderSwitch()
       setupReflowSwitch()
       setupSyncSwitch()
       setupZoom()
@@ -1152,6 +1170,7 @@
       _ = raw?.addEventListener("toggle-button-update") { [self] (event: Event) in
         self.rawVisible = stringEquals(event.detail, "true")
         self.showLayers()
+        self.reflectHeaderApplies()
       }
       _ = root.addEventListener("markup-translated") { [self] (event: Event) in
         self.translationVisible = stringEquals(event.detail, "true")
@@ -1169,6 +1188,40 @@
           self.root.setAttribute(data("translated"), state)
           self.root.dispatchEvent(CustomEvent(type: "markup-translated", detail: state))
         }
+      }
+    }
+
+    /// The Header switch (user, 2026-10-20): the document's header lines at
+    /// the top of the code pane while it is on (`data-header`), the page's
+    /// lines counted on after them (an editor's numbers too).
+    private func setupHeaderSwitch() {
+      guard let toggle = root.querySelector(".artifact-header-toggle") else { return }
+      root.setAttribute(data("header"), "false")
+      reflectHeaderApplies()
+      _ = toggle.addEventListener("toggle-button-update") { [self] (event: Event) in
+        self.setHeader(stringEquals(event.detail, "true"))
+      }
+    }
+
+    private func setHeader(_ on: Bool) {
+      guard let toggle = root.querySelector(".artifact-header-toggle") else { return }
+      root.setAttribute(data("header"), on ? "true" : "false")
+      toggle.setAttribute("aria-pressed", on ? "true" : "false")
+      toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
+      CodeEditorHydration.renumber(in: root)
+    }
+
+    /// Enabled only while the code shows; the code put away puts the header
+    /// away with it, off.
+    private func reflectHeaderApplies() {
+      guard let button = root.querySelector(".artifact-header-toggle button") else { return }
+      if rawVisible {
+        button.removeAttribute("disabled")
+        button.removeAttribute("aria-disabled")
+      } else {
+        if stringEquals(root.getAttribute(data("header")) ?? "false", "true") { setHeader(false) }
+        button.setAttribute("disabled", "")
+        button.setAttribute("aria-disabled", "true")
       }
     }
 
@@ -1202,7 +1255,11 @@
 
     /// The code of the page on screen, under Raw: its editor, or its
     /// read-only blocks (the page's and its translation's).
-    private static let rawCode = ".artifact-markup .tei-page[data-active='true'] .tei-page-raw .code-code"
+    /// The document's header over it (`.tei-page-header`) is no page's code.
+    private static let rawCode =
+      ".artifact-markup .tei-page[data-active='true'] .tei-page-raw .code-code:not(.tei-page-header .code-code)"
+    /// A layer's own code, never the document's header drawn over it.
+    private static let layerCode = ".code-view:not(.tei-page-header .code-view)"
 
     private func setupRegions() {
       // Once a frame at most (user, 2026-10-15): typing fires an input and
@@ -3175,7 +3232,7 @@
         let left = pane.scrollLeft, top = pane.scrollTop
         layer.style.setProperty("zoom", "1")
         layer.setAttribute(data("zoom"), "1")
-        if let code = layer.querySelector(".code-view") {
+        if let code = layer.querySelector(Self.layerCode) {
           code.style.setProperty("min-width", doubleToString(pane.clientWidth) + "px")
           code.style.setProperty("min-height", doubleToString(pane.clientHeight) + "px")
         }
@@ -3184,7 +3241,7 @@
         matchedScroll = (pane.scrollLeft, pane.scrollTop)
         return
       }
-      if layer.querySelector(".code-view") == nil && !reflowOn {
+      if layer.querySelector(Self.layerCode) == nil && !reflowOn {
         applyPageScale(layer, in: pane, about: anchor, matching: matching)
         return
       }
@@ -3197,7 +3254,7 @@
       let point = anchor.map { ((paneBox.x + $0.x - oldBox.x) / previous, (paneBox.y + $0.y - oldBox.y) / previous) }
       // The text's own box: without the code view's pane-filling minimum or
       // the page's centering margin.
-      let codeView = layer.querySelector(".code-view")
+      let codeView = layer.querySelector(Self.layerCode)
       _ = codeView?.style.removeProperty("min-width")
       _ = codeView?.style.removeProperty("min-height")
       // A margin does not affect the measured width. Removing it briefly
