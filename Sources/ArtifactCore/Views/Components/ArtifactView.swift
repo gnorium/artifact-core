@@ -50,10 +50,12 @@
     let rawSwitchInfo: String?
     /// The document's header as code (a testament's `<teiHeader>`), where it
     /// has one; nil for none. Its own Header switch in the footer, after the
-    /// code switch where there is one, never tied to it (user, 2026-10-21):
-    /// on, the header's code (no rendered side) in a pane of its own at the
-    /// top of the markup's column, read-only on the code's gray, numbered
-    /// from 1; the markup's own code never holds it. Off by default and per
+    /// code switch where there is one (user, 2026-10-21). The two share the
+    /// markup's column as radio toggles: neither on, the rendering; XML on,
+    /// the page's code; Header on, the header's code alone (no rendered
+    /// side, no page's code, no diff), read-only on the code's gray,
+    /// numbered from 1. Turning one on turns the other off; never stacked.
+    /// The markup's own code never holds the header. Off by default and per
     /// viewer, the viewer wearing its state as `data-header`. It needs no
     /// markup: an object whose pages are images alone (a calibrated, not
     /// yet explicated testament) shows the header in that column beside
@@ -232,9 +234,9 @@
           if !markup.isEmpty || documentHeader != nil {
             div {
               // The document's header, as code alone, under its switch
-              // (user, 2026-10-21): a pane of its own at the column's top,
-              // so the markup's pane (its zoom, its scroll, the image
-              // kept beside it) is the same with it shown or not.
+              // (user, 2026-10-21): a pane of its own that takes the column
+              // while it shows, the markup's pane (its zoom, its scroll)
+              // put away beside it, not redrawn.
               if let documentHeader {
                 div {
                   CodeView(documentHeader, showLineNumbers: false, lined: true)
@@ -297,7 +299,7 @@
               XMLToggleButtonView(class: "artifact-xml-toggle")
             }
             // The document's header, after the code switch where there is
-            // one, yet never tied to it (user, 2026-10-21): offered wherever
+            // one, the two exclusive (user, 2026-10-21): offered wherever
             // there is a header, with no markup too.
             if documentHeader != nil {
               HeaderToggleButtonView(class: "artifact-header-toggle")
@@ -569,21 +571,27 @@
           maxHeight(perc(40))
           overflow(.auto)
         }
-        // The document's header, under its switch alone (user,
-        // 2026-10-21): code, read-only on the code's own gray, a zone at
-        // the column's top that scrolls both ways, at most half the column
-        // over the markup's pane; the markup's pane keeps the rest.
+        // The document's header, under its switch (user, 2026-10-21): code,
+        // read-only on the code's own gray, the whole column while it is on,
+        // a zone that scrolls both ways. It and the XML switch share the
+        // column as radio toggles do: the header on puts the markup's pane
+        // (and what stands under it, a page's diff) away, never stacked
+        // with the page's code.
         descendant(".artifact-document-header") { display(.none) }
         selector("&[data-header='true'] .artifact-document-header") {
           display(.flex)
           flexDirection(.column)
-          flexShrink(0)
+          flex("1 1 auto")
           minWidth(0)
           minHeight(0)
-          maxHeight(perc(50))
           overflow(.auto)
           backgroundColor(backgroundColorNeutralSubtle)
-          borderBlockEnd(borderWidthBase, .solid, borderColorSubtle)
+        }
+        selector(
+          "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-markup-box",
+          "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-under-markup"
+        ) {
+          display(.none).important()
         }
         // The zone scrolls, never the code within it: its lines as wide as
         // the longest, on the gray the whole way.
@@ -598,12 +606,6 @@
         // Reflowed, its long lines wrap as the markup's code's do.
         selector("&[data-reflow='true'] .artifact-document-header .code-view") {
           width(perc(100)).important()
-        }
-        // No markup yet: the header is the column's whole height.
-        selector("&[data-header='true'] .artifact-markup-frame[data-header-only='true'] .artifact-document-header") {
-          flex("1 1 auto")
-          maxHeight(.none)
-          borderBlockEnd(.none)
         }
         // Switched off with no markup, the column goes and the images take
         // the whole viewer, as an object's with no markup do.
@@ -1249,6 +1251,12 @@
       _ = raw?.addEventListener("toggle-button-update") { [self] (event: Event) in
         self.rawVisible = stringEquals(event.detail, "true")
         self.showLayers()
+        // The XML and the header share the column (user, 2026-10-21): the
+        // XML on turns the header off, by its own switch's press, so every
+        // listener hears it.
+        if self.rawVisible, self.headerVisible {
+          self.root.querySelector(".artifact-header-toggle button")?.click()
+        }
       }
       _ = root.addEventListener("markup-translated") { [self] (event: Event) in
         self.translationVisible = stringEquals(event.detail, "true")
@@ -1270,8 +1278,9 @@
     }
 
     /// The Header switch (user, 2026-10-21): the document's header, as
-    /// code, in its own pane while it is on (`data-header`), whatever the
-    /// XML switch says; off at first.
+    /// code, alone in the markup's column while it is on (`data-header`);
+    /// off at first. It and the XML switch are exclusive, radio toggles
+    /// sharing the column: the header on turns the XML off.
     private func setupHeaderSwitch() {
       guard let toggle = root.querySelector(".artifact-header-toggle") else { return }
       setHeader(stringEquals(toggle.getAttribute("aria-pressed") ?? "false", "true"))
@@ -1280,11 +1289,23 @@
       }
     }
 
+    /// Whether the header holds the markup's column (`data-header`).
+    private var headerVisible = false
+
     private func setHeader(_ on: Bool) {
       guard let toggle = root.querySelector(".artifact-header-toggle") else { return }
+      headerVisible = on
       root.setAttribute(data("header"), on ? "true" : "false")
       toggle.setAttribute("aria-pressed", on ? "true" : "false")
       toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
+      // The XML off by its own switch's press, so every listener (a host's
+      // diff zone) hears it.
+      if on, rawVisible {
+        root.querySelector(".artifact-xml-toggle button")?.click()
+      }
+      // The markup's pane put away takes the overlay and the sync with it,
+      // as the XML does.
+      reflectSyncApplies()
       // With no markup its column comes and goes beside the images: the
       // image on screen fitted to the room it has now.
       if case .none = markupPane { shownCanvas?.refit() }
@@ -1702,13 +1723,13 @@
     /// kept underneath; disabled and off while the overlay is on, where
     /// nothing pans or zooms to sync or not (user, 2026-10-14).
     private func reflectSyncApplies() {
-      let active = overlayOn && !rawVisible && !reflowOn && imagesShown
+      let active = overlayOn && !codeShown && !reflowOn && imagesShown
       root.setAttribute(data("overlay-active"), active ? "true" : "false")
       // The overlay's switch disabled, as Detach's is, where it cannot
       // apply: Raw, Reflow, the images put away, a page with no markup or
       // no image (`overlayApplies`, user, 2026-10-17).
       if let button = root.querySelector(".artifact-overlay-toggle button") {
-        if rawVisible || reflowOn || !imagesShown || !overlayApplies {
+        if codeShown || reflowOn || !imagesShown || !overlayApplies {
           button.setAttribute("disabled", "")
           button.setAttribute("aria-disabled", "true")
         } else {
@@ -1720,7 +1741,7 @@
       detachToggle?.setAttribute("aria-pressed", detached ? "true" : "false")
       detachToggle?.querySelector("button")?.setAttribute("aria-pressed", detached ? "true" : "false")
       guard let button = detachToggle?.querySelector("button") else { return }
-      if rawVisible || reflowOn || !imagesShown || overlayOn {
+      if codeShown || reflowOn || !imagesShown || overlayOn {
         button.setAttribute("disabled", "")
         button.setAttribute("aria-disabled", "true")
       } else {
@@ -1757,6 +1778,9 @@
     }
 
     private var rawVisible = false
+    /// The markup's column holds code, the page's (XML) or the header's:
+    /// no rendering to overlay or sync.
+    private var codeShown: Bool { rawVisible || headerVisible }
     private var translationVisible = false
     /// Whether the markup has a translated layer to show at all.
     private var translatable = false

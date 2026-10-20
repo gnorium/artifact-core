@@ -5,13 +5,14 @@ import XCTest
 
 @testable import ArtifactCore
 
-/// The Header switch is the artifact's own, never tied to its XML switch
-/// (user, 2026-10-21): offered wherever there is a header, enabled, off at
-/// first, after the XML switch where there is one; the header as code in a
-/// pane of its own at the top of the markup's column, the markup's pane
-/// apart from it; with no markup (a calibrated, not yet explicated
-/// testament) there is no XML switch, and the header's column stands beside
-/// the images alone.
+/// The Header switch and the XML switch are radio toggles sharing the
+/// markup's column (user, 2026-10-21): neither on, the rendering; XML on,
+/// the page's code; Header on, the header's code alone, the markup's pane
+/// (and a diff under it) put away; never stacked. The Header switch is
+/// offered wherever there is a header, enabled, off at first, after the XML
+/// switch where there is one; with no markup (a calibrated, not yet
+/// explicated testament) there is no XML switch, and the header's column
+/// stands beside the images alone.
 final class ArtifactHeaderTests: XCTestCase {
   static let header = """
     <teiHeader><encodingDesc><tagsDecl>
@@ -79,6 +80,19 @@ final class ArtifactHeaderTests: XCTestCase {
     XCTAssertFalse(pane.render().contains("contenteditable"), "the header can be edited")
     let markup = try XCTUnwrap(first("artifact-markup", in: node))
     XCTAssertFalse(markup.render().contains("teiHeader"), "the markup's pane holds the header")
+  }
+
+  /// The header on takes the whole column: the markup's pane and what
+  /// stands under it put away (an overlay excepted, which lays the pane on
+  /// the image and puts the header away).
+  func testTheHeaderOnHoldsTheColumnAlone() throws {
+    var node: DOM.Node?
+    let sheets = HTMLGlobalStyle.collecting { node = withMarkup(header: Self.header) }.currentStyleSheets()
+    XCTAssertNotNil(node)
+    let css = sheets.map { $0.css }.joined(separator: "\n")
+    let on = "[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true'])"
+    XCTAssertTrue(css.contains("\(on) .artifact-markup-box"), "the header on leaves the markup's pane")
+    XCTAssertTrue(css.contains("\(on) .artifact-under-markup"), "the header on leaves the diff under the pane")
   }
 
   func testWithNoMarkupTheHeaderStandsBesideTheImagesAlone() throws {
