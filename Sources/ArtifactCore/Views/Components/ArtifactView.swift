@@ -148,7 +148,7 @@
 
     /// The header carries no title (user, 2026-10-09): on a biblio page
     /// the work is already the page's heading or its node's description,
-    /// and a quotation's reader is credited under it. It names the page
+    /// and a quote's reader is credited under it. It names the page
     /// on screen at its start (user, 2026-10-10: the canvas label moved
     /// up from the footer, Raw down to the footer's start, so Raw sits at
     /// the bottom left of every box), and the host's controls take its
@@ -180,14 +180,14 @@
                 // Drawn as the footer's switches are (user, 2026-10-20):
                 // subtle, bordered, gray.
                 ToggleButtonView(
-                  label: "Resemblance",
+                  label: "Image",
                   icon: IconView(
                     icon: { s in ImageIconView(size: s) }, size: sizeIconSmall),
                   modelValue: false,
                   weight: .subtle,
                   buttonColor: .gray,
                   iconOnly: true,
-                  ariaLabel: "Resemblance",
+                  ariaLabel: "Image",
                   size: .medium,
                   class: "artifact-canvas-toggle"
                 )
