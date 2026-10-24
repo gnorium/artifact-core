@@ -57,18 +57,18 @@ final class MarkupRegionTests: XCTestCase {
 
   func testAFacsReferenceIsEditedWhereTheZoneLives() throws {
     let text =
-      #"<facsimile><surface><zone xml:id="a" ulx="10" uly="20" lrx="110" lry="70"/></surface></facsimile>"#
-      + #"<text><p facs="#a">Hello</p></text>"#
+      ##"<facsimile><surface><zone xml:id="a" ulx="10" uly="20" lrx="110" lry="70"/></surface></facsimile>"##
+      + ##"<text><p facs="#a">Hello</p></text>"##
     let found = try XCTUnwrap(region(text, caretAt: "Hello"))
     XCTAssertEqual([found.x, found.y, found.width, found.height], [10, 20, 100, 50])
     XCTAssertTrue(found.editable, "the zone is in the code")
     XCTAssertEqual(slice(text, found), #"10" uly="20" lrx="110" lry="70"#)
-    let tag = Array(text.utf8).count - Array(#"<text><p facs="#a">Hello</p></text>"#.utf8).count
+    let tag = Array(text.utf8).count - Array(##"<text><p facs="#a">Hello</p></text>"##.utf8).count
     XCTAssertLessThan(found.valueStart, tag, "the value stands in the facsimile, not at the caret")
   }
 
   func testAReferencedPolygonIsEditedWhereItLivesToo() throws {
-    let text = #"<zone xml:id="a" points="10,10 60,10 60,60"/><p facs="#a">Hello</p>"#
+    let text = ##"<zone xml:id="a" points="10,10 60,10 60,60"/><p facs="#a">Hello</p>"##
     let found = try XCTUnwrap(region(text, caretAt: "Hello"))
     XCTAssertEqual(found.points, [10, 10, 60, 10, 60, 60])
     XCTAssertEqual(slice(text, found), "10,10 60,10 60,60")
@@ -83,7 +83,7 @@ final class MarkupRegionTests: XCTestCase {
   }
 
   func testAZoneThatPointsAtAnotherIsEditedWhereTheOtherLives() throws {
-    let text = #"<zone xml:id="a" ulx="10" uly="20" lrx="110" lry="70"/><zone xml:id="b" sameAs="#a"/>"#
+    let text = ##"<zone xml:id="a" ulx="10" uly="20" lrx="110" lry="70"/><zone xml:id="b" sameAs="#a"/>"##
     let found = try XCTUnwrap(region(text, caretAt: #"sameAs"#))
     XCTAssertEqual([found.x, found.y, found.width, found.height], [10, 20, 100, 50])
     XCTAssertTrue(found.editable)
