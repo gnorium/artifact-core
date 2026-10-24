@@ -288,64 +288,7 @@
     }
 
     private func tellRegion() {
-      // A reader's own zoom or pan: the view the caret's move would go back
-      // to is no longer theirs, and a glide under way gives way to them.
-      savedView = nil
-      glideGeneration += 1
       if let onRegion, let region { onRegion(region) }
-    }
-
-    // MARK: - Framing the caret's region
-
-    /// The view before the first automatic move to a region, which the
-    /// image goes back to once the caret leaves every region; cleared by
-    /// any zoom or pan of the reader's (`tellRegion`).
-    private var savedView: ViewerZoom.Region?
-    /// The glide under way, by number: a newer one or a reader's gesture
-    /// ends it.
-    private var glideGeneration = 0
-    /// How long a glide takes.
-    private static let glideMilliseconds = 250.0
-
-    /// The caret entered a region (0–1000): the image glides to frame it
-    /// where `ViewerZoom.Surface.framing` says it should, and otherwise
-    /// stays as the reader has it.
-    func frame(x: Int, y: Int, width: Int, height: Int) {
-      guard imageW > 0, imageH > 0, !locked, !blending else { return }
-      guard let target = surface.framing(ofX: Double(x), y: Double(y), width: Double(width), height: Double(height))
-      else { return }
-      if case .none = savedView { savedView = surface.region }
-      glide(to: target)
-    }
-
-    /// The caret left every region: back to the view before the first
-    /// automatic move, if the reader has neither zoomed nor panned since.
-    func restoreView() {
-      guard let saved = savedView, imageW > 0, imageH > 0, !locked, !blending else { return }
-      savedView = nil
-      glide(to: surface.framing(showing: saved))
-    }
-
-    /// The image moved to `target`, short and eased; at once where the
-    /// reader prefers reduced motion.
-    private func glide(to target: ViewerZoom.Surface.Framing) {
-      glideGeneration += 1
-      let generation = glideGeneration
-      let from = surface.framing
-      if window.matchMedia("(prefers-reduced-motion: reduce)") {
-        surface.apply(target)
-        updateTransform()
-        return
-      }
-      let began = window.performance.now()
-      func step() {
-        guard generation == glideGeneration else { return }
-        let t = min(1, max(0, (window.performance.now() - began) / Self.glideMilliseconds))
-        surface.apply(from.moved(toward: target, by: OverlayMotion.eased(t)))
-        updateTransform()
-        if t < 1 { _ = window.requestAnimationFrame { step() } }
-      }
-      step()
     }
 
     private var dragStartX: Double = 0

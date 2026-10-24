@@ -1448,14 +1448,6 @@
       }
       caretRegion = region
       drawRegion()
-      // A region entered is framed where it is not wholly in view; every
-      // region left, the view before the first such move comes back unless
-      // the reader has moved the scan since (`CanvasReader.frame`).
-      if case .some(let entered) = region {
-        shownCanvas?.frame(x: entered.x, y: entered.y, width: entered.width, height: entered.height)
-      } else {
-        shownCanvas?.restoreView()
-      }
     }
 
     private func setRegion(hover region: MarkupRegion?) {
