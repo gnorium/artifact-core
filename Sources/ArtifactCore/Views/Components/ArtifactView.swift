@@ -914,10 +914,9 @@
           borderRadius(borderRadiusBase)
           border(.none)
           backgroundColor(.transparent)
-          color(colorSubtle)
+          color(colorBase)
           cursor(.pointer)
           flexShrink(0)
-          pseudoClass(.hover) { color(colorBase) }
         }
         selector("& .artifact-fullscreen-exit", "&:fullscreen .artifact-fullscreen-enter") {
           display(.none)
