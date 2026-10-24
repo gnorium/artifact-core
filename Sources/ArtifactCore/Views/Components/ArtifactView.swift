@@ -897,7 +897,7 @@
         // not), less the row's 8.
         descendant(".artifact-canvas-label") {
           fontSize(fontSizeMedium16)
-          color(colorSubtle)
+          color(colorBase)
           flex(1)
           minWidth(0)
           CSS.Property(
