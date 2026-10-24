@@ -26,8 +26,14 @@
     /// The region can be edited there.
     var valueStart = -1
     var valueEnd = -1
+    /// For a `<zone>` that writes its corners as `ulx uly lrx lry` in that
+    /// order, one after another and in one kind of quote: the quote, and the
+    /// span `valueStart..<valueEnd` runs from the first value to the last
+    /// (the attributes between are rewritten with them). 0 for a bbox.
+    var quote: UInt8 = 0
 
-    init(x: Int, y: Int, width: Int, height: Int, valueStart: Int = -1, valueEnd: Int = -1) {
+    init(x: Int, y: Int, width: Int, height: Int, valueStart: Int = -1, valueEnd: Int = -1, quote: UInt8 = 0) {
+      self.quote = quote
       self.x = x
       self.y = y
       self.width = width
@@ -45,6 +51,17 @@
     /// As a bbox writes it: "x y w h".
     var bbox: String {
       stringJoin([intToString(x), intToString(y), intToString(width), intToString(height)], separator: " ")
+    }
+
+    /// What replaces `valueStart..<valueEnd` for a box of this region's
+    /// kind: a bbox's "x y w h", or a zone's four corners with the
+    /// attribute names between them kept, in its own quote.
+    func writing(x: Int, y: Int, width: Int, height: Int) -> String {
+      guard quote != 0 else { return MarkupRegion(x: x, y: y, width: width, height: height).bbox }
+      let q = String(decoding: [quote], as: UTF8.self)
+      return stringJoin(
+        [intToString(x), q, " uly=", q, intToString(y), q, " lrx=", q, intToString(x + width), q, " lry=", q,
+         intToString(y + height)], separator: "")
     }
 
     func isSame(as other: MarkupRegion) -> Bool {
@@ -216,12 +233,45 @@
       guard stringEquals(name, "zone") else { return .nothing }
       // As it is written now (user, 2026-10-16): its corners, else its
       // points; listed by its id only where it writes neither.
-      if case .some(let own) = written(attributes) { return own }
+      if case .some(let own) = written(attributes) {
+        // Editable on the scan where it writes its corners plainly.
+        if case .region(let region) = own, let span = cornersSpan(attributes, in: text) {
+          return .region(
+            MarkupRegion(
+              x: region.x, y: region.y, width: region.width, height: region.height, valueStart: span.start,
+              valueEnd: span.end, quote: span.quote))
+        }
+        return own
+      }
       if let id = value(of: "xml:id", in: attributes), let id {
         let listed = zone(String(decoding: id.bytes, as: UTF8.self), in: zones)
         if case .region = listed { return listed }
       }
       return .invalid
+    }
+
+    /// Where a zone's four corner values stand when it writes `ulx uly lrx
+    /// lry` one after another, each closed, in one kind of quote: the first
+    /// value's start, the last value's end, and the quote.
+    static func cornersSpan(
+      _ attributes: [(name: [UInt8], value: Value?)], in text: [UInt8]
+    ) -> (start: Int, end: Int, quote: UInt8)? {
+      let names: [[UInt8]] = ["ulx", "uly", "lrx", "lry"].map { Array($0.utf8) }
+      guard let first = attributes.firstIndex(where: { $0.name == names[0] }), first + 4 <= attributes.count
+      else { return nil }
+      var quote: UInt8 = 0
+      var start = -1
+      var end = -1
+      for offset in 0..<4 {
+        let attribute = attributes[first + offset]
+        guard attribute.name == names[offset], let value = attribute.value, value.start > 0 else { return nil }
+        let mark = text[value.start - 1]
+        guard mark == 34 || mark == 39, quote == 0 || quote == mark else { return nil }
+        quote = mark
+        if offset == 0 { start = value.start }
+        end = value.start + value.bytes.count
+      }
+      return (start, end, quote)
     }
 
     /// A zone's region as its tag writes it: its corners (`ulx uly lrx

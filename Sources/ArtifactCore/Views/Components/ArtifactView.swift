@@ -1336,6 +1336,8 @@
     private var dragStart = 0
     private var dragLength = 0
     private var dragOriginal = ""
+    /// The region whose value the drag writes (a bbox's or a zone's corners).
+    private var dragRegion: MarkupRegion?
     private var selectionListener: Int32 = -1
 
     /// The code of the page on screen, under Raw: its editor, or its
@@ -1528,14 +1530,17 @@
     /// into the text; once it ends, the value it began as put back and the
     /// last one written over it as one edit.
     private func regionEdited(x: Int, y: Int, width: Int, height: Int, done: Bool) {
-      let value = MarkupRegion(x: x, y: y, width: width, height: height).bbox
       if case .none = dragNode {
         guard let edited = editedValue() else { return }
         dragNode = edited.node
         dragStart = edited.start
         dragLength = edited.length
         dragOriginal = edited.value
+        dragRegion = edited.region
       }
+      // A bbox's value, or a zone's four corners (`MarkupRegion.writing`).
+      let value = (dragRegion ?? MarkupRegion(x: x, y: y, width: width, height: height))
+        .writing(x: x, y: y, width: width, height: height)
       guard let node = dragNode else { return }
       var length = 0
       for byte in value.utf8 where byte & 0xC0 != 0x80 { length += byte >= 0xF0 ? 2 : 1 }
@@ -1572,7 +1577,9 @@
           x: max(0, min(1000 - box.width, box.x + dx)), y: max(0, min(1000 - box.height, box.y + dy)),
           width: box.width, height: box.height)
       }
-      write(box.bbox, node: edited.node, start: edited.start, length: edited.length)
+      write(
+        edited.region.writing(x: box.x, y: box.y, width: box.width, height: box.height), node: edited.node,
+        start: edited.start, length: edited.length)
       return true
     }
 
