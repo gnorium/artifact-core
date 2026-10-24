@@ -168,6 +168,19 @@
         descendant(".canvas-crop-handle[data-corner='ne']") { left(perc(100)); top(px(0)) }
         descendant(".canvas-crop-handle[data-corner='sw']") { left(px(0)); top(perc(100)) }
         descendant(".canvas-crop-handle[data-corner='se']") { left(perc(100)); top(perc(100)) }
+        // A polygon zone's vertices, each a handle a drag moves by.
+        descendant(".canvas-vertex") {
+          position(.absolute)
+          zIndex(7)
+          width(spacing8)
+          height(spacing8)
+          boxSizing(.borderBox)
+          backgroundColor(backgroundColorBase)
+          border(borderWidthBase, .solid, colorBlue)
+          transform(translate(perc(-50), perc(-50)))
+          pointerEvents(.none)
+        }
+        descendant(".canvas-viewport[data-crop-hover='vertex']") { cursor(.move) }
         descendant(".canvas-viewport[data-crop-hover='move']") { cursor(.move) }
         selector("& .canvas-viewport[data-crop-hover='nw']", "& .canvas-viewport[data-crop-hover='se']") {
           cursor(.nwseResize)
@@ -177,7 +190,7 @@
         }
         selector(
           "& .canvas-crop[hidden]", "& .canvas-word[hidden]", "& .canvas-region[hidden]", "& .canvas-region-dim[hidden]", "& .canvas-grid[hidden]",
-          "& .canvas-readout[hidden]"
+          "& .canvas-readout[hidden]", "& .canvas-vertex[hidden]"
         ) {
           display(.none)
         }
@@ -275,7 +288,64 @@
     }
 
     private func tellRegion() {
+      // A reader's own zoom or pan: the view the caret's move would go back
+      // to is no longer theirs, and a glide under way gives way to them.
+      savedView = nil
+      glideGeneration += 1
       if let onRegion, let region { onRegion(region) }
+    }
+
+    // MARK: - Framing the caret's region
+
+    /// The view before the first automatic move to a region, which the
+    /// image goes back to once the caret leaves every region; cleared by
+    /// any zoom or pan of the reader's (`tellRegion`).
+    private var savedView: ViewerZoom.Region?
+    /// The glide under way, by number: a newer one or a reader's gesture
+    /// ends it.
+    private var glideGeneration = 0
+    /// How long a glide takes.
+    private static let glideMilliseconds = 250.0
+
+    /// The caret entered a region (0–1000): the image glides to frame it
+    /// where `ViewerZoom.Surface.framing` says it should, and otherwise
+    /// stays as the reader has it.
+    func frame(x: Int, y: Int, width: Int, height: Int) {
+      guard imageW > 0, imageH > 0, !locked, !blending else { return }
+      guard let target = surface.framing(ofX: Double(x), y: Double(y), width: Double(width), height: Double(height))
+      else { return }
+      if case .none = savedView { savedView = surface.region }
+      glide(to: target)
+    }
+
+    /// The caret left every region: back to the view before the first
+    /// automatic move, if the reader has neither zoomed nor panned since.
+    func restoreView() {
+      guard let saved = savedView, imageW > 0, imageH > 0, !locked, !blending else { return }
+      savedView = nil
+      glide(to: surface.framing(showing: saved))
+    }
+
+    /// The image moved to `target`, short and eased; at once where the
+    /// reader prefers reduced motion.
+    private func glide(to target: ViewerZoom.Surface.Framing) {
+      glideGeneration += 1
+      let generation = glideGeneration
+      let from = surface.framing
+      if window.matchMedia("(prefers-reduced-motion: reduce)") {
+        surface.apply(target)
+        updateTransform()
+        return
+      }
+      let began = window.performance.now()
+      func step() {
+        guard generation == glideGeneration else { return }
+        let t = min(1, max(0, (window.performance.now() - began) / Self.glideMilliseconds))
+        surface.apply(from.moved(toward: target, by: OverlayMotion.eased(t)))
+        updateTransform()
+        if t < 1 { _ = window.requestAnimationFrame { step() } }
+      }
+      step()
     }
 
     private var dragStartX: Double = 0
@@ -321,6 +391,13 @@
     /// Told x y w h (0–1000, whole, inside the image) as an edited region
     /// is moved or resized, `true` once the drag ends.
     var onRegionEdit: ((Int, Int, Int, Int, Bool) -> Void)?
+    /// The vertices of an edited polygon zone (x y x y …, 0–1000), each a
+    /// handle over the image, and their elements.
+    private var vertices: [Int] = []
+    private var vertexHandles: [DOM.Element] = []
+    /// Told the vertex, its x and y (0–1000, whole) as one is dragged,
+    /// `true` once the drag ends.
+    var onVertexEdit: ((Int, Int, Int, Bool) -> Void)?
     /// What a drag on the box does: draws a new one, moves it, or resizes
     /// it from the corner it holds still (`anchorX`, `anchorY`).
     private enum CropDrag { case draw, move, resize }
@@ -466,6 +543,7 @@
       compositor?.update(panX: panX, panY: panY, zoom: zoom, viewportW: viewportW, viewportH: viewportH)
       drawCrop()
       drawRegion()
+      drawVertices()
       drawWord()
     }
 
@@ -641,11 +719,13 @@
     /// A region edited on the canvas as well as in its markup: the crop
     /// box drawn over it, its corners and body dragged. A canvas taking a
     /// crop box for a call keeps it, and only shows the region.
-    func editRegion(x: Int, y: Int, width: Int, height: Int) {
+    func editRegion(x: Int, y: Int, width: Int, height: Int, vertices: [Int] = []) {
       guard !cropping else {
         showRegion(x: x, y: y, width: width, height: height)
         return
       }
+      // Mid-drag, the vertices are the drag's.
+      if mouseMoveListener < 0 { self.vertices = vertices }
       regionX = Double(x)
       regionY = Double(y)
       regionW = Double(width)
@@ -660,11 +740,14 @@
       }
       drawCrop()
       drawRegion()
+      drawVertices()
     }
 
     private func stopEditing() {
       guard editing else { return }
       editing = false
+      vertices = []
+      drawVertices()
       if mouseMoveListener >= 0 { endDrag() }
       cropW = 0
       cropH = 0
@@ -888,6 +971,89 @@
       place(box, x: cropX, y: cropY, width: cropW, height: cropH)
     }
 
+    /// The vertices' handles over the image, one a vertex, placed as the
+    /// image is panned and zoomed; the spare ones hidden.
+    private func drawVertices() {
+      guard editing, imageW > 0, imageH > 0 else {
+        for handle in vertexHandles { handle.setAttribute(.hidden, "") }
+        return
+      }
+      let count = vertices.count / 2
+      while vertexHandles.count < count {
+        guard let handle = overlay("canvas-vertex") else { break }
+        vertexHandles.append(handle)
+      }
+      for (index, handle) in vertexHandles.enumerated() {
+        guard index < count else {
+          handle.setAttribute(.hidden, "")
+          continue
+        }
+        handle.removeAttribute(.hidden)
+        handle.style.setProperty("left", pixels(panX + Double(vertices[index * 2]) / 1000 * Double(imageW) * zoom))
+        handle.style.setProperty("top", pixels(panY + Double(vertices[index * 2 + 1]) / 1000 * Double(imageH) * zoom))
+      }
+    }
+
+    /// The vertex a point of the viewport is on (within a handle's reach),
+    /// or -1.
+    private func vertexAt(clientX: Double, clientY: Double) -> Int {
+      guard editing, imageW > 0, imageH > 0, let rect = viewport?.getBoundingClientRect() else { return -1 }
+      let x = clientX - rect.x
+      let y = clientY - rect.y
+      let reach = 8.0
+      var found = -1
+      var nearest = reach * reach
+      var index = 0
+      while index * 2 + 1 < vertices.count {
+        let vx = panX + Double(vertices[index * 2]) / 1000 * Double(imageW) * zoom
+        let vy = panY + Double(vertices[index * 2 + 1]) / 1000 * Double(imageH) * zoom
+        let distance = (x - vx) * (x - vx) + (y - vy) * (y - vy)
+        if distance <= nearest {
+          nearest = distance
+          found = index
+        }
+        index += 1
+      }
+      return found
+    }
+
+    /// A drag on a vertex's handle: the vertex follows the pointer, kept
+    /// inside the image, the box around the polygon with it; told live and
+    /// once more when the drag ends.
+    private func beginVertex(_ index: Int) {
+      viewport?.setAttribute(data("dragging"), "true")
+      mouseMoveListener = window.addEventListener(.mousemove) { [self] e in
+        let point = imagePoint(clientX: e.clientX, clientY: e.clientY)
+        moveVertex(index, toX: point.x, y: point.y)
+        onVertexEdit?(index, vertices[index * 2], vertices[index * 2 + 1], false)
+      }
+      mouseUpListener = window.addEventListener(.mouseup) { [self] _ in
+        endDrag()
+        onVertexEdit?(index, vertices[index * 2], vertices[index * 2 + 1], true)
+      }
+    }
+
+    /// Vertex `index` at a point of the image (pixels), whole in the
+    /// 0–1000 space; the region's box and the crop box follow.
+    private func moveVertex(_ index: Int, toX px: Double, y py: Double) {
+      guard index * 2 + 1 < vertices.count, imageW > 0, imageH > 0 else { return }
+      vertices[index * 2] = max(0, min(1000, Int((px / Double(imageW) * 1000).rounded())))
+      vertices[index * 2 + 1] = max(0, min(1000, Int((py / Double(imageH) * 1000).rounded())))
+      if let box = MarkupRegion.box(around: vertices) {
+        regionX = Double(box.x)
+        regionY = Double(box.y)
+        regionW = Double(box.width)
+        regionH = Double(box.height)
+        cropX = regionX * Double(imageW) / 1000
+        cropY = regionY * Double(imageH) / 1000
+        cropW = regionW * Double(imageW) / 1000
+        cropH = regionH * Double(imageH) / 1000
+      }
+      drawCrop()
+      drawRegion()
+      drawVertices()
+    }
+
     /// A point of the viewport in image pixels, kept on the image.
     private func imagePoint(clientX: Double, clientY: Double) -> (x: Double, y: Double) {
       let rect = viewport?.getBoundingClientRect()
@@ -1053,6 +1219,11 @@
         // An edited region's box takes a drag on itself; anywhere else
         // pans, and the focus stays in the editor.
         if editing, imageW > 0, imageH > 0 {
+          let vertex = vertexAt(clientX: e.clientX, clientY: e.clientY)
+          if vertex >= 0 {
+            beginVertex(vertex)
+            return
+          }
           let part = cropPart(clientX: e.clientX, clientY: e.clientY)
           if !stringIsEmpty(part) {
             beginCrop(clientX: e.clientX, clientY: e.clientY, part: part)
@@ -1085,7 +1256,8 @@
       vp.addEventListener(.mousemove) { [self] e in
         showReadout(clientX: e.clientX, clientY: e.clientY)
         guard mouseMoveListener < 0, cropping || editing else { return }
-        let part = cropPart(clientX: e.clientX, clientY: e.clientY)
+        let part = vertexAt(clientX: e.clientX, clientY: e.clientY) >= 0
+          ? "vertex" : cropPart(clientX: e.clientX, clientY: e.clientY)
         if stringIsEmpty(part) {
           vp.removeAttribute(data("crop-hover"))
         } else {

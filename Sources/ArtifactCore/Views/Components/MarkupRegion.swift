@@ -1,4 +1,3 @@
-#if CLIENT
   import EmbeddedSwiftUtilities
 
   /// The region of the canvas a page's markup names where a caret stands
@@ -31,8 +30,17 @@
     /// span `valueStart..<valueEnd` runs from the first value to the last
     /// (the attributes between are rewritten with them). 0 for a bbox.
     var quote: UInt8 = 0
+    /// For a `<zone>` that writes `points`: its vertices, x y one after
+    /// another in the 0–1000 space (empty for a box). The span
+    /// `valueStart..<valueEnd` is the points value; the region is the box
+    /// around them.
+    var points: [Int] = []
 
-    init(x: Int, y: Int, width: Int, height: Int, valueStart: Int = -1, valueEnd: Int = -1, quote: UInt8 = 0) {
+    init(
+      x: Int, y: Int, width: Int, height: Int, valueStart: Int = -1, valueEnd: Int = -1, quote: UInt8 = 0,
+      points: [Int] = []
+    ) {
+      self.points = points
       self.quote = quote
       self.x = x
       self.y = y
@@ -57,6 +65,7 @@
     /// kind: a bbox's "x y w h", or a zone's four corners with the
     /// attribute names between them kept, in its own quote.
     func writing(x: Int, y: Int, width: Int, height: Int) -> String {
+      if !points.isEmpty { return MarkupRegion.pointsText(scaled(toX: x, y: y, width: width, height: height)) }
       guard quote != 0 else { return MarkupRegion(x: x, y: y, width: width, height: height).bbox }
       let q = String(decoding: [quote], as: UTF8.self)
       return stringJoin(
@@ -64,8 +73,63 @@
          intToString(y + height)], separator: "")
     }
 
+    /// Its vertices with the box around them moved and resized to the given
+    /// one: each vertex keeps its place in the box, scaled with it.
+    func scaled(toX nx: Int, y ny: Int, width nw: Int, height nh: Int) -> [Int] {
+      var out: [Int] = []
+      var index = 0
+      while index + 1 < points.count {
+        let px = nx + ((points[index] - x) * nw + width / 2) / max(1, width)
+        let py = ny + ((points[index + 1] - y) * nh + height / 2) / max(1, height)
+        out.append(max(0, min(1000, px)))
+        out.append(max(0, min(1000, py)))
+        index += 2
+      }
+      return out
+    }
+
+    /// What replaces the points value when vertex `vertex` is dragged to
+    /// `px`, `py` (the others stay where they are).
+    func writing(vertex: Int, toX px: Int, y py: Int) -> String {
+      var moved = points
+      if vertex >= 0, vertex * 2 + 1 < moved.count {
+        moved[vertex * 2] = max(0, min(1000, px))
+        moved[vertex * 2 + 1] = max(0, min(1000, py))
+      }
+      return MarkupRegion.pointsText(moved)
+    }
+
+    /// The box around vertices (x y x y …), as a region; nil for fewer
+    /// than three or a box of no size.
+    static func box(around values: [Int]) -> MarkupRegion? {
+      guard values.count >= 6, values.count % 2 == 0 else { return nil }
+      var left = values[0], top = values[1], right = values[0], bottom = values[1]
+      var index = 2
+      while index < values.count {
+        left = min(left, values[index]); right = max(right, values[index])
+        top = min(top, values[index + 1]); bottom = max(bottom, values[index + 1])
+        index += 2
+      }
+      guard case .region(let region) = checked(x: left, y: top, width: right - left, height: bottom - top) else {
+        return nil
+      }
+      return region
+    }
+
+    /// Vertices as `points` writes them: "x,y x,y …".
+    static func pointsText(_ values: [Int]) -> String {
+      var pairs: [String] = []
+      var index = 0
+      while index + 1 < values.count {
+        pairs.append(stringJoin([intToString(values[index]), ",", intToString(values[index + 1])], separator: ""))
+        index += 2
+      }
+      return stringJoin(pairs, separator: " ")
+    }
+
     func isSame(as other: MarkupRegion) -> Bool {
       x == other.x && y == other.y && width == other.width && height == other.height
+        && points == other.points
     }
 
     /// `zones`: "id x y w h" in the 0–1000 space, one a ";" (`TEIView`'s
@@ -227,27 +291,71 @@
       if let facs = value(of: "facs", in: attributes) {
         // A page break's facs is its image, not a zone.
         guard let facs, !facs.bytes.isEmpty, facs.bytes[0] == 35 else { return .nothing }  // "#"
-        return zone(String(decoding: facs.bytes[1...], as: UTF8.self), in: zones)
+        return referenced(String(decoding: facs.bytes[1...], as: UTF8.self), in: text, zones: zones)
       }
       let name = String(decoding: text[tag.nameStart..<tag.nameEnd], as: UTF8.self)
       guard stringEquals(name, "zone") else { return .nothing }
       // As it is written now (user, 2026-10-16): its corners, else its
       // points; listed by its id only where it writes neither.
       if case .some(let own) = written(attributes) {
-        // Editable on the scan where it writes its corners plainly.
-        if case .region(let region) = own, let span = cornersSpan(attributes, in: text) {
-          return .region(
-            MarkupRegion(
-              x: region.x, y: region.y, width: region.width, height: region.height, valueStart: span.start,
-              valueEnd: span.end, quote: span.quote))
+        return editable(own, attributes, in: text)
+      }
+      // Geometry written elsewhere: a zone that points at another
+      // (`sameAs`, `corresp`, "#id"), else the zone of its own id the page
+      // lists (the facsimile's). Edited where that lives, when it is in the
+      // code; otherwise the region is shown.
+      for name in ["sameAs", "corresp"] as [StaticString] {
+        if let target = value(of: name, in: attributes), let target, !target.bytes.isEmpty, target.bytes[0] == 35 {
+          let found = referenced(String(decoding: target.bytes[1...], as: UTF8.self), in: text, zones: zones)
+          if case .region = found { return found }
         }
-        return own
       }
       if let id = value(of: "xml:id", in: attributes), let id {
-        let listed = zone(String(decoding: id.bytes, as: UTF8.self), in: zones)
+        let listed = referenced(String(decoding: id.bytes, as: UTF8.self), in: text, zones: zones)
         if case .region = listed { return listed }
       }
       return .invalid
+    }
+
+    /// A zone written plainly is editable on the scan where its corners
+    /// stand in one kind of quote, or its `points` are valid: the span of
+    /// the value the edit rewrites.
+    static func editable(
+      _ own: Named, _ attributes: [(name: [UInt8], value: Value?)], in text: [UInt8]
+    ) -> Named {
+      guard case .region(let region) = own else { return own }
+      if let span = cornersSpan(attributes, in: text) {
+        return .region(
+          MarkupRegion(
+            x: region.x, y: region.y, width: region.width, height: region.height, valueStart: span.start,
+            valueEnd: span.end, quote: span.quote))
+      }
+      if let points = value(of: "points", in: attributes), let points,
+        let values = numbers(points.bytes.map { $0 == 44 ? 32 : $0 })
+      {
+        return .region(
+          MarkupRegion(
+            x: region.x, y: region.y, width: region.width, height: region.height, valueStart: points.start,
+            valueEnd: points.start + points.bytes.count, points: values))
+      }
+      return own
+    }
+
+    /// The zone `id` names: the one the code writes, with geometry, edited
+    /// where it stands (a facsimile's zone in the same document); else the
+    /// page's listed one, shown.
+    static func referenced(_ id: String, in text: [UInt8], zones: String) -> Named {
+      for tag in tags(text) where tag.kind != .close {
+        let name = String(decoding: text[tag.nameStart..<tag.nameEnd], as: UTF8.self)
+        guard stringEquals(name, "zone") else { continue }
+        let attributes = self.attributes(of: tag, in: text)
+        guard let own = value(of: "xml:id", in: attributes), let own,
+          stringEquals(String(decoding: own.bytes, as: UTF8.self), id),
+          case .some(let geometry) = written(attributes)
+        else { continue }
+        return editable(geometry, attributes, in: text)
+      }
+      return zone(id, in: zones)
     }
 
     /// Where a zone's four corner values stand when it writes `ulx uly lrx
@@ -412,4 +520,3 @@
       return values
     }
   }
-#endif

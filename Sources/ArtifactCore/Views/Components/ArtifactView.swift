@@ -1448,6 +1448,14 @@
       }
       caretRegion = region
       drawRegion()
+      // A region entered is framed where it is not wholly in view; every
+      // region left, the view before the first such move comes back unless
+      // the reader has moved the scan since (`CanvasReader.frame`).
+      if case .some(let entered) = region {
+        shownCanvas?.frame(x: entered.x, y: entered.y, width: entered.width, height: entered.height)
+      } else {
+        shownCanvas?.restoreView()
+      }
     }
 
     private func setRegion(hover region: MarkupRegion?) {
@@ -1468,7 +1476,8 @@
         canvas.showRegion(x: region.x, y: region.y, width: region.width, height: region.height)
       } else if case .some(let region) = caretRegion {
         if case .some = caretEditor, region.editable {
-          canvas.editRegion(x: region.x, y: region.y, width: region.width, height: region.height)
+          canvas.editRegion(
+            x: region.x, y: region.y, width: region.width, height: region.height, vertices: region.points)
         } else {
           canvas.showRegion(x: region.x, y: region.y, width: region.width, height: region.height)
         }
@@ -1530,6 +1539,18 @@
     /// into the text; once it ends, the value it began as put back and the
     /// last one written over it as one edit.
     private func regionEdited(x: Int, y: Int, width: Int, height: Int, done: Bool) {
+      // A bbox's value, a zone's four corners, or a polygon's points scaled
+      // with its box (`MarkupRegion.writing`).
+      dragged(done: done) { $0.writing(x: x, y: y, width: width, height: height) }
+    }
+
+    /// A polygon zone's vertex dragged on the canvas: the points value
+    /// with that vertex moved, written as a box's drag is.
+    private func vertexEdited(_ index: Int, x: Int, y: Int, done: Bool) {
+      dragged(done: done) { $0.writing(vertex: index, toX: x, y: y) }
+    }
+
+    private func dragged(done: Bool, value make: (MarkupRegion) -> String) {
       if case .none = dragNode {
         guard let edited = editedValue() else { return }
         dragNode = edited.node
@@ -1538,9 +1559,8 @@
         dragOriginal = edited.value
         dragRegion = edited.region
       }
-      // A bbox's value, or a zone's four corners (`MarkupRegion.writing`).
-      let value = (dragRegion ?? MarkupRegion(x: x, y: y, width: width, height: height))
-        .writing(x: x, y: y, width: width, height: height)
+      guard let region = dragRegion else { return }
+      let value = make(region)
       guard let node = dragNode else { return }
       var length = 0
       for byte in value.utf8 where byte & 0xC0 != 0x80 { length += byte >= 0xF0 ? 2 : 1 }
@@ -3711,6 +3731,9 @@
       }
       canvas.onRegionEdit = { [self] x, y, width, height, done in
         self.regionEdited(x: x, y: y, width: width, height: height, done: done)
+      }
+      canvas.onVertexEdit = { [self] index, x, y, done in
+        self.vertexEdited(index, x: x, y: y, done: done)
       }
       canvas.onNoImage = { [self] in self.showNoImage(ofService: service) }
       canvas.setCropping(mayCrop(service))

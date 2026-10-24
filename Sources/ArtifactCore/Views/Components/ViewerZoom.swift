@@ -191,6 +191,100 @@ public enum ViewerZoom {
       clampPan()
     }
 
+    // MARK: - Framing a region
+
+    /// Where the image stands on its surface: its zoom and its top left.
+    public struct Framing: Sendable, Equatable {
+      public var zoom: Double
+      public var panX: Double
+      public var panY: Double
+      public init(zoom: Double, panX: Double, panY: Double) {
+        self.zoom = zoom
+        self.panX = panX
+        self.panY = panY
+      }
+
+      /// `self` a fraction `t` (0–1) of the way to `other`.
+      public func moved(toward other: Framing, by t: Double) -> Framing {
+        Framing(
+          zoom: zoom + (other.zoom - zoom) * t, panX: panX + (other.panX - panX) * t,
+          panY: panY + (other.panY - panY) * t)
+      }
+    }
+
+    /// Where the image stands now.
+    public var framing: Framing { Framing(zoom: zoom, panX: panX, panY: panY) }
+
+    /// The image put at `framing`: its zoom within the fit and the actual
+    /// size, kept inside the surface.
+    public mutating func apply(_ framing: Framing) {
+      zoom = max(minZoom, min(maxZoom, framing.zoom))
+      atFit = zoom <= minZoom
+      panX = framing.panX
+      panY = framing.panY
+      clampPan()
+    }
+
+    /// Where the image would stand showing `region` (what `show(region:)`
+    /// does), without moving it.
+    public func framing(showing region: Region) -> Framing {
+      var copy = self
+      copy.show(region: region)
+      return copy.framing
+    }
+
+    /// The margin left around a region framed, as a fraction of the
+    /// surface on each side.
+    public static let framingMargin = 0.1
+
+    /// Where the image should stand to show a region of it (`x`, `y`,
+    /// `width`, `height` in the 0–1000 space over the whole image), or nil
+    /// to leave it where it is:
+    ///
+    /// - a region wholly in view is left be, whatever the zoom (a reader's
+    ///   own zoom is respected);
+    /// - a region larger than the surface at the zoom it has is not zoomed
+    ///   into: only if its top left is out of view is the image panned to
+    ///   show it, with the margin;
+    /// - any other is framed: zoomed in, never out, so its longer edge fits
+    ///   the surface within the margin (to the actual size at most), and
+    ///   centered.
+    public func framing(ofX x: Double, y: Double, width: Double, height: Double) -> Framing? {
+      guard imageWidth > 0, imageHeight > 0, viewportWidth > 0, viewportHeight > 0, zoom > 0, width > 0, height > 0
+      else { return nil }
+      let scaleX = imageWidth / 1000 * zoom
+      let scaleY = imageHeight / 1000 * zoom
+      let left = panX + x * scaleX
+      let top = panY + y * scaleY
+      let right = left + width * scaleX
+      let bottom = top + height * scaleY
+      // Layout rounds a shown size by a hair.
+      let slack = 0.5
+      if left >= -slack && top >= -slack && right <= viewportWidth + slack && bottom <= viewportHeight + slack {
+        return nil
+      }
+      let marginX = viewportWidth * ViewerZoom.framingMargin
+      let marginY = viewportHeight * ViewerZoom.framingMargin
+      var target = self
+      if right - left > viewportWidth || bottom - top > viewportHeight {
+        guard left < -slack || top < -slack || left >= viewportWidth || top >= viewportHeight else { return nil }
+        target.panX += marginX - left
+        target.panY += marginY - top
+      } else {
+        let fitX = (viewportWidth - 2 * marginX) / (width / 1000 * imageWidth)
+        let fitY = (viewportHeight - 2 * marginY) / (height / 1000 * imageHeight)
+        target.zoom = max(zoom, min(maxZoom, min(fitX, fitY)))
+        target.atFit = target.zoom <= minZoom
+        let centerX = (x + width / 2) / 1000 * imageWidth
+        let centerY = (y + height / 2) / 1000 * imageHeight
+        target.panX = viewportWidth / 2 - centerX * target.zoom
+        target.panY = viewportHeight / 2 - centerY * target.zoom
+      }
+      target.clampPan()
+      let framed = target.framing
+      return framed == framing ? nil : framed
+    }
+
     /// The image moved by `dx`, `dy`, kept inside the surface.
     public mutating func pan(by dx: Double, _ dy: Double) {
       panX += dx
