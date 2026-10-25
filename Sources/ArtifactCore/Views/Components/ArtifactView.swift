@@ -3115,11 +3115,13 @@
       }
     }
 
-    /// The contain fit, never above the text's actual size: a page smaller
-    /// than the pane is read at its size, its box filling the pane, never
-    /// enlarged or shown small in it.
-    private func containFit(width: Double, height: Double, paneWidth: Double, paneHeight: Double) -> Double {
-      min(paneWidth / max(paneWidth, width), paneHeight / max(paneHeight, height))
+    /// The reading fit, never above the text's actual size: a page no wider
+    /// than the pane is read at its size, never enlarged; a wider one fits
+    /// the pane's width. A page taller than the pane scrolls, never shrunk
+    /// to its height (user, 2026-10-25): the edition is regularized, read at
+    /// its own size, not drawn whole as its scan is.
+    private func readingFit(width: Double, paneWidth: Double) -> Double {
+      paneWidth / max(paneWidth, width)
     }
 
     /// The fit of the rendered text of the page `codeLayer` is on: measured
@@ -3144,7 +3146,7 @@
       if reflowOn {
         fit = reflowedFit(rendered, paneHeight: paneHeight)
       } else if let box = measure(rendered, at: ViewerZoom.actualSize), box.width > 0, box.height > 0 {
-        fit = containFit(width: box.width, height: box.height, paneWidth: paneWidth, paneHeight: paneHeight)
+        fit = readingFit(width: box.width, paneWidth: paneWidth)
       }
       rendered.style.display(.none)
       if stringIsEmpty(transform) {
@@ -3248,7 +3250,7 @@
       layer.style.setProperty("transform-origin", "top left")
       layer.style.setProperty("transform", "none")
       guard let natural = layer.getBoundingClientRect(), natural.width > 0, natural.height > 0 else { return }
-      let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
+      let fit = readingFit(width: natural.width, paneWidth: paneWidth)
       let stored = storedZoom()
       var resting = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
       // Within a pixel of its fit the page is at its fit: a zoom a hair
@@ -3409,7 +3411,7 @@
         guard let reflowed = reflowedFit(layer, paneHeight: paneHeight) else { return }
         fit = reflowed
       } else {
-        fit = containFit(width: box.width / previous, height: box.height / previous, paneWidth: paneWidth, paneHeight: paneHeight)
+        fit = readingFit(width: box.width / previous, paneWidth: paneWidth)
       }
       let stored = storedZoom()
       // The reader's zoom, or at the fit, or, until the reader zooms, the
