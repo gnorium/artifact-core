@@ -345,6 +345,11 @@
     func show(region: ViewerZoom.Region) {
       guard imageW > 0, imageH > 0 else { return }
       surface.show(region: region)
+      // Kept for the session as its own zoom is: a text zoomed out to its
+      // fit leaves the image at its fit for the next page too, never at the
+      // zoom it had before, which the next page's text then matched—fitted
+      // to its width instead of whole (user, 2026-10-26).
+      sessionStorage.setItem(ViewerZoom.imageKey, atFit ? "fit" : doubleToString(zoom))
       updateTransform()
     }
 
@@ -601,10 +606,18 @@
       let laidZoom = (target[2] - target[0]) / span
       let laidX = target[0] - box.x - x0 * laidZoom
       let laidY = target[1] - box.y - y0 * laidZoom
-      let ownX = viewportW / 2 - own.centerX * Double(imageW) * own.zoom
-      let ownY = viewportH / 2 - own.centerY * Double(imageH) * own.zoom
+      // Its own end as it will rest (`showSpot`): its zoom within its reach,
+      // its pan held to its viewport. Unheld, the blend aimed past where the
+      // image then stops, and it jumped there once the overlay was off
+      // (user, 2026-10-26).
+      let ownZoom = max(minZoom, min(max(maxZoom, own.zoom), own.zoom))
+      let width = Double(imageW) * ownZoom, height = Double(imageH) * ownZoom
+      var ownX = viewportW / 2 - own.centerX * width
+      var ownY = viewportH / 2 - own.centerY * height
+      ownX = width <= viewportW ? (viewportW - width) / 2 : min(0, max(viewportW - width, ownX))
+      ownY = height <= viewportH ? (viewportH - height) / 2 : min(0, max(viewportH - height, ownY))
       let p = max(0, min(1, progress))
-      zoom = own.zoom + (laidZoom - own.zoom) * p
+      zoom = ownZoom + (laidZoom - ownZoom) * p
       panX = ownX + (laidX - ownX) * p
       panY = ownY + (laidY - ownY) * p
       updateTransform()

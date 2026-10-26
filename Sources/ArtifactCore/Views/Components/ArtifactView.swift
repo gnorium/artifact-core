@@ -1371,17 +1371,56 @@
         root.querySelector(".artifact-xml-toggle button")?.click()
       }
       // The overlay off by its own switch's press too (user, 2026-10-26):
-      // the header is no page to lay on the scan.
+      // the header is no page to lay on the scan. The header put away, the
+      // overlay it put away comes back.
       if on, overlayOn {
+        overlayPutAwayByHeader = true
         root.querySelector(".artifact-overlay-toggle button")?.click()
       }
       // The markup's pane put away takes the overlay and the sync with it,
       // as the XML does.
       reflectSyncApplies()
+      if !on, overlayPutAwayByHeader {
+        overlayPutAwayByHeader = false
+        if !overlayOn { root.querySelector(".artifact-overlay-toggle button")?.click() }
+      }
       // With no markup its column comes and goes beside the images: the
       // image on screen fitted to the room it has now.
       if case .none = markupPane { shownCanvas?.refit() }
     }
+
+    /// The text pane's fit before the overlay came on: the fit it goes back
+    /// to as the overlay goes off (`placeOverlay`).
+    private var overlayLeaveFit: Double?
+
+    /// The shown page's fit in its pane as the pane rests at that fit: its
+    /// whole box less its borders and the text's inset, no scrollbar taken
+    /// out of it (a page at its fit shows none), as `applyPageScale` fits it.
+    private func restingFit() -> Double? {
+      guard let pane = markupPane, let layer = shownLayer(), let paneBox = pane.getBoundingClientRect(),
+        let box = layer.getBoundingClientRect()
+      else { return nil }
+      let zoom = currentZoom()
+      guard zoom > 0 else { return nil }
+      let style = window.getComputedStyle(pane)
+      let borderX = pixels(style.getPropertyValue("border-left-width")) + pixels(style.getPropertyValue("border-right-width"))
+      let borderY = pixels(style.getPropertyValue("border-top-width")) + pixels(style.getPropertyValue("border-bottom-width"))
+      let margin = layer.parentElement.map { pixels($0.style.getPropertyValue("margin-inline-start")) } ?? 0
+      let insetX = max(0, box.x - paneBox.x + pane.scrollLeft - margin)
+      let insetY = max(0, box.y - paneBox.y + pane.scrollTop)
+      let width = paneBox.width - borderX - 2 * insetX
+      let height = paneBox.height - borderY - 2 * insetY
+      guard width > 0, height > 0 else { return nil }
+      return containFit(width: box.width / zoom, height: box.height / zoom, paneWidth: width, paneHeight: height)
+    }
+    /// The pane's size when `overlayLeaveFit` was read.
+    private var overlayLeavePane: (Double, Double) = (0, 0)
+    /// And the page it was read on.
+    private var overlayLeavePage = ""
+
+    /// Whether the Header switch put the overlay away (`setHeader`): the
+    /// header put away, the overlay comes back.
+    private var overlayPutAwayByHeader = false
 
     // MARK: - Regions
 
@@ -2071,6 +2110,17 @@
         self.overlayLeavesToFit = false
         self.overlayFocus = nil
         self.overlayZoomStart = self.currentZoom()
+        // The pane's own fit, read while it rests: kept for a pane of the same
+        // size, as the last exit's frames may have left another behind.
+        let paneSize = (Double(self.markupPane?.clientWidth ?? 0), Double(self.markupPane?.clientHeight ?? 0))
+        let page = self.root.querySelector(".artifact-markup .tei-page[data-active='true']")?.getAttribute("data-service-id") ?? ""
+        if !self.overlayLeaving,
+          self.overlayLeaveFit == nil || self.overlayLeavePane != paneSize || !stringEquals(self.overlayLeavePage, page)
+        {
+          self.overlayLeaveFit = self.restingFit() ?? self.lastFit
+          self.overlayLeavePane = paneSize
+          self.overlayLeavePage = page
+        }
         self.overlayScrollStart = (self.markupPane?.scrollLeft ?? 0, self.markupPane?.scrollTop ?? 0)
         self.overlayZoomBegan = window.performance.now()
         self.overlayLeaving = false
@@ -2615,17 +2665,21 @@
         // From its fit, to the pane's fit as it is now, the scan sent to
         // the spot the text then shows (user, 2026-10-17).
         var focus = overlayFocus ?? (x: 0, y: 0, zoom: from.zoom)
+        // The pane's fit as it will be once back in its own place, the fit
+        // it had before the overlay: never the fit of the pane mid-move,
+        // which swept the scan's aim up and back down (user, 2026-10-26).
+        let leaveFit = overlayLeaveFit ?? fit
         if overlayLeavesToFit {
-          focus.zoom = fit
+          focus.zoom = leaveFit
           overlayFocus = focus
         }
         let to = leavingView(focus, natural: (natural.width, natural.height))
         if overlayLeavesToFit {
           let middle = (
-            x: (Double(pane.clientLeft) + Double(pane.clientWidth) / 2 - room.x - to.x) / fit,
-            y: (Double(pane.clientTop) + Double(pane.clientHeight) / 2 - room.y - to.y) / fit
+            x: (Double(pane.clientLeft) + Double(pane.clientWidth) / 2 - room.x - to.x) / leaveFit,
+            y: (Double(pane.clientTop) + Double(pane.clientHeight) / 2 - room.y - to.y) / leaveFit
           )
-          if let spot = scanSpot(at: middle, zoom: fit) { scanOwn = spot }
+          if let spot = scanSpot(at: middle, zoom: leaveFit) { scanOwn = spot }
         }
         view = (between(from.zoom, focus.zoom), between(from.x, to.x), between(from.y, to.y))
       }
