@@ -1370,6 +1370,11 @@
       if on, rawVisible {
         root.querySelector(".artifact-xml-toggle button")?.click()
       }
+      // The overlay off by its own switch's press too (user, 2026-10-26):
+      // the header is no page to lay on the scan.
+      if on, overlayOn {
+        root.querySelector(".artifact-overlay-toggle button")?.click()
+      }
       // The markup's pane put away takes the overlay and the sync with it,
       // as the XML does.
       reflectSyncApplies()
@@ -1809,13 +1814,13 @@
     /// kept underneath; disabled and off while the overlay is on, where
     /// nothing pans or zooms to sync or not (user, 2026-10-14).
     private func reflectSyncApplies() {
-      let active = overlayOn && !codeShown && !reflowOn && imagesShown
+      let active = overlayOn && !codeShown && !headerVisible && !reflowOn && imagesShown
       root.setAttribute(data("overlay-active"), active ? "true" : "false")
       // The overlay's switch disabled, as Detach's is, where it cannot
-      // apply: Raw, Reflow, the images put away, a page with no markup or
-      // no image (`overlayApplies`, user, 2026-10-17).
+      // apply: Raw, the Header, Reflow, the images put away, a page with no
+      // markup or no image (`overlayApplies`, user, 2026-10-17, 2026-10-26).
       if let button = root.querySelector(".artifact-overlay-toggle button") {
-        if codeShown || reflowOn || !imagesShown || !overlayApplies {
+        if codeShown || headerVisible || reflowOn || !imagesShown || !overlayApplies {
           button.setAttribute("disabled", "")
           button.setAttribute("aria-disabled", "true")
         } else {
@@ -2196,8 +2201,20 @@
         laid([measured[0], measured[1], measured[2], measured[5]], zone: zone, size: $0, unit: currentZoom())
       }
         ?? [measured[0], measured[1], measured[2], measured[5]]
-      canvas.blend(own: own, zone: zone, target: box, progress: overlayOn ? overlayProgress : 1 - overlayProgress)
+      // Going off, the scan leaves from where it lay when the overlay went
+      // off, straight to its own pane: never riding the text's zoom on its
+      // way to the text pane's fit, which drew it past both (user,
+      // 2026-10-26: the overlay frames the whole scan).
+      if overlayOn { leavingScanTarget = box }
+      canvas.blend(
+        own: own, zone: zone, target: overlayOn ? box : leavingScanTarget ?? box,
+        progress: overlayOn ? overlayProgress : 1 - overlayProgress)
     }
+
+    /// Where the scan lay (its laid box in the window) the last time the
+    /// overlay was on: what its way back to its own pane starts from
+    /// (`blendScan`), the text's zoom leaving from elsewhere.
+    private var leavingScanTarget: [Double]?
 
     /// The image's spot under `spot` (the page's point, in the layer's own
     /// pixels) at the zoom the text is drawn at, through the registration's
@@ -2531,22 +2548,29 @@
     private var overlayTarget: (page: String, box: [Double], spans: Bool, em: Double) = ("", [], false, 0)
 
     /// The overlay's framing of the shown layer (`OverlayFraming`) in the
-    /// pane's room as it is now (`overlayRoom`): the edition's whole page
-    /// (`natural` its size unzoomed), on which the scan's text block is laid,
-    /// never the scan beyond it (user, 2026-10-26); the reader's zoom held
-    /// between its fit and the larger of the text's and the scan's actual
-    /// sizes.
+    /// pane's room as it is now (`overlayRoom`): the whole scan image, the
+    /// edition's text block tilted and shifted onto the scan's (user,
+    /// 2026-10-26), its corners taken through the registration into the
+    /// layer's own pixels (`natural` the layer's size unzoomed, framed where
+    /// no registration stands); the reader's zoom held between its fit and
+    /// the larger of the text's and the scan's actual sizes.
     private func overlayFraming(
       layer: DOM.Element, natural: (width: Double, height: Double), in room: (width: Double, height: Double)
     ) -> OverlayFraming {
-      let content = (left: 0.0, top: 0.0, right: natural.width, bottom: natural.height)
+      var content = (left: 0.0, top: 0.0, right: natural.width, bottom: natural.height)
       var actual = ViewerZoom.actualSize
       if let zone = overlayZone(), let size = shownImageSize, let measured = textBlock(in: layer, drawnAt: 1) {
         let box = laid(measured, zone: zone, size: size)
+        let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
         let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
-        // The overlay frames the edition's page alone: the scan's text block
-        // is laid on its text block, so the scan beyond it—its margins and
-        // what stands in them—frames nothing (user, 2026-10-26).
+        if let laid = Homography(from: corners, to: target) {
+          var frame = (left: Double.infinity, top: Double.infinity, right: -Double.infinity, bottom: -Double.infinity)
+          for (x, y) in [(0.0, 0.0), (size.width, 0.0), (size.width, size.height), (0.0, size.height)] {
+            let point = laid.apply(x: x, y: y)
+            frame = (min(frame.left, point.x), min(frame.top, point.y), max(frame.right, point.x), max(frame.bottom, point.y))
+          }
+          content = frame
+        }
         let zoneSpan = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
         if box[2] > box[0] { actual = max(actual, zoneSpan / (box[2] - box[0])) }
       }
@@ -2555,7 +2579,7 @@
 
     /// The layer where the overlay frames it (user, 2026-10-14): on its
     /// way in from where the reader had it to its fit, centered, the
-    /// edition's page and the scan's reach framed; there, at the reader's
+    /// whole scan image framed (`overlayFraming`); there, at the reader's
     /// own zoom and pan, the text and the structure over it moving as one
     /// (`overlayView`, held to the framing); on its way out at that zoom,
     /// sliding into its own pane with the spot the reader was looking at in
