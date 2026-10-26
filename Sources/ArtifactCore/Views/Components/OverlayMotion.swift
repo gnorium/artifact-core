@@ -6,6 +6,12 @@ enum OverlayMotion {
   /// Its length.
   static let milliseconds = 400.0
 
+  /// A pane taking the edition's place on the scan (the XML, the header,
+  /// Reflow; user, 2026-10-26): the edition fades out where it lies, then
+  /// the overlay is off at once, the image and that pane fading in at
+  /// rest. Each fade this long.
+  static let handoffMilliseconds = 200.0
+
   /// Its curve, CSS's `ease-in-out`: a cubic Bézier from (0, 0) to (1, 1)
   /// by these two control points.
   static let x1 = 0.42
@@ -17,6 +23,11 @@ enum OverlayMotion {
     /// As a CSS transition takes it, after the property it moves.
     static var timing: String {
       "\(Int(milliseconds))ms cubic-bezier(\(x1), \(y1), \(x2), \(y2))"
+    }
+
+    /// A handoff's fade (`handoffMilliseconds`), as CSS takes it.
+    static var handoffTiming: String {
+      "\(Int(handoffMilliseconds))ms ease-out"
     }
   #endif
 

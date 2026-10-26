@@ -1,5 +1,6 @@
 #if SERVER
   import CSSBuilder
+  import CSSOMBuilder
   import DesignTokens
   import DOMBuilder
   import HTMLBuilder
@@ -842,6 +843,43 @@
         selector("&[data-overlay-fading='true'] .artifact-object") {
           CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
         }
+        // A pane that is not the rendering putting the overlay away (the
+        // XML, the header, Reflow: `overlayAside`): the edition fades out on
+        // the same clock as it leaves the scan, gone as it lands, that pane
+        // then in its place—never the edition at full strength and then
+        // cut (user, 2026-10-26); that pane put away, it fades back in as
+        // it comes back onto the scan.
+        selector("&[data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-markup") {
+          CSS.Property("opacity", "var(--artifact-overlay-progress, 0)")
+        }
+        // Handed off (`overlayAside`): first the edition fades out where it
+        // lies on the scan (`data-overlay-put-away="out"`), nothing moving;
+        // then, the overlay off at once, the image and the pane that took
+        // its place (the XML's code, the header) fade in at rest
+        // (`data-overlay-handoff`). Never the edition flown back.
+        selector("&[data-overlay-put-away='out'] .artifact-markup") {
+          CSS.Property("opacity", "0").important()
+          CSS.Property("transition", "opacity " + OverlayMotion.handoffTiming)
+        }
+        // The overlay off at once (`data-overlay-handoff="leaving"`): the
+        // panes where they rest, never sliding; the image fading in from
+        // there on.
+        selector("&[data-overlay-handoff] .artifact-markup-frame", "&[data-overlay-handoff] .artifact-object") {
+          CSS.Property("transition", "none").important()
+        }
+        selector("&[data-overlay-handoff] .artifact-object") {
+          animation("artifact-handoff-in " + OverlayMotion.handoffTiming)
+        }
+        // Off (`"true"`): the pane that took the edition's place fading in.
+        selector(
+          "&[data-overlay-handoff='true'] .artifact-markup", "&[data-overlay-handoff='true'] .artifact-document-header"
+        ) {
+          animation("artifact-handoff-in " + OverlayMotion.handoffTiming)
+        }
+        keyframes("artifact-handoff-in") {
+          from { opacity(0) }
+          to { opacity(1) }
+        }
         selector("&[data-overlay-active='true'] .image-viewport") { CSS.Property("touch-action", "none") }
         selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled") {
           backgroundColor(backgroundColorBlue).important()
@@ -1317,6 +1355,7 @@
       showLayers()
       _ = raw?.addEventListener("toggle-button-update") { [self] (event: Event) in
         self.rawVisible = stringEquals(event.detail, "true")
+        self.overlayAside()
         self.showLayers()
         // The XML and the header share the column (user, 2026-10-21): the
         // XML on turns the header off, by its own switch's press, so every
@@ -1370,20 +1409,11 @@
       if on, rawVisible {
         root.querySelector(".artifact-xml-toggle button")?.click()
       }
-      // The overlay off by its own switch's press too (user, 2026-10-26):
-      // the header is no page to lay on the scan. The header put away, the
-      // overlay it put away comes back.
-      if on, overlayOn {
-        overlayPutAwayByHeader = true
-        root.querySelector(".artifact-overlay-toggle button")?.click()
-      }
+      // The header is no page to lay on the scan (user, 2026-10-26).
+      overlayAside()
       // The markup's pane put away takes the overlay and the sync with it,
       // as the XML does.
       reflectSyncApplies()
-      if !on, overlayPutAwayByHeader {
-        overlayPutAwayByHeader = false
-        if !overlayOn { root.querySelector(".artifact-overlay-toggle button")?.click() }
-      }
       // With no markup its column comes and goes beside the images: the
       // image on screen fitted to the room it has now.
       if case .none = markupPane { shownCanvas?.refit() }
@@ -1418,9 +1448,58 @@
     /// And the page it was read on.
     private var overlayLeavePage = ""
 
-    /// Whether the Header switch put the overlay away (`setHeader`): the
-    /// header put away, the overlay comes back.
-    private var overlayPutAwayByHeader = false
+    /// Whether a pane that is not the rendering put the overlay away
+    /// (`overlayAside`): every such pane put away, the overlay comes back.
+    private var overlayPutAway = false
+    /// While the edition fades out in place before the overlay goes off.
+    private var overlayHandingOff = false
+    /// The overlay off in one frame, its motion spent (`overlayAside`).
+    private var overlayInstant = false
+
+    /// The overlay off, its switch shown off, while the column holds a
+    /// pane that is not the rendering—the XML, the header—or Reflow sets
+    /// it (user, 2026-10-26): none is a page to lay on the scan. The
+    /// edition fades out where it lies (`OverlayMotion.handoffMilliseconds`),
+    /// then the overlay is off at once and the image and that pane fade in
+    /// at rest: never the edition flown back. Every one of them put away,
+    /// the overlay it put away comes back, the edition fading in on its
+    /// way onto the scan.
+    private func overlayAside() {
+      let aside = codeShown || reflowOn
+      // Set as the images switch sets it (`setCanvasShown`), never by a
+      // press of its button: a listener of the XML's press may have
+      // disabled it already, and a press of a disabled button does nothing.
+      if aside, overlayOn, !overlayHandingOff {
+        overlayPutAway = true
+        overlayHandingOff = true
+        root.setAttribute(data("overlay-put-away"), "out")
+        let ticket = overlayMotion
+        _ = window.setTimeout(OverlayMotion.handoffMilliseconds) { [self] in
+          self.overlayHandingOff = false
+          guard self.overlayPutAway, self.overlayOn, self.overlayMotion == ticket, self.isInDocument else { return }
+          self.root.setAttribute(data("overlay-put-away"), "true")
+          self.overlayInstant = true
+          self.pressOverlay(false)
+          self.setOverlay(false)
+          // The panes at rest and the fade's clock spent in this frame: no
+          // frame of the edition at full strength before the next.
+          self.root.setAttribute(data("overlay-handoff"), "leaving")
+          self.fadeOverlay()
+        }
+      } else if !aside, overlayPutAway {
+        overlayPutAway = false
+        overlayHandingOff = false
+        reflectSyncApplies()
+        // Coming back, the edition fades in on the overlay's clock as it
+        // went (`data-overlay-put-away`, taken off once it has landed).
+        if !overlayOn, overlayApplies, imagesShown {
+          pressOverlay(true)
+          setOverlay(true)
+        } else {
+          root.removeAttribute(data("overlay-put-away"))
+        }
+      }
+    }
 
     // MARK: - Regions
 
@@ -1853,7 +1932,9 @@
     /// kept underneath; disabled and off while the overlay is on, where
     /// nothing pans or zooms to sync or not (user, 2026-10-14).
     private func reflectSyncApplies() {
-      let active = overlayOn && !codeShown && !headerVisible && !reflowOn && imagesShown
+      // Held while the edition fades out in place, as a pane takes its
+      // place (`overlayAside`): nothing moves until it is gone.
+      let active = overlayOn && imagesShown && (overlayHandingOff || (!codeShown && !headerVisible && !reflowOn))
       root.setAttribute(data("overlay-active"), active ? "true" : "false")
       // The overlay's switch disabled, as Detach's is, where it cannot
       // apply: Raw, the Header, Reflow, the images put away, a page with no
@@ -1903,6 +1984,7 @@
       }
       toggle.setAttribute("aria-pressed", on ? "true" : "false")
       toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
+      overlayAside()
       // A framed page's grid is Reflow off's alone.
       showLayers()
     }
@@ -1918,7 +2000,10 @@
     /// The layer each page shows, by the two switches.
     private var shownLayerName: String {
       let translated = translatable && translationVisible
-      return translated ? (rawVisible ? "translated-markup" : "translated-rendering") : (rawVisible ? "markup" : "rendering")
+      // The rendering while the XML's press takes it off the scan, the
+      // code once the overlay is off (`overlayAside`).
+      let code = rawVisible && !(overlayPutAway && (overlayOn || overlayLeaving))
+      return translated ? (code ? "translated-markup" : "translated-rendering") : (code ? "markup" : "rendering")
     }
 
     /// The one layer of each page that shows, by two switches (user,
@@ -2097,6 +2182,8 @@
     /// a page with no markup of its own or no image (`reflectPageMarkup`,
     /// user, 2026-10-17).
     private func setOverlay(_ on: Bool) {
+      // A handoff's fade in is spent: the next one runs again.
+      if on { root.removeAttribute(data("overlay-handoff")) }
       // The word correspondence is side by side's alone. The structure is
       // measured here, the layer at rest, before the motion scales it.
       if on {
@@ -2177,6 +2264,15 @@
           // middle; the scan at the same spot and zoom, where the
           // registration's way out left it. Matching resumes from there.
           self.overlayLeaving = false
+          self.overlayInstant = false
+          // The fade done with (`fadeOverlay`: none once off has run); the
+          // pane that put it away fading in where it lands.
+          self.fadeOverlay()
+          if self.overlayPutAway, self.root.hasAttribute(data("overlay-handoff")) {
+            self.root.setAttribute(data("overlay-handoff"), "true")
+          }
+          // The XML that put it away shown now it has landed.
+          if self.rawVisible { self.showLayers() }
           let registered = self.overlayRegistered
           // The spot the pane's own layout can hold in its middle: the
           // scan is sent to it, so the two show one point.
@@ -2215,6 +2311,10 @@
           } else if self.syncs {
             self.matchImage()
           }
+        } else {
+          // Back on the scan: an edition that faded out as a pane took its
+          // place has faded back in (`overlayAside`).
+          self.root.removeAttribute(data("overlay-put-away"))
         }
       }
       _ = window.requestAnimationFrame { frame() }
@@ -2339,7 +2439,7 @@
 
     /// The overlay's motion so far, on its curve: 0 to 1.
     private var overlayProgress: Double {
-      if window.matchMedia("(prefers-reduced-motion: reduce)") { return 1 }
+      if overlayInstant || window.matchMedia("(prefers-reduced-motion: reduce)") { return 1 }
       return OverlayMotion.eased((window.performance.now() - overlayZoomBegan) / OverlayMotion.milliseconds)
     }
 
