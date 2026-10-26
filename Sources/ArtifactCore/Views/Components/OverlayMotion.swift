@@ -10,7 +10,7 @@ enum OverlayMotion {
   /// Reflow; user, 2026-10-26): the edition fades out where it lies, then
   /// the overlay is off at once, the image and that pane fading in at
   /// rest. Each fade this long.
-  static let handoffMilliseconds = 200.0
+  static let handoffMilliseconds = 300.0
 
   /// Its curve, CSS's `ease-in-out`: a cubic Bézier from (0, 0) to (1, 1)
   /// by these two control points.

@@ -852,6 +852,20 @@
         selector("&[data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-markup") {
           CSS.Property("opacity", "var(--artifact-overlay-progress, 0)")
         }
+        // A code pane's lines and its diff's rows laid out only as they come
+        // into view: a Hamlet header's 688 lines and 1,209 diff rows took a
+        // 180 ms frame to show, 20 ms so (dev, 2026-10-26). Unwrapped alone,
+        // every line one line high, so a line not laid out yet stands
+        // exactly where it will (the diff's scroll sync reads them).
+        selector(
+          "&:not([data-reflow='true']) .artifact-document-header .code-line",
+          "&:not([data-reflow='true']) .artifact-markup .code-line",
+          "&:not([data-reflow='true']) .artifact-under-header .diff-row",
+          "&:not([data-reflow='true']) .artifact-under-markup .diff-row"
+        ) {
+          CSS.Property("content-visibility", "auto")
+          CSS.Property("contain-intrinsic-block-size", "auto 1lh")
+        }
         // Handed off (`overlayAside`): first the edition fades out where it
         // lies on the scan (`data-overlay-put-away="out"`), nothing moving;
         // then, the overlay off at once, the image and the pane that took
@@ -862,17 +876,23 @@
           CSS.Property("transition", "opacity " + OverlayMotion.handoffTiming)
         }
         // The overlay off at once (`data-overlay-handoff="leaving"`): the
-        // panes where they rest, never sliding; the image fading in from
-        // there on.
+        // panes where they rest, never sliding. Until the frame that lays
+        // the incoming pane out has been drawn (`"pending"`; a header's
+        // hundreds of lines take a long frame) the image and that pane wait
+        // unseen; then (`"true"`) they fade in together—never a fade spent
+        // while nothing was drawn, so seen as a flash (user, 2026-10-26).
         selector("&[data-overlay-handoff] .artifact-markup-frame", "&[data-overlay-handoff] .artifact-object") {
           CSS.Property("transition", "none").important()
         }
-        selector("&[data-overlay-handoff] .artifact-object") {
-          animation("artifact-handoff-in " + OverlayMotion.handoffTiming)
-        }
-        // Off (`"true"`): the pane that took the edition's place fading in.
         selector(
-          "&[data-overlay-handoff='true'] .artifact-markup", "&[data-overlay-handoff='true'] .artifact-document-header"
+          "&[data-overlay-handoff='leaving'] .artifact-object", "&[data-overlay-handoff='pending'] .artifact-object",
+          "&[data-overlay-handoff='pending'] .artifact-markup", "&[data-overlay-handoff='pending'] .artifact-document-header"
+        ) {
+          CSS.Property("opacity", "0").important()
+        }
+        selector(
+          "&[data-overlay-handoff='true'] .artifact-object", "&[data-overlay-handoff='true'] .artifact-markup",
+          "&[data-overlay-handoff='true'] .artifact-document-header"
         ) {
           animation("artifact-handoff-in " + OverlayMotion.handoffTiming)
         }
@@ -2268,8 +2288,16 @@
           // The fade done with (`fadeOverlay`: none once off has run); the
           // pane that put it away fading in where it lands.
           self.fadeOverlay()
+          // The incoming pane laid out unseen, then faded in once that
+          // frame is drawn: two frames on.
           if self.overlayPutAway, self.root.hasAttribute(data("overlay-handoff")) {
-            self.root.setAttribute(data("overlay-handoff"), "true")
+            self.root.setAttribute(data("overlay-handoff"), "pending")
+            _ = window.requestAnimationFrame {
+              _ = window.requestAnimationFrame {
+                guard stringEquals(self.root.getAttribute(data("overlay-handoff")) ?? "", "pending") else { return }
+                self.root.setAttribute(data("overlay-handoff"), "true")
+              }
+            }
           }
           // The XML that put it away shown now it has landed.
           if self.rawVisible { self.showLayers() }
