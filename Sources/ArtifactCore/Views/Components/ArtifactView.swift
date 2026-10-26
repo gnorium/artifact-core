@@ -603,6 +603,10 @@
           maxHeight(perc(40))
           overflow(.auto)
         }
+        // A diff under its pane on the page's own ground, as the pane above
+        // it is: never the scan or the edition showing through it while the
+        // overlay leaves (user, 2026-10-27).
+        selector("& .artifact-under-markup", "& .artifact-under-header") { backgroundColor(backgroundColorBase) }
         // The document's header, under its switch (user, 2026-10-21): code,
         // read-only on the code's own gray, the whole column while it is on,
         // a zone that scrolls both ways. It and the XML switch share the
@@ -885,10 +889,29 @@
         selector("&[data-overlay-put-away='true'][data-overlay-fading='true'][data-raw='true'] .artifact-under-markup") {
           CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
         }
+        // A code pane's numbered lines (the XML's, the header's) each hold
+        // their number inside their own box, the gutter their own padding
+        // and the code view's inset reached by their margin: a line laid
+        // out as it comes into view paints within its box alone (below),
+        // and a number drawn outside it, in the code's padding, was clipped
+        // away (user, 2026-10-27); so too a line's ground runs the whole row.
+        selector("& .artifact-markup .code-view[data-lined='true'] .code-code", "& .artifact-document-header .code-view[data-lined='true'] .code-code", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-code") {
+          CSS.Property("padding-inline-start", "0")
+        }
+        selector("& .artifact-markup .code-view[data-lined='true'] .code-line", "& .artifact-document-header .code-view[data-lined='true'] .code-line", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line") {
+          CSS.Property("margin-inline", "calc(-1 * \(spacing16.value))")
+          CSS.Property("padding-inline-start", "calc(\(spacing16.value) + var(--gutter) + 2 * \(spacing4.value))")
+          CSS.Property("padding-inline-end", spacing16.value)
+        }
+        selector("& .artifact-markup .code-view[data-lined='true'] .code-line::before", "& .artifact-document-header .code-view[data-lined='true'] .code-line::before", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line::before") {
+          CSS.Property("inset-inline-start", spacing16.value)
+        }
         // A code line whose box the image shows as the pointer is on it
-        // (`markRegionLine`): its ground a selected line's, as the editor
-        // marks the line its caret is on.
+        // (`markRegionLine`): its ground a selected line's, gutter to edge,
+        // its number in the text's color, as the editor marks the line its
+        // caret is on.
         descendant(".code-line[data-region-hover='true']") { backgroundColor(backgroundColorCurrentLine) }
+        descendant(".code-line[data-region-hover='true']::before") { color(colorBase) }
         // A code pane's lines and its diff's rows laid out only as they come
         // into view: a Hamlet header's 688 lines and 1,209 diff rows took a
         // 180 ms frame to show, 20 ms so (dev, 2026-10-26). Unwrapped alone,
@@ -2344,7 +2367,9 @@
               y: (Double(pane.clientTop) + Double(pane.clientHeight) / 2 - room.y - view.y) / focus.zoom
             )
             self.overlayFocus = (middle.x, middle.y, focus.zoom)
-            if !self.overlayPutAway, let spot = self.scanSpot(at: middle, zoom: focus.zoom) { self.scanOwn = spot }
+            if !self.overlayPutAway, !self.overlayLeavesToFit, let spot = self.scanSpot(at: middle, zoom: focus.zoom) {
+              self.scanOwn = spot
+            }
           }
           // The image its own again, at the spot it came back to.
           self.shownCanvas?.endBlend()
@@ -2390,10 +2415,11 @@
       overlayFocus = (x, y, place.zoom)
       // From its fit, to the text pane's fit (`placeOverlay` follows it).
       setZoom(overlayLeavesToFit ? nil : place.zoom, atFit: overlayLeavesToFit)
-      // A pane taking the edition's place (`overlayAside`): the image back
-      // to its own view from before the overlay, never the text's zoom it
-      // kept for the text it no longer shows (user, 2026-10-27).
-      if overlayPutAway, let before = scanBeforeOverlay {
+      // A pane taking the edition's place (`overlayAside`), or an overlay
+      // never zoomed (its text going back to its own fit): the image back to
+      // its own view from before the overlay, never the overlay's zoom it
+      // kept for a reading done there (user, 2026-10-27).
+      if overlayPutAway || overlayLeavesToFit, let before = scanBeforeOverlay {
         scanOwn = before
       } else if let spot = scanSpot(at: (x, y), zoom: place.zoom) {
         scanOwn = spot
