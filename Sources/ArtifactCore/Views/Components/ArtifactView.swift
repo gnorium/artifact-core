@@ -62,6 +62,10 @@
     /// them while the switch is on, and the images take the whole width
     /// while it is off.
     let documentHeader: String?
+    /// What an object or edit did to the document's header (`added`,
+    /// `changed`, `removed`), drawn as a ring on the Header switch and on
+    /// the header pane; nil where unchanged.
+    let headerRing: String?
     /// Switches the host adds to the footer, after the code switch (the
     /// testament's English switch, user 2026-10-18): the host draws them
     /// only where they apply. A switch that shows a layer of the markup
@@ -98,6 +102,10 @@
     /// stacked; one layout whether the reader is on the page or
     /// fullscreen, which only enlarges it. Empty, nothing is drawn.
     let underMarkup: [DOM.Node]
+    /// What the host shows under the header pane, in its column, while the
+    /// Header switch is on (the header's diff: user, 2026-10-26). Empty,
+    /// nothing is drawn.
+    let underHeader: [DOM.Node]
     /// How many pages the markup has, when the host knows: the pager
     /// counts them from the start, before a manifest is read (which may
     /// count its canvases instead). Nil: unknown until the reader counts
@@ -120,6 +128,7 @@
       rawSwitch: Bool = false,
       rawSwitchInfo: String? = nil,
       header: String? = nil,
+      headerRing: String? = nil,
       canvasSwitch: Bool = false,
       pageCount: Int? = nil,
       windowed: Bool = false,
@@ -128,7 +137,8 @@
       @HTMLBuilder footerSwitches: () -> [DOM.Node] = { [] },
       @HTMLBuilder actions: () -> [DOM.Node] = { [] },
       @HTMLBuilder bar: () -> [DOM.Node] = { [] },
-      @HTMLBuilder underMarkup: () -> [DOM.Node] = { [] }
+      @HTMLBuilder underMarkup: () -> [DOM.Node] = { [] },
+      @HTMLBuilder underHeader: () -> [DOM.Node] = { [] }
     ) {
       self.manifestURL = manifestURL
       self.style = style
@@ -137,6 +147,7 @@
       self.rawSwitch = rawSwitch
       self.rawSwitchInfo = rawSwitchInfo
       self.documentHeader = header
+      self.headerRing = headerRing
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.windowed = windowed
@@ -146,12 +157,20 @@
       self.actions = actions()
       self.bar = bar()
       self.underMarkup = underMarkup()
+      self.underHeader = underHeader()
     }
 
     /// Whether the header shows the page-images switch: only when there are
     /// page images to show. Drawn hidden: the reader shows it once the
     /// manifest confirms an image (`data-canvas-confirmed`).
     private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty && !markup.isEmpty }
+
+    /// Whether the viewer offers the Header switch and draws the header
+    /// pane: when the document has a header now, or had one before that an
+    /// object or edit removed (`headerRing`, `underHeader`; user, 2026-10-26).
+    private var hasHeader: Bool {
+      documentHeader != nil || !(headerRing ?? "").isEmpty || !underHeader.isEmpty
+    }
 
     /// The header carries no title (user, 2026-10-09): on a biblio page
     /// the work is already the page's heading or its node's description,
@@ -162,9 +181,9 @@
     /// end.
 
     public func build() -> DOM.Node {
-      // A canvas the reader draws itself, for a canvas the slot lacks, is
-      // styled by the canvas's own sheet, which the page must link.
-      _ = CanvasView(serviceID: "").build()
+      // An image the reader draws itself, for an image the slot lacks, is
+      // styled by the image's own sheet, which the page must link.
+      _ = ImageView(serviceID: "").build()
 
       return div {
         // ── Header ──────────────────────────────────────────────────────────
@@ -231,19 +250,24 @@
           // The markup of the object, beside the object. It is a sibling of
           // the object rather than a block under the viewer so that the two
           // page together and fullscreen carries both.
-          if !markup.isEmpty || documentHeader != nil {
+          if !markup.isEmpty || hasHeader {
             div {
               // The document's header, as code alone, under its switch
               // (user, 2026-10-21): a pane of its own that takes the column
               // while it shows, the markup's pane (its zoom, its scroll)
               // put away beside it, not redrawn.
-              if let documentHeader {
+              if hasHeader {
                 div {
-                  CodeView(documentHeader, showLineNumbers: false, lined: true)
+                  CodeView(documentHeader ?? "", showLineNumbers: false, lined: true)
                 }
                 .class("artifact-document-header")
                 .role("region")
                 .ariaLabel("Header")
+                .data("ring", headerRing ?? "")
+              }
+              if !underHeader.isEmpty {
+                div { underHeader }
+                  .class("artifact-under-header")
               }
               if !markup.isEmpty {
                 // The pane in a box of its own, which a host's ring around
@@ -255,10 +279,10 @@
                     .class("artifact-markup")
                 }
                 .class("artifact-markup-box")
-                if !underMarkup.isEmpty {
-                  div { underMarkup }
-                    .class("artifact-under-markup")
-                }
+              }
+              if !underMarkup.isEmpty {
+                div { underMarkup }
+                  .class("artifact-under-markup")
               }
             }
             .class("artifact-markup-frame")
@@ -281,6 +305,7 @@
               canvas
             }
             .class("artifact-object")
+            .data("sheet-host", true)
           }
         }
         .id("artifact-viewer-container")
@@ -300,9 +325,15 @@
             }
             // The document's header, after the code switch where there is
             // one, the two exclusive (user, 2026-10-21): offered wherever
-            // there is a header, with no markup too.
-            if documentHeader != nil {
-              HeaderToggleButtonView(class: "artifact-header-toggle")
+            // there is a header (or one an object or edit removed: user,
+            // 2026-10-26), with no markup too.
+            if hasHeader {
+              let toggle = HeaderToggleButtonView(class: "artifact-header-toggle").build()
+              if let headerRing, !headerRing.isEmpty, let element = toggle as? DOM.Element {
+                element.addingAttribute("data-ring", headerRing)
+              } else {
+                toggle
+              }
             }
             if rawSwitch, !markup.isEmpty {
               // The English layer of a non-English page, the viewer's own.
@@ -577,7 +608,27 @@
         // column as radio toggles do: the header on puts the markup's pane
         // (and what stands under it, a page's diff) away, never stacked
         // with the page's code.
-        descendant(".artifact-document-header") { display(.none) }
+        descendant(".artifact-document-header") {
+          display(.none)
+          border(borderWidthBase, .solid, borderColorTransparent)
+        }
+        descendant(".artifact-under-header") {
+          display(.none)
+        }
+        for (state, color) in [("added", borderColorGreen), ("removed", borderColorRed), ("changed", borderColorOrange)] {
+          selector("& .artifact-document-header[data-ring='\(state)']") {
+            border(borderWidthBase, .solid, color)
+            outline(borderWidthBase, .solid, color)
+            CSS.Property("outline-offset", "calc(-2 * \(borderWidthBase.value))")
+          }
+          // The switch wears the ring only while the header is put away;
+          // shown, the pane wears it (user, 2026-10-26).
+          selector("&:not([data-header='true']) .artifact-header-toggle[data-ring='\(state)'] > .button-view") {
+            borderColor(color).important()
+            outline(borderWidthBase, .solid, color).important()
+            outlineOffset(px(0)).important()
+          }
+        }
         selector("&[data-header='true'] .artifact-document-header") {
           display(.flex)
           flexDirection(.column)
@@ -586,6 +637,21 @@
           minHeight(0)
           overflow(.auto)
           backgroundColor(backgroundColorNeutralSubtle)
+        }
+        // A diff under the header pane splits the column evenly with it, as a
+        // page's diff splits the column with the markup pane (user, 2026-10-26).
+        selector("&[data-header='true']:has(.artifact-under-header) .artifact-document-header") {
+          flex("1 1 0")
+        }
+        selector(
+          "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-under-header"
+        ) {
+          display(.flex)
+          flexDirection(.column)
+          flex("1 1 0")
+          minWidth(0)
+          minHeight(0)
+          overflow(.auto)
         }
         selector(
           "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-markup-box",
@@ -776,7 +842,7 @@
         selector("&[data-overlay-fading='true'] .artifact-object") {
           CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
         }
-        selector("&[data-overlay-active='true'] .canvas-viewport") { CSS.Property("touch-action", "none") }
+        selector("&[data-overlay-active='true'] .image-viewport") { CSS.Property("touch-action", "none") }
         selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled") {
           backgroundColor(backgroundColorBlue).important()
           borderColor(backgroundColorBlue).important()
@@ -1094,8 +1160,8 @@
     private var markupPanes: [DOM.Element] { root.querySelectorAll(".artifact-markup [data-service-id]") }
     /// The canvas slot, when the viewer has one, and the canvases read so far.
     private var object: DOM.Element?
-    private var canvases: [CanvasReader] = []
-    private var shownCanvas: CanvasReader?
+    private var canvases: [ImageView] = []
+    private var shownCanvas: ImageView?
     /// The canvases a host lets the reader draw a crop box on
     /// (`artifact-crop-mode`), by image service.
     private var cropServices: [String] = []
@@ -1219,6 +1285,9 @@
         }
         self.showLayers()
         self.showMarkup(for: self.canvasIndex)
+        if self.syncs, let region = self.shownCanvas?.region {
+          self.applyMatchText(region)
+        }
       }
       if stringIsEmpty(manifestURL) {
         pageMarkup()
@@ -1839,6 +1908,7 @@
           }
         }
       }
+      applyZoom(about: nil)
       scheduleZoom()
     }
 
@@ -1971,6 +2041,10 @@
         // came on at was the last page's.
         scanOwn = nil
         setOverlay(false)
+      } else if overlayOn {
+        overlayView = nil
+        overlayZoomed = false
+        setOverlayRegistered(overlayZone() != nil)
       }
       reflectCanvasShown()
     }
@@ -2458,34 +2532,21 @@
 
     /// The overlay's framing of the shown layer (`OverlayFraming`) in the
     /// pane's room as it is now (`overlayRoom`): the edition's whole page
-    /// (`natural` its size unzoomed) and as far as the scan's measured
-    /// structure, laid by the registration, reaches beyond it, so all of it
-    /// shows (user, 2026-10-14); the reader's zoom held between
-    /// its fit and the larger of the text's and the scan's actual sizes.
+    /// (`natural` its size unzoomed), on which the scan's text block is laid,
+    /// never the scan beyond it (user, 2026-10-26); the reader's zoom held
+    /// between its fit and the larger of the text's and the scan's actual
+    /// sizes.
     private func overlayFraming(
       layer: DOM.Element, natural: (width: Double, height: Double), in room: (width: Double, height: Double)
     ) -> OverlayFraming {
-      var content = (left: 0.0, top: 0.0, right: natural.width, bottom: natural.height)
+      let content = (left: 0.0, top: 0.0, right: natural.width, bottom: natural.height)
       var actual = ViewerZoom.actualSize
       if let zone = overlayZone(), let size = shownImageSize, let measured = textBlock(in: layer, drawnAt: 1) {
         let box = laid(measured, zone: zone, size: size)
-        let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
         let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
-        // The scan's measured structure laid with the page (its blocks'
-        // corners), so all of it shows; never the scan's paper.
-        if let laid = Homography(from: corners, to: target), let page = layer.closest(".tei-page") {
-          for zone in scanLayout(of: page) where zone.kind == 0 {
-            for corner in 0..<4 {
-              let point = laid.apply(
-                x: zone.points[2 * corner] / Self.zoneExtent * size.width,
-                y: zone.points[2 * corner + 1] / Self.zoneExtent * size.height)
-              content = (
-                min(content.left, point.x), min(content.top, point.y), max(content.right, point.x),
-                max(content.bottom, point.y)
-              )
-            }
-          }
-        }
+        // The overlay frames the edition's page alone: the scan's text block
+        // is laid on its text block, so the scan beyond it—its margins and
+        // what stands in them—frames nothing (user, 2026-10-26).
         let zoneSpan = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
         if box[2] > box[0] { actual = max(actual, zoneSpan / (box[2] - box[0])) }
       }
@@ -2652,11 +2713,21 @@
         ".artifact-markup .tei-page[data-active='true'] [data-layer='" + shownLayerName + "']")
     }
 
+    private var lastPaneSize = (width: 0.0, height: 0.0)
+
     private func setupZoom() {
       guard let pane = markupPane else { return }
       // The fit follows the pane's size and the page's content: a page
       // fetched in, a page turned, the pane resized.
-      pane.observeResize { [self] _, _ in self.scheduleZoom() }
+      pane.observeResize { [self] _, _ in
+        if let box = self.markupPane?.getBoundingClientRect() {
+          if abs(box.width - self.lastPaneSize.width) < 0.5 && abs(box.height - self.lastPaneSize.height) < 0.5 {
+            return
+          }
+          self.lastPaneSize = (box.width, box.height)
+        }
+        self.scheduleZoom()
+      }
       pane.observeMutations(childList: true, subtree: true) { [self] in self.scheduleZoom() }
       _ = pane.addEventListener("wheel", { [self] e in self.wheel(e) }, capture: false, passive: false)
       // A drag from the text selects it, as text is selected; a drag from
@@ -2723,6 +2794,7 @@
           self.zoom(to: self.gestureStartZoom * e.webKitGestureScale, about: (e.clientX - box.x, e.clientY - box.y))
         }, capture: false, passive: false)
       _ = pane.addEventListener("gestureend", { [self] e in if !self.rawVisible { e.preventDefault() } }, capture: false, passive: false)
+      applyZoom(about: nil)
       scheduleZoom()
     }
 
@@ -3068,7 +3140,11 @@
     /// region's own point, never from the scroll before, so no rounding
     /// adds up.
     private func applyMatchText(_ region: ViewerZoom.Region) {
-      guard syncs, let pane = markupPane, let layer = shownLayer() else { return }
+      guard syncs else { return }
+      guard let pane = markupPane, let layer = shownLayer() else {
+        if region.scale <= 1.0001 { setZoom(nil, atFit: true) }
+        return
+      }
       let zoom = max(lastFit, min(maxZoom(fit: lastFit), lastFit * region.scale))
       setZoom(zoom, atFit: zoom <= lastFit)
       applyZoom(about: nil, matching: true)
@@ -3115,13 +3191,11 @@
       }
     }
 
-    /// The reading fit, never above the text's actual size: a page no wider
-    /// than the pane is read at its size, never enlarged; a wider one fits
-    /// the pane's width. A page taller than the pane scrolls, never shrunk
-    /// to its height (user, 2026-10-25): the edition is regularized, read at
-    /// its own size, not drawn whole as its scan is.
-    private func readingFit(width: Double, paneWidth: Double) -> Double {
-      paneWidth / max(paneWidth, width)
+    /// The contain fit, never above the text's actual size: a page smaller
+    /// than the pane is read at its size, its box filling the pane, never
+    /// enlarged or shown small in it.
+    private func containFit(width: Double, height: Double, paneWidth: Double, paneHeight: Double) -> Double {
+      min(paneWidth / max(paneWidth, width), paneHeight / max(paneHeight, height))
     }
 
     /// The fit of the rendered text of the page `codeLayer` is on: measured
@@ -3146,7 +3220,7 @@
       if reflowOn {
         fit = reflowedFit(rendered, paneHeight: paneHeight)
       } else if let box = measure(rendered, at: ViewerZoom.actualSize), box.width > 0, box.height > 0 {
-        fit = readingFit(width: box.width, paneWidth: paneWidth)
+        fit = containFit(width: box.width, height: box.height, paneWidth: paneWidth, paneHeight: paneHeight)
       }
       rendered.style.display(.none)
       if stringIsEmpty(transform) {
@@ -3215,8 +3289,10 @@
       let style = window.getComputedStyle(pane)
       let borderX = pixels(style.getPropertyValue("border-left-width")) + pixels(style.getPropertyValue("border-right-width"))
       let borderY = pixels(style.getPropertyValue("border-top-width")) + pixels(style.getPropertyValue("border-bottom-width"))
-      let paneWidth = paneBox.width - borderX - 2 * insetX
-      let paneHeight = paneBox.height - borderY - 2 * insetY
+      let innerWidth = pane.clientWidth > 0 ? min(paneBox.width - borderX, Double(pane.clientWidth)) : paneBox.width - borderX
+      let innerHeight = pane.clientHeight > 0 ? min(paneBox.height - borderY, Double(pane.clientHeight)) : paneBox.height - borderY
+      let paneWidth = innerWidth - 2 * insetX
+      let paneHeight = innerHeight - 2 * insetY
       guard paneWidth > 0, paneHeight > 0 else { return }
       let frame: DOM.Element
       if existing {
@@ -3250,7 +3326,7 @@
       layer.style.setProperty("transform-origin", "top left")
       layer.style.setProperty("transform", "none")
       guard let natural = layer.getBoundingClientRect(), natural.width > 0, natural.height > 0 else { return }
-      let fit = readingFit(width: natural.width, paneWidth: paneWidth)
+      let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
       let stored = storedZoom()
       var resting = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
       // Within a pixel of its fit the page is at its fit: a zoom a hair
@@ -3381,9 +3457,19 @@
         _ = layer.style.removeProperty("min-width")
         _ = layer.style.removeProperty("min-height")
         _ = layer.style.removeProperty("margin-inline-start")
+        if let page = layer.closest(".tei-page") {
+          _ = page.style.removeProperty("min-width")
+          _ = page.style.removeProperty("min-height")
+        }
+      }
+      if reflowOn {
+        pane.style.setProperty("overflow", "hidden")
       }
       guard let box = layer.getBoundingClientRect(), box.width > 0, box.height > 0
-      else { return }
+      else {
+        if reflowOn { _ = pane.style.removeProperty("overflow") }
+        return
+      }
       // What stands around the layer in the pane (the view's 1px inset,
       // which keeps a ring clear), on both sides alike: where the layer
       // starts, less its centering margin.
@@ -3395,9 +3481,14 @@
       let style = window.getComputedStyle(pane)
       let borderX = pixels(style.getPropertyValue("border-left-width")) + pixels(style.getPropertyValue("border-right-width"))
       let borderY = pixels(style.getPropertyValue("border-top-width")) + pixels(style.getPropertyValue("border-bottom-width"))
-      let paneWidth = paneBox.width - borderX - 2 * insetX
-      let paneHeight = paneBox.height - borderY - 2 * insetY
-      guard paneWidth > 0, paneHeight > 0 else { return }
+      let innerWidth = pane.clientWidth > 0 ? min(paneBox.width - borderX, Double(pane.clientWidth)) : paneBox.width - borderX
+      let innerHeight = pane.clientHeight > 0 ? min(paneBox.height - borderY, Double(pane.clientHeight)) : paneBox.height - borderY
+      let paneWidth = innerWidth - 2 * insetX
+      let paneHeight = innerHeight - 2 * insetY
+      guard paneWidth > 0, paneHeight > 0 else {
+        if reflowOn { _ = pane.style.removeProperty("overflow") }
+        return
+      }
       // The whole page's fit, never above its actual size: its lines as
       // drawn, or, reflowed, its height as it wraps.
       let fit: Double
@@ -3405,13 +3496,19 @@
         // The code zooms out no further than its page's rendered text can
         // (user, 2026-10-12), for the two to keep one scale: past that its
         // long lines scroll sideways.
-        guard let rendered = renderedFit(of: layer, paneWidth: paneWidth, paneHeight: paneHeight) else { return }
+        guard let rendered = renderedFit(of: layer, paneWidth: paneWidth, paneHeight: paneHeight) else {
+          if reflowOn { _ = pane.style.removeProperty("overflow") }
+          return
+        }
         fit = rendered
       } else if reflowOn {
-        guard let reflowed = reflowedFit(layer, paneHeight: paneHeight) else { return }
+        guard let reflowed = reflowedFit(layer, paneHeight: paneHeight) else {
+          _ = pane.style.removeProperty("overflow")
+          return
+        }
         fit = reflowed
       } else {
-        fit = readingFit(width: box.width / previous, paneWidth: paneWidth)
+        fit = containFit(width: box.width / previous, height: box.height / previous, paneWidth: paneWidth, paneHeight: paneHeight)
       }
       let stored = storedZoom()
       // The reader's zoom, or at the fit, or, until the reader zooms, the
@@ -3438,6 +3535,7 @@
       let atFit = chosen && zoom <= fit
       layer.style.setProperty("zoom", doubleToString(zoom))
       layer.setAttribute(data("zoom"), doubleToString(zoom))
+      if reflowOn { _ = pane.style.removeProperty("overflow") }
       // The page at least the pane's size, top-aligned: never a gap above
       // it to center.
       // The pane's room as it is, its scrollbars taken out, so the page
@@ -3454,7 +3552,7 @@
         // the pane's size in the code's own, zoomed, units.
         codeView.style.setProperty("min-width", doubleToString(roomWidth / zoom) + "px")
         codeView.style.setProperty("min-height", doubleToString(roomHeight / zoom) + "px")
-      } else {
+      } else if !reflowOn {
         // The rendered page centered across the pane where narrower, as the
         // image is, for the two to be laid side by side; its lines keep
         // their own alignment, and wider, it scrolls with no gap. A zoomed
@@ -3702,22 +3800,22 @@
 
     /// The reader of a canvas, made the first time it is shown: over the
     /// slot's canvas for that image service, else one drawn for it.
-    private func canvasReader(ofService service: String) -> CanvasReader {
+    private func canvasReader(ofService service: String) -> ImageView {
       for canvas in canvases where stringEquals(canvas.serviceID, service) {
         return canvas
       }
       var element: DOM.Element?
-      for candidate in object?.querySelectorAll(".canvas-view") ?? []
+      for candidate in object?.querySelectorAll(".image-view") ?? []
       where stringEquals(candidate.dataset["service-id"] ?? "", service) {
         element = candidate
         break
       }
       if element == nil {
-        let drawn = CanvasReader.make(serviceID: service)
+        let drawn = ImageView.make(serviceID: service)
         object?.appendChild(drawn)
         element = drawn
       }
-      let canvas = CanvasReader(root: element ?? CanvasReader.make(serviceID: service))
+      let canvas = ImageView(root: element ?? ImageView.make(serviceID: service))
       let viewer = root
       canvas.onCrop = { detail in
         viewer.dispatchEvent(CustomEvent(type: "artifact-crop-change", detail: detail))
@@ -3861,7 +3959,7 @@
         // form may hold a viewer among its fields.
         if let _ = e.target?.closest("input, textarea, select, [contenteditable='true']") { return }
         // A focused pane's arrows pan it, as its own keys do.
-        if let target = e.target, let pane = target.closest(".artifact-markup, .canvas-viewport"), pane.id == target.id {
+        if let target = e.target, let pane = target.closest(".artifact-markup, .image-viewport"), pane.id == target.id {
           return
         }
         if stringEquals(e.key, "ArrowLeft") { navigate(-1) }
@@ -3921,6 +4019,7 @@
       // screen and wasteful for the nine hundred behind it.
       root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
       reflectPageMarkup()
+      applyZoom(about: nil)
       scheduleZoom()
     }
 
@@ -4327,6 +4426,10 @@
       /// word the print spaces apart is one box (user, 2026-10-18); words
       /// whose space the print closes share one.
       let words: [(parts: [DOM.Element], boxes: [[Double]])]
+      /// Each encoded zone on the image (copy evidence, notes, figures): its
+      /// index in `TEIRenderer.elements(of:)` and its box on the scan (left,
+      /// top, right, bottom in the 0–1000 space).
+      let elements: [(index: Int, box: [Double])]
     }
 
     private var wordLinks: WordLinks?
@@ -4360,7 +4463,20 @@
           words.append(([element], word.boxes))
         }
       }
-      let made = WordLinks(key: key, words: words)
+      var elements: [(index: Int, box: [Double])] = []
+      for entry in stringSplit(page.getAttribute(data("element-zones")) ?? "", separator: ";") {
+        let parts = stringSplit(entry, separator: " ")
+        guard parts.count == 5,
+          let index = parseInt(parts[0]),
+          let x = parseDouble(parts[1]),
+          let y = parseDouble(parts[2]),
+          let w = parseDouble(parts[3]),
+          let h = parseDouble(parts[4]),
+          w > 0, h > 0
+        else { continue }
+        elements.append((index, [x, y, x + w, y + h]))
+      }
+      let made = WordLinks(key: key, words: words, elements: elements)
       wordLinks = made
       return made
     }
@@ -4391,32 +4507,60 @@
         self.pointScan(x: event.clientX, y: event.clientY)
       }
       // A click on a word's band opens the word's gloss, as a click on the
-      // word in the text does (user, 2026-10-18).
+      // word in the text does (user, 2026-10-18); a click on an encoded zone
+      // on the image opens its gloss on the image side.
       _ = object.addEventListener(.click) { [self] event in self.openScanWord(x: event.clientX, y: event.clientY) }
-      _ = object.addEventListener(.mouseleave) { [self] _ in self.markEdition([]) }
+      _ = object.addEventListener(.mouseleave) { [self] _ in
+        self.markEdition([])
+        self.shownCanvas?.clearElement()
+        self.shownCanvas?.setClickable(false)
+      }
     }
 
     /// Where the press on the scan began: a click that ends elsewhere was a
     /// pan, as the text pane's (`panMoved`).
     private var scanPress: (x: Double, y: Double)?
 
+    /// The smallest encoded element zone containing `point` (0–1000).
+    private func elementAt(_ point: (x: Double, y: Double), in links: WordLinks) -> (index: Int, box: [Double])? {
+      var best: (index: Int, box: [Double], area: Double)?
+      for element in links.elements {
+        let box = element.box
+        guard point.x >= box[0], point.x <= box[2], point.y >= box[1], point.y <= box[3] else { continue }
+        let area = (box[2] - box[0]) * (box[3] - box[1])
+        if best.map({ area < $0.area }) ?? true {
+          best = (element.index, box, area)
+        }
+      }
+      return best.map { ($0.index, $0.box) }
+    }
+
     /// The edition's word of the scan's word at a point of the window, as a
     /// click on it in the text: the pane brought to it the least it takes,
     /// then the word itself clicked, so whatever a click on a word does (its
     /// gloss opens, in the pane it is in) is done, never a copy of it. A
-    /// press that moved panned the image: nothing opens.
+    /// click on a copy-evidence / encoded zone on the image opens its gloss
+    /// sheet on the image side. A press that moved panned the image: nothing
+    /// opens.
     private func openScanWord(x: Double, y: Double) {
       guard let press = scanPress, press.x == x, press.y == y else { return }
       scanPress = nil
       guard corresponds, let canvas = shownCanvas, let point = canvas.spacePoint(clientX: x, clientY: y),
-        let links = currentWordLinks(),
-        let word = links.words.first(where: { linked in
-          linked.boxes.contains { point.x >= $0[0] && point.x <= $0[2] && point.y >= $0[1] && point.y <= $0[3] }
-        }),
-        let part = word.parts.first
+        let links = currentWordLinks()
       else { return }
-      markEdition(word.parts)
-      part.click()
+      if let word = links.words.first(where: { linked in
+        linked.boxes.contains { point.x >= $0[0] && point.x <= $0[2] && point.y >= $0[1] && point.y <= $0[3] }
+      }), let part = word.parts.first {
+        markEdition(word.parts)
+        part.click()
+        return
+      }
+      if let element = elementAt(point, in: links), let object {
+        object.dispatchEvent(
+          CustomEvent(
+            type: "artifact-image-element",
+            detail: stringJoin([canvas.serviceID, intToString(element.index)], separator: " ")))
+      }
     }
 
     /// The scan's zones of an edition word, banded, and its other parts
@@ -4436,23 +4580,36 @@
 
     /// The edition's words of the scan's word under a point of the window
     /// (each word whose zones hold it: words whose space the print closes
-    /// share one), marked, and their zones banded; none clears them.
+    /// share one), marked, and their zones banded; or an encoded zone on the
+    /// image outlined in neutral borderColorBase; none clears them.
     private func pointScan(x: Double, y: Double) {
       guard corresponds, let canvas = shownCanvas, let point = canvas.spacePoint(clientX: x, clientY: y),
         let links = currentWordLinks()
       else {
         markEdition([])
+        shownCanvas?.clearElement()
+        shownCanvas?.setClickable(false)
         return
       }
       let found = links.words.filter { word in
         word.boxes.contains { point.x >= $0[0] && point.x <= $0[2] && point.y >= $0[1] && point.y <= $0[3] }
       }
-      guard !found.isEmpty else {
-        markEdition([])
+      if !found.isEmpty {
+        canvas.clearElement()
+        canvas.setClickable(true)
+        markEdition(found.flatMap { $0.parts })
+        canvas.showWord(found.flatMap { $0.boxes })
         return
       }
-      markEdition(found.flatMap { $0.parts })
-      canvas.showWord(found.flatMap { $0.boxes })
+      markEdition([])
+      if let element = elementAt(point, in: links) {
+        let box = element.box
+        canvas.setClickable(true)
+        canvas.showElement(x: box[0], y: box[1], width: box[2] - box[0], height: box[3] - box[1])
+      } else {
+        canvas.clearElement()
+        canvas.setClickable(false)
+      }
     }
 
     /// Edition words marked as corresponding; the others unmarked.

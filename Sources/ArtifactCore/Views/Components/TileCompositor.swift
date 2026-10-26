@@ -157,15 +157,15 @@
     init(viewport: DOM.Element, spinner: DOM.Element) {
       spinnerEl = spinner
       let svgNamespace = "http://www.w3.org/2000/svg"
-      // The viewport's own size, user units its CSS pixels (`CanvasView`'s
+      // The viewport's own size, user units its CSS pixels (`ImageView`'s
       // styles); its one group carries the pan and zoom, and is clipped to
       // the image's rectangle in the group's own units: whatever is drawn
       // lies on the image, at any zoom, and a stale strip of an earlier
       // zoom has no place to be drawn beside it.
       let svg = document.createElementNS(svgNamespace, "svg")
-      svg.setAttribute(.class, "canvas-tile-surface")
+      svg.setAttribute(.class, "image-tile-surface")
       Self.surfaces += 1
-      let clipID = "canvas-tile-clip-\(intToString(Self.surfaces))"
+      let clipID = "image-tile-clip-\(intToString(Self.surfaces))"
       let defs = document.createElementNS(svgNamespace, "defs")
       let clip = document.createElementNS(svgNamespace, "clipPath")
       clip.setAttribute("id", clipID)
@@ -176,7 +176,7 @@
       defs.appendChild(clip)
       svg.appendChild(defs)
       let c = document.createElementNS(svgNamespace, "g")
-      c.setAttribute(.class, "canvas-tile-compositor")
+      c.setAttribute(.class, "image-tile-compositor")
       c.setAttribute("clip-path", "url(#\(clipID))")
       svg.appendChild(c)
       viewport.insertBefore(svg, spinner)
@@ -771,7 +771,7 @@
     /// The image element of a tile, in the group of its rank.
     private func makeElement(_ tile: Tile) -> DOM.Element {
       let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
-      img.setAttribute(.class, "canvas-tile-image")
+      img.setAttribute(.class, "image-tile-image")
       img.setAttribute(.draggable, "false")
       img.setAttribute("x", intToString(tile.x))
       img.setAttribute("y", intToString(tile.y))

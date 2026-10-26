@@ -2,6 +2,7 @@
   import CSSBuilder
   import DesignTokens
   import DOMBuilder
+  import Foundation
   import HTMLBuilder
   import WebComponents
   import WebTypes
@@ -10,15 +11,15 @@
   /// service it names is read in tiles, a low-resolution copy first and the
   /// detail the zoom asks for over it.
   ///
-  /// Drawn empty. Nothing is fetched until the canvas is shown
-  /// (`CanvasReader.show(width:height:)`), and a canvas put away lets go of
-  /// its tiles, so a viewer holding four hundred canvases reads one image at
-  /// a time. ``ArtifactView`` takes canvases in its canvas slot and shows the
-  /// one whose `data-service-id` is the canvas on screen.
-  public struct CanvasView: HTMLContent {
-    /// The image service the canvas reads, as a manifest names it.
+  /// Drawn empty. Nothing is fetched until the image is shown
+  /// (`ImageView.show(width:height:)`), and an image put away lets go of
+  /// its tiles, so a viewer holding four hundred images reads one image at
+  /// a time. ``ArtifactView`` takes images in its image slot and shows the
+  /// one whose `data-service-id` is the image on screen.
+  public struct ImageView: HTMLContent {
+    /// The image service the image reads, as a manifest names it.
     let serviceID: String
-    /// Whether it is the canvas shown before the viewer is hydrated.
+    /// Whether it is the image shown before the viewer is hydrated.
     let active: Bool
 
     public init(serviceID: String, active: Bool = false) {
@@ -33,13 +34,13 @@
           div {
             RotatingDottedRingSectorView(ariaHidden: true)
           }
-          .class("canvas-spinner")
+          .class("image-spinner")
           .data("visible", "false")
         }
-        .class("canvas-viewport")
+        .class("image-viewport")
         .data("dragging", "false")
       }
-      .class("canvas-view")
+      .class("image-view")
       .data("service-id", serviceID)
       .data("active", active ? "true" : "false")
       .style {
@@ -52,9 +53,56 @@
           position(.relative)
           overflow(.hidden)
         }
+        selector("&[data-aspect-ratio]") {
+          display(.block)
+          flex("none")
+          backgroundColor(backgroundColorBase)
+        }
+        selector("&[data-position='left']") { marginInlineEnd(.auto) }
+        selector("&[data-position='center']") { marginInline(.auto) }
+        selector("&[data-position='right']") { marginInlineStart(.auto) }
+        selector("&[data-aspect-ratio='16:9']") { paddingBottom(perc((9.0 / 16.0) * 100)) }
+        selector("&[data-aspect-ratio='3:2']") { paddingBottom(perc((2.0 / 3.0) * 100)) }
+        selector("&[data-aspect-ratio='4:3']") { paddingBottom(perc((3.0 / 4.0) * 100)) }
+        selector("&[data-aspect-ratio='1:1']") { paddingBottom(perc(100)) }
+        selector("&[data-aspect-ratio='3:4']") { paddingBottom(perc((4.0 / 3.0) * 100)) }
+        selector("&[data-aspect-ratio='2:3']") { paddingBottom(perc((3.0 / 2.0) * 100)) }
+        descendant(".image-image") {
+          display(.block)
+          width(perc(100))
+          height(perc(100))
+        }
+        descendant(".image-image[data-has-aspect-ratio='true']") {
+          position(.absolute)
+          insetBlockStart(0)
+          insetInlineStart(0)
+        }
+        descendant(".image-image[data-object-fit='cover']") { objectFit(.cover) }
+        descendant(".image-image[data-object-fit='contain']") { objectFit(.contain) }
+        descendant(".image-image[data-object-fit='fill']") { objectFit(.fill) }
+        descendant(".image-image[data-object-fit='none']") { objectFit(.none) }
+        descendant(".image-image[data-object-fit='scale-down']") { objectFit(.scaleDown) }
+        descendant(".image-image[data-object-position='center']") { objectPosition(.center) }
+        descendant(".image-image[data-object-position='top']") { objectPosition(.top) }
+        descendant(".image-image[data-object-position='bottom']") { objectPosition(.bottom) }
+        descendant(".image-image[data-object-position='left']") { objectPosition(.left) }
+        descendant(".image-image[data-object-position='right']") { objectPosition(.right) }
+        descendant(".image-placeholder") {
+          position(.absolute)
+          insetBlockStart(0)
+          insetInlineStart(0)
+          width(perc(100))
+          height(perc(100))
+          display(.flex)
+          alignItems(.center)
+          justifyContent(.center)
+          backgroundColor(backgroundColorBase)
+          color(colorPlaceholder)
+          fontSize(size20)
+        }
         // Explicit flex(1) and a zero minimum height make flex size it to
         // the room it has, not to the image.
-        descendant(".canvas-viewport") {
+        descendant(".image-viewport") {
           width(perc(100))
           flex(1)
           minHeight(0)
@@ -63,8 +111,9 @@
           cursor(.grab)
           userSelect(.none)
         }
-        descendant(".canvas-viewport[data-dragging='true']") { cursor(.grabbing) }
-        descendant(".canvas-spinner") {
+        descendant(".image-viewport[data-clickable='true']") { cursor(.pointer) }
+        descendant(".image-viewport[data-dragging='true']") { cursor(.grabbing) }
+        descendant(".image-spinner") {
           display(.none)
           position(.absolute)
           inset(0)
@@ -73,7 +122,7 @@
           justifyContent(.center)
           backgroundColor(backgroundColorBase)
         }
-        descendant(".canvas-spinner[data-visible='true']") { display(.flex) }
+        descendant(".image-spinner[data-visible='true']") { display(.flex) }
         // The tile layer is the viewport's own size, user units its CSS
         // pixels, and clips what it draws: the tiles' group carries the
         // pan and zoom and is itself clipped to the image's rectangle
@@ -81,59 +130,70 @@
         // not composited (no `will-change`): WebKit left strips of the
         // image's edge at earlier positions on a composited SVG group as
         // the zoom changed, and a layer of that size is its own cost.
-        descendant(".canvas-tile-surface") {
+        descendant(".image-tile-surface") {
           position(.absolute)
           inset(0)
           width(perc(100))
           height(perc(100))
           overflow(.hidden)
         }
-        descendant(".canvas-tile-compositor") {
+        descendant(".image-tile-compositor") {
           transformOrigin(px(0), px(0))
         }
         // Drawing a crop box: a crosshair, not a hand.
-        descendant(".canvas-viewport[data-cropping='true']") { cursor(.crosshair) }
+        descendant(".image-viewport[data-cropping='true']") { cursor(.crosshair) }
         // A crop box over the image, and the region the markup names where
         // the caret or the pointer is: the house ring (1px border and 1px
         // outline, one color), the image seen through it.
-        selector("& .canvas-crop", "& .canvas-region") {
+        selector("& .image-crop", "& .image-region") {
           position(.absolute)
           boxSizing(.borderBox)
           border(borderWidthBase, .solid, colorBlue)
           outline(borderWidthBase, .solid, colorBlue)
           pointerEvents(.none)
         }
-        descendant(".canvas-crop") { zIndex(5) }
+        descendant(".image-crop") { zIndex(5) }
+        // An encoded zone on the image (copy evidence, note, signature, figure)
+        // outlined in neutral borderColorBase when hovered on the image;
+        // nothing is drawn at rest.
+        descendant(".image-element") {
+          position(.absolute)
+          zIndex(4)
+          boxSizing(.borderBox)
+          border(borderWidthBase, .solid, borderColorBase)
+          outline(borderWidthBase, .solid, borderColorBase)
+          pointerEvents(.none)
+        }
         // The edition's word the reader points at, on the scan (user,
         // 2026-10-14): a translucent band, the scan seen through it in
         // either scheme. Yellow, as the quote highlight and the find
         // bar's matches are (user, 2026-10-18), the edition's marked word
         // wearing the same yellow at the same opacity.
-        descendant(".canvas-word") {
+        descendant(".image-word") {
           position(.absolute)
           zIndex(1)
           backgroundColor(colorYellow)
           opacity(opacityLow)
           pointerEvents(.none)
         }
-        descendant(".canvas-region") { zIndex(4) }
+        descendant(".image-region") { zIndex(4) }
         // The 0–1000 space drawn over the image while a region is: lines
         // every 100, 50, 10, 5 and 1, each finer level fainter and drawn
         // only once its lines stand 4px apart on screen (its gradients set
         // as the image is scaled), each 100 named along the top and the left
         // edges. Above the dim, under the region's ring.
-        descendant(".canvas-grid") {
+        descendant(".image-grid") {
           position(.absolute)
           zIndex(3)
           pointerEvents(.none)
         }
         // The pointer's place in the 0–1000 space, beside it.
-        descendant(".canvas-readout") {
+        descendant(".image-readout") {
           position(.absolute)
           zIndex(6)
           pointerEvents(.none)
         }
-        selector("& .canvas-grid-label", "& .canvas-readout") {
+        selector("& .image-grid-label", "& .image-readout") {
           position(.absolute)
           paddingInline(spacing2)
           fontSize(fontSizeMedium16)
@@ -145,7 +205,7 @@
         // Everything but the region dimmed, as an image editor marks a
         // selection: a backdrop over the viewport, the region (and its ring)
         // cut out of it.
-        descendant(".canvas-region-dim") {
+        descendant(".image-region-dim") {
           position(.absolute)
           inset(0)
           zIndex(2)
@@ -155,7 +215,7 @@
         }
         // A box's corners, each a handle a drag resizes it by (the box's
         // body moves it).
-        descendant(".canvas-crop-handle") {
+        descendant(".image-crop-handle") {
           position(.absolute)
           width(spacing8)
           height(spacing8)
@@ -164,12 +224,12 @@
           border(borderWidthBase, .solid, colorBlue)
           transform(translate(perc(-50), perc(-50)))
         }
-        descendant(".canvas-crop-handle[data-corner='nw']") { left(px(0)); top(px(0)) }
-        descendant(".canvas-crop-handle[data-corner='ne']") { left(perc(100)); top(px(0)) }
-        descendant(".canvas-crop-handle[data-corner='sw']") { left(px(0)); top(perc(100)) }
-        descendant(".canvas-crop-handle[data-corner='se']") { left(perc(100)); top(perc(100)) }
+        descendant(".image-crop-handle[data-corner='nw']") { left(px(0)); top(px(0)) }
+        descendant(".image-crop-handle[data-corner='ne']") { left(perc(100)); top(px(0)) }
+        descendant(".image-crop-handle[data-corner='sw']") { left(px(0)); top(perc(100)) }
+        descendant(".image-crop-handle[data-corner='se']") { left(perc(100)); top(perc(100)) }
         // A polygon zone's vertices, each a handle a drag moves by.
-        descendant(".canvas-vertex") {
+        descendant(".image-vertex") {
           position(.absolute)
           zIndex(7)
           width(spacing8)
@@ -180,22 +240,23 @@
           transform(translate(perc(-50), perc(-50)))
           pointerEvents(.none)
         }
-        descendant(".canvas-viewport[data-crop-hover='vertex']") { cursor(.move) }
-        descendant(".canvas-viewport[data-crop-hover='move']") { cursor(.move) }
-        selector("& .canvas-viewport[data-crop-hover='nw']", "& .canvas-viewport[data-crop-hover='se']") {
+        descendant(".image-viewport[data-crop-hover='vertex']") { cursor(.move) }
+        descendant(".image-viewport[data-crop-hover='move']") { cursor(.move) }
+        selector("& .image-viewport[data-crop-hover='nw']", "& .image-viewport[data-crop-hover='se']") {
           cursor(.nwseResize)
         }
-        selector("& .canvas-viewport[data-crop-hover='ne']", "& .canvas-viewport[data-crop-hover='sw']") {
+        selector("& .image-viewport[data-crop-hover='ne']", "& .image-viewport[data-crop-hover='sw']") {
           cursor(.neswResize)
         }
         selector(
-          "& .canvas-crop[hidden]", "& .canvas-word[hidden]", "& .canvas-region[hidden]", "& .canvas-region-dim[hidden]", "& .canvas-grid[hidden]",
-          "& .canvas-readout[hidden]", "& .canvas-vertex[hidden]"
+          "& .image-crop[hidden]", "& .image-element[hidden]", "& .image-word[hidden]",
+          "& .image-region[hidden]", "& .image-region-dim[hidden]", "& .image-grid[hidden]",
+          "& .image-readout[hidden]", "& .image-vertex[hidden]"
         ) {
           display(.none)
         }
-        descendant(".canvas-tile-image[data-loaded='false']") { opacity(0) }
-        descendant(".canvas-tile-image[data-loaded='true']") { opacity(1) }
+        descendant(".image-tile-image[data-loaded='false']") { opacity(0) }
+        descendant(".image-tile-image[data-loaded='true']") { opacity(1) }
       }
     }
   }
@@ -209,9 +270,9 @@
   import WebComponents
   import WebTypes
 
-  /// One canvas, read: its tiles, its zoom and pan, the gestures that change
-  /// them. Made by the viewer the first time the canvas is shown.
-  final class CanvasReader: @unchecked Sendable {
+  /// One image, read: its tiles, its zoom and pan, the gestures that change
+  /// them. Made by the viewer the first time the image is shown.
+  final class ImageView: @unchecked Sendable {
     let root: DOM.Element
     let serviceID: String
     private var viewport: DOM.Element?
@@ -269,7 +330,7 @@
     /// (pane sync).
     var onRegion: ((ViewerZoom.Region) -> Void)?
 
-    /// Told when the canvas is left with no image: every copy of what was
+    /// Told when the image is left with no image: every copy of what was
     /// sent failed to load, and its service's image now may not stand in
     /// (`TileCompositor.onNoImage`).
     var onNoImage: (() -> Void)? {
@@ -300,7 +361,7 @@
     private var mouseUpListener: Int32 = -1
 
     /// Whether a drag draws a crop box rather than pans (a host's call, on
-    /// an attached canvas), the box in image pixels (width 0: none), the
+    /// an attached image), the box in image pixels (width 0: none), the
     /// corner a drag started from, and its element over the image.
     private var cropping = false
     private var cropX: Double = 0
@@ -325,6 +386,13 @@
     private var regionDim: DOM.Element?
     private var grid: DOM.Element?
     private var readout: DOM.Element?
+    /// An encoded zone on the image hovered by the pointer, in the 0–1000
+    /// space (width 0: none), and its neutral outline element over the image.
+    private var elementX: Double = 0
+    private var elementY: Double = 0
+    private var elementW: Double = 0
+    private var elementH: Double = 0
+    private var elementBox: DOM.Element?
     /// The grid levels drawn, as last set ("" none), so a pan sets nothing.
     private var gridLevels = ""
     /// Whether the crop box is the region, edited where its markup is
@@ -351,9 +419,9 @@
     init(root: DOM.Element) {
       self.root = root
       serviceID = root.dataset["service-id"] ?? ""
-      let vp = root.querySelector(".canvas-viewport")
+      let vp = root.querySelector(".image-viewport")
       viewport = vp
-      if let vp, let spinner = root.querySelector(".canvas-spinner") {
+      if let vp, let spinner = root.querySelector(".image-spinner") {
         compositor = TileCompositor(viewport: vp, spinner: spinner)
       }
       // Whenever the viewport resizes (a sidebar toggled, the window
@@ -362,7 +430,7 @@
       // same zoom over its fit, found again (a pane made shorter fits the
       // whole image again, not its width alone), so it scales with its pane
       // at its fit or zoomed in alike (user, 2026-10-14: a zoomed image
-      // held its size as the overlay's panes parted). A canvas put away
+      // held its size as the overlay's panes parted). An image put away
       // measures nothing, and some browsers call back on scroll with the
       // size unchanged.
       vp?.observeResize { [self] w, h in
@@ -380,18 +448,18 @@
       setupGestures()
     }
 
-    /// A canvas drawn here rather than by the page: one the manifest has
+    /// An image drawn here rather than by the page: one the manifest has
     /// and the page drew none for.
     static func make(serviceID: String) -> DOM.Element {
       let canvas = document.createElement(.div)
-      canvas.className = "canvas-view"
+      canvas.className = "image-view"
       canvas.setAttribute(data("service-id"), serviceID)
       canvas.setAttribute(data("active"), "false")
       let viewport = document.createElement(.div)
-      viewport.className = "canvas-viewport"
+      viewport.className = "image-viewport"
       viewport.setAttribute(data("dragging"), "false")
       let spinner = document.createElement(.div)
-      spinner.className = "canvas-spinner"
+      spinner.className = "image-spinner"
       spinner.setAttribute(data("visible"), "false")
       spinner.appendChild(RotatingDottedRingSectorFactory.createElement())
       viewport.appendChild(spinner)
@@ -412,12 +480,13 @@
       updateTransform()
     }
 
-    /// Put away: its tiles go, so only the canvas on screen holds images.
+    /// Put away: its tiles go, so only the image on screen holds images.
     /// The browser keeps what it fetched, and showing it again is quick.
     func hide() {
       compositor?.clear()
       endDrag()
       clearRegion()
+      clearElement()
     }
 
     /// Fitted again, the viewport having changed its size (fullscreen).
@@ -427,17 +496,17 @@
       updateTransform()
     }
 
-    /// Let go of everything outside the canvas.
+    /// Let go of everything outside the image.
     func detach() {
       endDrag()
       compositor?.detach()
     }
 
-    /// What showing a canvas of `width` by `height` in this canvas's
+    /// What showing an image of `width` by `height` in this image's
     /// viewport asks for first (its first copies, at the viewport's fit),
-    /// fetched ahead for the canvases beside the one on screen: the URLs it
+    /// fetched ahead for the images beside the one on screen: the URLs it
     /// then asks for, so they come from the browser's cache. Its service's:
-    /// only for a canvas that reads its service (`ArtifactView`'s
+    /// only for an image that reads its service (`ArtifactView`'s
     /// `readsService`), never one changed at its source.
     func openingURLs(serviceID: String, width: Int, height: Int) -> [String] {
       TileCompositor.openingURLs(
@@ -450,7 +519,7 @@
       TileCompositor.preloadTimeout(serviceID: serviceID)
     }
 
-    /// `callback`, once the canvas shows all its view needs.
+    /// `callback`, once the image shows all its view needs.
     func whenSettled(_ callback: @escaping () -> Void) {
       compositor?.whenSettled(callback)
     }
@@ -486,6 +555,7 @@
       compositor?.update(panX: panX, panY: panY, zoom: zoom, viewportW: viewportW, viewportH: viewportH)
       drawCrop()
       drawRegion()
+      drawElement()
       drawVertices()
       drawWord()
     }
@@ -615,7 +685,7 @@
     private var wordBands: [DOM.Element] = []
 
     private func drawWord() {
-      while wordBands.count < wordBoxes.count, let band = overlay("canvas-word") { wordBands.append(band) }
+      while wordBands.count < wordBoxes.count, let band = overlay("image-word") { wordBands.append(band) }
       for (index, band) in wordBands.enumerated() {
         guard index < wordBoxes.count else {
           band.setAttribute(.hidden, "")
@@ -639,6 +709,45 @@
     /// The space a zone's corners are in, over the whole image.
     private static let zoneExtent = 1000.0
 
+    // MARK: - Hovered element zone
+
+    /// An encoded zone on the image (0–1000) outlined in neutral
+    /// `borderColorBase` while the pointer hovers it on the image.
+    func showElement(x: Double, y: Double, width: Double, height: Double) {
+      elementX = x
+      elementY = y
+      elementW = width
+      elementH = height
+      drawElement()
+    }
+
+    func clearElement() {
+      guard elementW > 0 || elementH > 0 else { return }
+      elementW = 0
+      elementH = 0
+      drawElement()
+    }
+
+    func setClickable(_ clickable: Bool) {
+      if clickable {
+        viewport?.setAttribute(data("clickable"), "true")
+      } else {
+        viewport?.removeAttribute(data("clickable"))
+      }
+    }
+
+    private func drawElement() {
+      guard elementW > 0, elementH > 0, imageW > 0, imageH > 0 else {
+        elementBox?.setAttribute(.hidden, "")
+        return
+      }
+      if case .none = elementBox { elementBox = overlay("image-element") }
+      guard let box = elementBox else { return }
+      let scaleX = Double(imageW) / 1000
+      let scaleY = Double(imageH) / 1000
+      place(box, x: elementX * scaleX, y: elementY * scaleY, width: elementW * scaleX, height: elementH * scaleY)
+    }
+
     // MARK: - Region
 
     /// A region of the image (0–1000) drawn over it, as the image is
@@ -659,8 +768,8 @@
       drawRegion()
     }
 
-    /// A region edited on the canvas as well as in its markup: the crop
-    /// box drawn over it, its corners and body dragged. A canvas taking a
+    /// A region edited on the image as well as in its markup: the crop
+    /// box drawn over it, its corners and body dragged. An image taking a
     /// crop box for a call keeps it, and only shows the region.
     func editRegion(x: Int, y: Int, width: Int, height: Int, vertices: [Int] = []) {
       guard !cropping else {
@@ -711,8 +820,8 @@
         place(grid, x: 0, y: 0, width: Double(imageW), height: Double(imageH))
         drawGridLevels(grid)
       }
-      if case .none = regionDim { regionDim = overlay("canvas-region-dim") }
-      if case .none = regionBox { regionBox = overlay("canvas-region") }
+      if case .none = regionDim { regionDim = overlay("image-region-dim") }
+      if case .none = regionBox { regionBox = overlay("image-region") }
       guard let box = regionBox else { return }
       let scaleX = Double(imageW) / 1000
       let scaleY = Double(imageH) / 1000
@@ -741,14 +850,14 @@
     /// The 0–1000 grid, laid out once in its own percentages: placed over
     /// the image, it scales with it.
     private func gridElement() -> DOM.Element? {
-      guard let grid = overlay("canvas-grid") else { return nil }
+      guard let grid = overlay("image-grid") else { return nil }
       var value = 0
       while value <= 1000 {
         for axis in ["x", "y"] {
           // The 0 corner is named once, on the top edge.
           if value == 0, stringEquals(axis, "y") { continue }
           let label = document.createElement(.div)
-          label.className = "canvas-grid-label"
+          label.className = "image-grid-label"
           label.setAttribute(data("axis"), axis)
           label.textContent = intToString(value)
           // Centered on its line, kept inside the image at the ends.
@@ -812,7 +921,7 @@
         readout?.setAttribute(.hidden, "")
         return
       }
-      if case .none = readout { readout = overlay("canvas-readout") }
+      if case .none = readout { readout = overlay("image-readout") }
       guard let readout else { return }
       readout.textContent = stringJoin(
         [
@@ -902,10 +1011,10 @@
       // The box's element, made the first time a box is drawn, its corners
       // handles.
       if case .none = cropBox {
-        cropBox = overlay("canvas-crop")
+        cropBox = overlay("image-crop")
         for corner in ["nw", "ne", "sw", "se"] {
           let handle = document.createElement(.div)
-          handle.className = "canvas-crop-handle"
+          handle.className = "image-crop-handle"
           handle.setAttribute(data("corner"), corner)
           cropBox?.appendChild(handle)
         }
@@ -923,7 +1032,7 @@
       }
       let count = vertices.count / 2
       while vertexHandles.count < count {
-        guard let handle = overlay("canvas-vertex") else { break }
+        guard let handle = overlay("image-vertex") else { break }
         vertexHandles.append(handle)
       }
       for (index, handle) in vertexHandles.enumerated() {
@@ -1094,7 +1203,7 @@
       onRegionEdit?(box.x, box.y, box.w, box.h, done)
     }
 
-    /// The keys, on the focused canvas while it takes a box: Enter draws
+    /// The keys, on the focused image while it takes a box: Enter draws
     /// one in the middle when there is none; the arrows move it 10 in the
     /// 0–1000 space (with Shift, they resize it); Delete or Backspace
     /// clears it; Escape too.
@@ -1213,7 +1322,7 @@
       // The wheel, and Safari's trackpad pinch (WebKit's gesture events, not
       // the ctrl+wheel other browsers send, which the wheel zooms by): the
       // model every image zoomed where it stands shares. Always taken: the
-      // page never scrolls or zooms over the canvas.
+      // page never scrolls or zooms over the image.
       zoomInput = ViewerZoom.Input(
         on: vp, takes: { true }, current: { [self] in zoom },
         zoomTo: { [self] value, x, y in
