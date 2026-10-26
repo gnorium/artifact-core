@@ -2300,6 +2300,7 @@
           // leaving from what it shows.
           self.scanOwn = self.shownCanvas?.spot
           self.scanBeforeOverlay = self.scanOwn
+          self.scanBeforeAtFit = self.shownCanvas?.isAtFit ?? false
           self.overlayFrom = self.layerPlace()
           self.setOverlayRegistered(true)
         } else {
@@ -2371,9 +2372,14 @@
               self.scanOwn = spot
             }
           }
-          // The image its own again, at the spot it came back to.
+          // The image its own again, at the spot it came back to; back to
+          // its fit where it rested at its fit before the overlay and goes
+          // back to that view (`leaveOverlay`): a spot read at the fit of
+          // another layout is a zoom, never the fit (user, 2026-10-27).
           self.shownCanvas?.endBlend()
-          if registered, let own = self.scanOwn {
+          if registered, self.overlayPutAway || self.overlayLeavesToFit, self.scanBeforeAtFit {
+            self.shownCanvas?.refit()
+          } else if registered, let own = self.scanOwn {
             self.shownCanvas?.showSpot(centerX: own.centerX, centerY: own.centerY, zoom: own.zoom)
           }
           self.scanOwn = nil
@@ -2426,8 +2432,10 @@
       }
     }
 
-    /// The image's own view as the overlay came on (`leaveOverlay`).
+    /// The image's own view as the overlay came on (`leaveOverlay`), and
+    /// whether it rested at its fit then.
     private var scanBeforeOverlay: (centerX: Double, centerY: Double, zoom: Double)?
+    private var scanBeforeAtFit = false
 
     /// The image's own view the overlay leaves from, coming on, and goes
     /// back to, going off (`CanvasReader.blend`).

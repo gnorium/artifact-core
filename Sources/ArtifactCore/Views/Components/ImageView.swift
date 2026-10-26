@@ -574,6 +574,9 @@
     /// What the image shows as a spot: the point of it at the viewport's
     /// middle (fractions of it) and its zoom (viewport pixels per image
     /// pixel); nil before it has a size.
+    /// Whether the image rests at its fit, following the viewport.
+    var isAtFit: Bool { atFit }
+
     var spot: (centerX: Double, centerY: Double, zoom: Double)? {
       guard imageW > 0, imageH > 0, zoom > 0, viewportW > 0 else { return nil }
       return (
