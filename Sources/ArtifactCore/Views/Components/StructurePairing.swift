@@ -82,18 +82,28 @@ enum StructurePairing {
   }
 
   /// Lines side by side (columns the other structure does not split) taken
-  /// as one row: boxes that overlap down the page joined, top to bottom
+  /// as one row: boxes `beside` each other joined, top to bottom
   /// (gnorium-python `layout_measure._rows`).
   static func rows(_ boxes: [StructureRow]) -> [StructureRow] {
     var rows: [StructureRow] = []
     for box in boxes.sorted(by: { $0.top < $1.top }) {
-      if let last = rows.last, box.top < last.bottom {
+      if let last = rows.last, beside(last, box) {
         rows[rows.count - 1] = last.joined(box)
       } else {
         rows.append(box)
       }
     }
     return rows
+  }
+
+  /// Whether a line stands beside a row: they overlap down the page by more
+  /// than half the shorter's height. Lines one above the other overlap
+  /// only by their ascenders and descenders where the leading is tight (a
+  /// scan line's box, all of its ink, is as tall as the line pitch), and
+  /// more so where a tilted line's box is upright (user, 2026-10-26: Hamlet
+  /// Q1's p. 4 chained 37 lines into 2 rows).
+  static func beside(_ row: StructureRow, _ line: StructureRow) -> Bool {
+    min(row.bottom, line.bottom) - max(row.top, line.top) > min(row.bottom - row.top, line.bottom - line.top) / 2
   }
 
   /// Whether a pair is within the tolerance: its baselines (`seated`)

@@ -4235,7 +4235,7 @@
       func scanRows(_ lines: [ScanRow]) -> [ScanRow] {
         var rows: [ScanRow] = []
         for line in lines.sorted(by: { $0.box.top < $1.box.top }) {
-          if let last = rows.last, line.box.top < last.box.bottom {
+          if let last = rows.last, StructurePairing.beside(last.box, line.box) {
             rows[rows.count - 1].box = last.box.joined(line.box)
             rows[rows.count - 1].lines += line.lines
           } else {

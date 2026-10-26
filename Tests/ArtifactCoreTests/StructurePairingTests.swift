@@ -12,6 +12,17 @@ final class StructurePairingTests: XCTestCase {
     StructureRow(left: 0, top: top, right: 100, bottom: bottom)
   }
 
+  func testLinesWhoseInkTouchesAcrossTightLeadingStayRowsApart() {
+    // Each line's box 33 tall at a pitch of 20 (a tilted line's upright
+    // box): they overlap by 13, under half a line, so none is beside the
+    // next (Hamlet Q1 p. 4 chained 37 lines into 2 rows).
+    let lines = (0..<5).map { Self.row(Double($0) * 20, Double($0) * 20 + 33) }
+    XCTAssertEqual(StructurePairing.rows(lines).count, 5)
+    // Two columns of one row overlap by most of their height.
+    let columns = [StructureRow(left: 0, top: 0, right: 40, bottom: 12), StructureRow(left: 60, top: 2, right: 100, bottom: 13)]
+    XCTAssertEqual(StructurePairing.rows(columns).count, 1)
+  }
+
   func testRowsInPlaceArePairedWithinTheTolerance() {
     let edition = [Self.row(0, 12), Self.row(20, 32), Self.row(40, 52)]
     let scan = [Self.row(1, 13), Self.row(21, 31), Self.row(39, 52)]
