@@ -202,6 +202,10 @@
           backgroundColor(backgroundColorBackdropLight)
           whiteSpace(.nowrap)
         }
+        // Zoomed in past half again its fit, the edges' names put away: the
+        // lines and the pointer's place name every point there (user,
+        // 2026-10-27).
+        selector("& .image-grid[data-labels='off'] .image-grid-label") { display(.none) }
         // Everything but the region dimmed, as an image editor marks a
         // selection: a backdrop over the viewport, the region (and its ring)
         // cut out of it.
@@ -896,6 +900,7 @@
     /// spacing, one an axis, the finer the fainter. Named on the grid
     /// (`data-levels`, "100 50 10") for whoever reads it.
     private func drawGridLevels(_ grid: DOM.Element) {
+      grid.setAttribute(data("labels"), zoom > minZoom * 1.5 ? "off" : "on")
       let shownW = Double(imageW) * zoom
       let shownH = Double(imageH) * zoom
       var layers: [String] = []
@@ -906,10 +911,18 @@
         let stepY = shownH * Double(units) / 1000
         guard stepX >= 4, stepY >= 4 else { break }
         let color = stringJoin(["color-mix(in srgb, var(--color-base) ", strength, ", transparent)"], separator: "")
-        layers.append(stringJoin(["linear-gradient(to right, ", color, " 0 1px, transparent 1px)"], separator: ""))
-        sizes.append(stringJoin([pixels(stepX), " 100%"], separator: ""))
-        layers.append(stringJoin(["linear-gradient(to bottom, ", color, " 0 1px, transparent 1px)"], separator: ""))
-        sizes.append(stringJoin(["100% ", pixels(stepY)], separator: ""))
+        // One gradient over the whole grid, repeating at the level's exact
+        // pitch, never a tile the browser rounds to a pixel: tiles rounded
+        // level by level drifted the fine lines off the coarse ones as the
+        // image was zoomed (user, 2026-10-27).
+        layers.append(
+          stringJoin(
+            ["repeating-linear-gradient(to right, ", color, " 0 1px, transparent 1px ", pixels(stepX), ")"], separator: ""))
+        sizes.append("100% 100%")
+        layers.append(
+          stringJoin(
+            ["repeating-linear-gradient(to bottom, ", color, " 0 1px, transparent 1px ", pixels(stepY), ")"], separator: ""))
+        sizes.append("100% 100%")
         names.append(intToString(units))
       }
       let levels = stringJoin(names, separator: " ")

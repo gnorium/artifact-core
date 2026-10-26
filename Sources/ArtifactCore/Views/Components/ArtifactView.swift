@@ -644,8 +644,12 @@
         selector("&[data-header='true']:has(.artifact-under-header) .artifact-document-header") {
           flex("1 1 0")
         }
+        // Laid out so while the overlay it put away leaves too (`overlayAside`):
+        // the diff as it will rest, never its whole length pushing the header
+        // out of the column and then snapping (user, 2026-10-27).
         selector(
-          "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-under-header"
+          "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-under-header",
+          "&[data-header='true'][data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-under-header"
         ) {
           display(.flex)
           flexDirection(.column)
@@ -844,14 +848,47 @@
           CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
         }
         // A pane that is not the rendering putting the overlay away (the
-        // XML, the header, Reflow: `overlayAside`): the edition fades out on
-        // the same clock as it leaves the scan, gone as it lands, that pane
-        // then in its place—never the edition at full strength and then
-        // cut (user, 2026-10-26); that pane put away, it fades back in as
-        // it comes back onto the scan.
-        selector("&[data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-markup") {
+        // XML, the header, Reflow: `overlayAside`), on the overlay's own
+        // exit (user, 2026-10-26): the panes slide apart and the image fades
+        // in under it as on any Overlay off; in the moving column the
+        // edition fades out while that pane—the header and its diff, the
+        // XML's code and the page's diff—fades in where it will rest, on the
+        // same clock (`--artifact-overlay-progress`, 1 to 0 on the way out).
+        // The edition's box is out of the column's flow meanwhile, over it,
+        // so the incoming panes lay out as they will stand. Put away, the
+        // edition fades back in on its way onto the scan.
+        selector("&[data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-markup-box") {
+          position(.absolute).important()
+          CSS.Property("inset", "0").important()
+          zIndex(1)
           CSS.Property("opacity", "var(--artifact-overlay-progress, 0)")
         }
+        selector(
+          "&[data-overlay-put-away='true'][data-overlay-fading='true'][data-header='true'] .artifact-document-header",
+          "&[data-overlay-put-away='true'][data-overlay-fading='true'][data-header='true']:has(.artifact-under-header .diff-view) .artifact-under-header"
+        ) {
+          display(.flex).important()
+          CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
+        }
+        // The XML's code and the page's diff under it, in a box of their own
+        // in the column (`xmlHandoff`), the edition's own box leaving over it.
+        selector("&[data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-xml-handoff") {
+          display(.flex).important()
+          flexDirection(.column)
+          flex("1 1 auto")
+          minHeight(0)
+          overflow(.hidden)
+          backgroundColor(backgroundColorNeutralSubtle)
+          CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
+        }
+        descendant(".artifact-xml-handoff") { display(.none) }
+        selector("&[data-overlay-put-away='true'][data-overlay-fading='true'][data-raw='true'] .artifact-under-markup") {
+          CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
+        }
+        // A code line whose box the image shows as the pointer is on it
+        // (`markRegionLine`): its ground a selected line's, as the editor
+        // marks the line its caret is on.
+        descendant(".code-line[data-region-hover='true']") { backgroundColor(backgroundColorCurrentLine) }
         // A code pane's lines and its diff's rows laid out only as they come
         // into view: a Hamlet header's 688 lines and 1,209 diff rows took a
         // 180 ms frame to show, 20 ms so (dev, 2026-10-26). Unwrapped alone,
@@ -860,45 +897,12 @@
         selector(
           "&:not([data-reflow='true']) .artifact-document-header .code-line",
           "&:not([data-reflow='true']) .artifact-markup .code-line",
+          "&:not([data-reflow='true']) .artifact-xml-handoff .code-line",
           "&:not([data-reflow='true']) .artifact-under-header .diff-row",
           "&:not([data-reflow='true']) .artifact-under-markup .diff-row"
         ) {
           CSS.Property("content-visibility", "auto")
           CSS.Property("contain-intrinsic-block-size", "auto 1lh")
-        }
-        // Handed off (`overlayAside`): first the edition fades out where it
-        // lies on the scan (`data-overlay-put-away="out"`), nothing moving;
-        // then, the overlay off at once, the image and the pane that took
-        // its place (the XML's code, the header) fade in at rest
-        // (`data-overlay-handoff`). Never the edition flown back.
-        selector("&[data-overlay-put-away='out'] .artifact-markup") {
-          CSS.Property("opacity", "0").important()
-          CSS.Property("transition", "opacity " + OverlayMotion.handoffTiming)
-        }
-        // The overlay off at once (`data-overlay-handoff="leaving"`): the
-        // panes where they rest, never sliding. Until the frame that lays
-        // the incoming pane out has been drawn (`"pending"`; a header's
-        // hundreds of lines take a long frame) the image and that pane wait
-        // unseen; then (`"true"`) they fade in together—never a fade spent
-        // while nothing was drawn, so seen as a flash (user, 2026-10-26).
-        selector("&[data-overlay-handoff] .artifact-markup-frame", "&[data-overlay-handoff] .artifact-object") {
-          CSS.Property("transition", "none").important()
-        }
-        selector(
-          "&[data-overlay-handoff='leaving'] .artifact-object", "&[data-overlay-handoff='pending'] .artifact-object",
-          "&[data-overlay-handoff='pending'] .artifact-markup", "&[data-overlay-handoff='pending'] .artifact-document-header"
-        ) {
-          CSS.Property("opacity", "0").important()
-        }
-        selector(
-          "&[data-overlay-handoff='true'] .artifact-object", "&[data-overlay-handoff='true'] .artifact-markup",
-          "&[data-overlay-handoff='true'] .artifact-document-header"
-        ) {
-          animation("artifact-handoff-in " + OverlayMotion.handoffTiming)
-        }
-        keyframes("artifact-handoff-in") {
-          from { opacity(0) }
-          to { opacity(1) }
         }
         selector("&[data-overlay-active='true'] .image-viewport") { CSS.Property("touch-action", "none") }
         selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled") {
@@ -1471,53 +1475,60 @@
     /// Whether a pane that is not the rendering put the overlay away
     /// (`overlayAside`): every such pane put away, the overlay comes back.
     private var overlayPutAway = false
-    /// While the edition fades out in place before the overlay goes off.
-    private var overlayHandingOff = false
-    /// The overlay off in one frame, its motion spent (`overlayAside`).
-    private var overlayInstant = false
 
     /// The overlay off, its switch shown off, while the column holds a
     /// pane that is not the rendering—the XML, the header—or Reflow sets
     /// it (user, 2026-10-26): none is a page to lay on the scan. The
-    /// edition fades out where it lies (`OverlayMotion.handoffMilliseconds`),
-    /// then the overlay is off at once and the image and that pane fade in
-    /// at rest: never the edition flown back. Every one of them put away,
-    /// the overlay it put away comes back, the edition fading in on its
-    /// way onto the scan.
+    /// overlay leaves as it always does, the panes sliding apart and the
+    /// image fading in; in the column the edition fades out as that pane
+    /// fades in (`data-overlay-put-away`). Every one of them put away, the
+    /// overlay it put away comes back, the edition fading in on its way
+    /// onto the scan. Set as the images switch sets it (`setCanvasShown`),
+    /// never by a press of its button: a listener of the XML's press may
+    /// have disabled it already, and a press of a disabled button does
+    /// nothing.
     private func overlayAside() {
       let aside = codeShown || reflowOn
-      // Set as the images switch sets it (`setCanvasShown`), never by a
-      // press of its button: a listener of the XML's press may have
-      // disabled it already, and a press of a disabled button does nothing.
-      if aside, overlayOn, !overlayHandingOff {
+      if aside, overlayOn {
         overlayPutAway = true
-        overlayHandingOff = true
-        root.setAttribute(data("overlay-put-away"), "out")
-        let ticket = overlayMotion
-        _ = window.setTimeout(OverlayMotion.handoffMilliseconds) { [self] in
-          self.overlayHandingOff = false
-          guard self.overlayPutAway, self.overlayOn, self.overlayMotion == ticket, self.isInDocument else { return }
-          self.root.setAttribute(data("overlay-put-away"), "true")
-          self.overlayInstant = true
-          self.pressOverlay(false)
-          self.setOverlay(false)
-          // The panes at rest and the fade's clock spent in this frame: no
-          // frame of the edition at full strength before the next.
-          self.root.setAttribute(data("overlay-handoff"), "leaving")
-          self.fadeOverlay()
-        }
+        root.setAttribute(data("overlay-put-away"), "true")
+        if rawVisible { xmlHandoff(true) }
+        pressOverlay(false)
+        setOverlay(false)
       } else if !aside, overlayPutAway {
         overlayPutAway = false
-        overlayHandingOff = false
         reflectSyncApplies()
-        // Coming back, the edition fades in on the overlay's clock as it
-        // went (`data-overlay-put-away`, taken off once it has landed).
         if !overlayOn, overlayApplies, imagesShown {
           pressOverlay(true)
           setOverlay(true)
         } else {
           root.removeAttribute(data("overlay-put-away"))
         }
+      }
+    }
+
+    /// The XML fading in as the edition leaves the scan (`overlayAside`):
+    /// the page's code and its diff, as the column will show them, copied
+    /// into a box of their own beside the edition's (`artifact-xml-handoff`,
+    /// laid out where they will rest), gone once it has landed and the
+    /// column shows the page's own.
+    private func xmlHandoff(_ on: Bool) {
+      for old in root.querySelectorAll(".artifact-xml-handoff") { old.remove() }
+      guard on, let frame = root.querySelector(".artifact-markup-frame"),
+        let page = root.querySelector(".artifact-markup .tei-page[data-active='true']"),
+        let code = page.querySelector("[data-layer='" + (translatable && translationVisible ? "translated-markup" : "markup") + "']")
+      else { return }
+      let box = document.createElement("div")
+      box.setAttribute("class", "artifact-xml-handoff")
+      box.setAttribute("aria-hidden", "true")
+      let copy = code.cloneNode(deep: true)
+      copy.style.display(.block)
+      box.appendChild(copy)
+      // In the column where the code will stand: before the page's diff.
+      if let under = frame.querySelector(":scope > .artifact-under-markup") {
+        frame.insertBefore(box, under)
+      } else {
+        frame.appendChild(box)
       }
     }
 
@@ -1563,7 +1574,10 @@
       // stays.
       _ = root.addEventListener(.input) { [self] _ in self.followCaretSoon() }
       _ = root.addEventListener(.mousemove) { [self] e in self.followPointer(x: e.clientX, y: e.clientY) }
-      _ = root.addEventListener(.mouseleave) { [self] _ in self.setRegion(hover: nil) }
+      _ = root.addEventListener(.mouseleave) { [self] _ in
+        self.setRegion(hover: nil)
+        self.markRegionLine(nil)
+      }
       // Before the editor's own keys, which keep the arrows to themselves.
       _ = root.addEventListener(
         .keydown,
@@ -1621,10 +1635,34 @@
       }
       for code in root.querySelectorAll(Self.rawCode) where !code.hasAttribute("data-code-editing") && code.contains(node) {
         guard drawsRegions(of: code) else { break }
-        setRegion(hover: region(in: code, caret: offset(in: code, node: node, offset: position.offset)))
+        // The line under the pointer, wherever on it (its white space before
+        // and after its text too): the box its text names, where the
+        // pointer's own place names none (user, 2026-10-27).
+        let element = (node as? DOM.Element) ?? node.parentElement
+        let line = document.elementFromPoint(x, y)?.closest(".code-line") ?? element?.closest(".code-line")
+        var found = region(in: code, caret: offset(in: code, node: node, offset: position.offset))
+        if case .none = found, let line, code.contains(line) {
+          let start = offset(in: code, node: line, offset: 0)
+          let leading = Array(line.textContent.utf8).prefix { $0 == 32 || $0 == 9 }.count
+          found = region(in: code, caret: start + leading + 1)
+        }
+        setRegion(hover: found)
+        // The line that names it lit as its box is on the image.
+        if case .some = found { markRegionLine(line) } else { markRegionLine(nil) }
         return
       }
       setRegion(hover: nil)
+      markRegionLine(nil)
+    }
+
+    /// The code line whose box the image shows on hover (`followPointer`):
+    /// its ground a selected line's, one line at a time.
+    private var regionLine: DOM.Element?
+
+    private func markRegionLine(_ line: DOM.Element?) {
+      if let old = regionLine, line.map({ $0.id != old.id }) ?? true { old.removeAttribute(data("region-hover")) }
+      line?.setAttribute(data("region-hover"), "true")
+      regionLine = line
     }
 
     /// A point of the code as a byte of its text: the text before it
@@ -1954,7 +1992,7 @@
     private func reflectSyncApplies() {
       // Held while the edition fades out in place, as a pane takes its
       // place (`overlayAside`): nothing moves until it is gone.
-      let active = overlayOn && imagesShown && (overlayHandingOff || (!codeShown && !headerVisible && !reflowOn))
+      let active = overlayOn && !codeShown && !headerVisible && !reflowOn && imagesShown
       root.setAttribute(data("overlay-active"), active ? "true" : "false")
       // The overlay's switch disabled, as Detach's is, where it cannot
       // apply: Raw, the Header, Reflow, the images put away, a page with no
@@ -2020,11 +2058,14 @@
     /// The layer each page shows, by the two switches.
     private var shownLayerName: String {
       let translated = translatable && translationVisible
-      // The rendering while the XML's press takes it off the scan, the
-      // code once the overlay is off (`overlayAside`).
-      let code = rawVisible && !(overlayPutAway && (overlayOn || overlayLeaving))
-      return translated ? (code ? "translated-markup" : "translated-rendering") : (code ? "markup" : "rendering")
+      return translated
+        ? (codeLayerShown ? "translated-markup" : "translated-rendering") : (codeLayerShown ? "markup" : "rendering")
     }
+
+    /// Whether the pages show their code: the XML on, once the overlay it
+    /// put away has left the scan (`overlayAside`)—until then the edition
+    /// is the rendering, moved and faded as it leaves.
+    private var codeLayerShown: Bool { rawVisible && !(overlayPutAway && (overlayOn || overlayLeaving)) }
 
     /// The one layer of each page that shows, by two switches (user,
     /// 2026-10-07): the language switch picks the markup or its
@@ -2202,8 +2243,6 @@
     /// a page with no markup of its own or no image (`reflectPageMarkup`,
     /// user, 2026-10-17).
     private func setOverlay(_ on: Bool) {
-      // A handoff's fade in is spent: the next one runs again.
-      if on { root.removeAttribute(data("overlay-handoff")) }
       // The word correspondence is side by side's alone. The structure is
       // measured here, the layer at rest, before the motion scales it.
       if on {
@@ -2237,6 +2276,7 @@
           // the pane's zoom and scroll kept for the way back; the image
           // leaving from what it shows.
           self.scanOwn = self.shownCanvas?.spot
+          self.scanBeforeOverlay = self.scanOwn
           self.overlayFrom = self.layerPlace()
           self.setOverlayRegistered(true)
         } else {
@@ -2284,21 +2324,10 @@
           // middle; the scan at the same spot and zoom, where the
           // registration's way out left it. Matching resumes from there.
           self.overlayLeaving = false
-          self.overlayInstant = false
           // The fade done with (`fadeOverlay`: none once off has run); the
-          // pane that put it away fading in where it lands.
+          // XML's stand-in gone, the column's own code shown.
           self.fadeOverlay()
-          // The incoming pane laid out unseen, then faded in once that
-          // frame is drawn: two frames on.
-          if self.overlayPutAway, self.root.hasAttribute(data("overlay-handoff")) {
-            self.root.setAttribute(data("overlay-handoff"), "pending")
-            _ = window.requestAnimationFrame {
-              _ = window.requestAnimationFrame {
-                guard stringEquals(self.root.getAttribute(data("overlay-handoff")) ?? "", "pending") else { return }
-                self.root.setAttribute(data("overlay-handoff"), "true")
-              }
-            }
-          }
+          self.xmlHandoff(false)
           // The XML that put it away shown now it has landed.
           if self.rawVisible { self.showLayers() }
           let registered = self.overlayRegistered
@@ -2315,7 +2344,7 @@
               y: (Double(pane.clientTop) + Double(pane.clientHeight) / 2 - room.y - view.y) / focus.zoom
             )
             self.overlayFocus = (middle.x, middle.y, focus.zoom)
-            if let spot = self.scanSpot(at: middle, zoom: focus.zoom) { self.scanOwn = spot }
+            if !self.overlayPutAway, let spot = self.scanSpot(at: middle, zoom: focus.zoom) { self.scanOwn = spot }
           }
           // The image its own again, at the spot it came back to.
           self.shownCanvas?.endBlend()
@@ -2361,8 +2390,18 @@
       overlayFocus = (x, y, place.zoom)
       // From its fit, to the text pane's fit (`placeOverlay` follows it).
       setZoom(overlayLeavesToFit ? nil : place.zoom, atFit: overlayLeavesToFit)
-      if let spot = scanSpot(at: (x, y), zoom: place.zoom) { scanOwn = spot }
+      // A pane taking the edition's place (`overlayAside`): the image back
+      // to its own view from before the overlay, never the text's zoom it
+      // kept for the text it no longer shows (user, 2026-10-27).
+      if overlayPutAway, let before = scanBeforeOverlay {
+        scanOwn = before
+      } else if let spot = scanSpot(at: (x, y), zoom: place.zoom) {
+        scanOwn = spot
+      }
     }
+
+    /// The image's own view as the overlay came on (`leaveOverlay`).
+    private var scanBeforeOverlay: (centerX: Double, centerY: Double, zoom: Double)?
 
     /// The image's own view the overlay leaves from, coming on, and goes
     /// back to, going off (`CanvasReader.blend`).
@@ -2467,7 +2506,7 @@
 
     /// The overlay's motion so far, on its curve: 0 to 1.
     private var overlayProgress: Double {
-      if overlayInstant || window.matchMedia("(prefers-reduced-motion: reduce)") { return 1 }
+      if window.matchMedia("(prefers-reduced-motion: reduce)") { return 1 }
       return OverlayMotion.eased((window.performance.now() - overlayZoomBegan) / OverlayMotion.milliseconds)
     }
 
@@ -3612,7 +3651,7 @@
 
     private func applyZoomLayout(about anchor: (x: Double, y: Double)?, matching: Bool = false) {
       guard let pane = markupPane, let layer = shownLayer() else { return }
-      if rawVisible {
+      if codeLayerShown {
         // Source code has one readable size on every page, independent of
         // scan proportions, rendered fit, and old session zoom settings.
         let left = pane.scrollLeft, top = pane.scrollTop
