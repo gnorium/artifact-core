@@ -23,6 +23,19 @@ final class StructurePairingTests: XCTestCase {
     XCTAssertEqual(StructurePairing.rows(columns).count, 1)
   }
 
+  func testInkOfItsOwnOnALinesBaselineIsThatLinesRow() {
+    // A comma measured as ink of its own (its own text node): a box 5 tall
+    // at the line's foot, on the line's baseline, overlapping the line by
+    // under half its own height. One row, never two.
+    var line = Self.row(0, 12)
+    line.baseline = 10
+    var comma = Self.row(10, 15)
+    comma.baseline = 10
+    var next = Self.row(20, 32)
+    next.baseline = 30
+    XCTAssertEqual(StructurePairing.rows([line, comma, next]).count, 2)
+  }
+
   func testRowsInPlaceArePairedWithinTheTolerance() {
     let edition = [Self.row(0, 12), Self.row(20, 32), Self.row(40, 52)]
     let scan = [Self.row(1, 13), Self.row(21, 31), Self.row(39, 52)]

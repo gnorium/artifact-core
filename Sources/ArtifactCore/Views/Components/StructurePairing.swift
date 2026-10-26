@@ -96,14 +96,22 @@ enum StructurePairing {
     return rows
   }
 
-  /// Whether a line stands beside a row: they overlap down the page by more
-  /// than half the shorter's height. Lines one above the other overlap
-  /// only by their ascenders and descenders where the leading is tight (a
-  /// scan line's box, all of its ink, is as tall as the line pitch), and
-  /// more so where a tilted line's box is upright (user, 2026-10-26: Hamlet
+  /// Whether a line stands beside a row: on its baseline where both have
+  /// one—within half the taller's height, so a comma or an italic tail
+  /// measured as ink of its own (a text node of its own) is its line's row,
+  /// whatever its height (Hamlet Q1, user 2026-10-27: such fragments stood
+  /// as rows of their own, the line beside them unpaired); else, where a
+  /// box has no baseline (a scan's line zone kept as a box), overlapping
+  /// down the page by more than half the shorter's height. Lines one above
+  /// the other overlap only by their ascenders and descenders where the
+  /// leading is tight (a scan line's box, all of its ink, is as tall as the
+  /// line pitch), and more so where a tilted line's box is upright (Hamlet
   /// Q1's p. 4 chained 37 lines into 2 rows).
   static func beside(_ row: StructureRow, _ line: StructureRow) -> Bool {
-    min(row.bottom, line.bottom) - max(row.top, line.top) > min(row.bottom - row.top, line.bottom - line.top) / 2
+    if let a = row.baseline, let b = line.baseline {
+      return abs(a - b) < max(row.bottom - row.top, line.bottom - line.top) / 2
+    }
+    return min(row.bottom, line.bottom) - max(row.top, line.top) > min(row.bottom - row.top, line.bottom - line.top) / 2
   }
 
   /// Whether a pair is within the tolerance: its baselines (`seated`)
