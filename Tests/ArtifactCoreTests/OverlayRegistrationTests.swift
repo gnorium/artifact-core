@@ -116,6 +116,25 @@ final class OverlayRegistrationTests: XCTestCase {
     XCTAssertEqual(laid[2] - laid[0], 2132.01 * Self.typeScale, accuracy: 0.01)
   }
 
+  /// A left-set block is laid from its left edge, a right-set one from its
+  /// right, whatever the edition face's widths ran its lines to (user,
+  /// 2026-10-27: Hamlet Q1's verse, its lines 11% wider than the print's
+  /// before the fit, stood every start half the overrun right, centered).
+  func testALeftSetBlockIsLaidFromItsLeftEdge() {
+    let width = 2132.01 * Self.typeScale
+    let box = [100.0, 50.0, 100 + width * 1.11, 200.0]
+    let left = OverlayRegistration.laid(
+      box, zone: Self.textBlock, size: Self.size, spans: false, typeScale: Self.typeScale, anchor: .left)
+    XCTAssertEqual(left[0], 100)
+    XCTAssertEqual(left[2] - left[0], width, accuracy: 0.01)
+    let right = OverlayRegistration.laid(
+      box, zone: Self.textBlock, size: Self.size, spans: false, typeScale: Self.typeScale, anchor: .right)
+    XCTAssertEqual(right[2], box[2])
+    XCTAssertEqual(OverlayRegistration.anchor([.left, .left, .center, .justified, .left]), .left)
+    XCTAssertEqual(OverlayRegistration.anchor([.right, .right, .center]), .right)
+    XCTAssertEqual(OverlayRegistration.anchor([.left, .center, .center, .justified]), .center)
+  }
+
   /// With no frame declared, a spanning block is laid on its box both ways.
   func testWithNoFrameASpanningBlockIsLaidOnItsBox() {
     let box = [100.0, 50.0, 526.4, 163.2]

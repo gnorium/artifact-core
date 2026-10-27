@@ -15,6 +15,12 @@ struct ScanZone {
   var baseline: [Double] = []
 }
 
+/// The edge registration lays the scan's text block on across
+/// (`OverlayRegistration.laid`).
+enum OverlayAnchor: Equatable {
+  case left, center, right
+}
+
 /// How the reader's overlay lays the scan under the edition (user,
 /// 2026-10-14): the page's measured text block (its corners on the scan)
 /// onto the rendered main text block, by one homography. The rule is the
@@ -41,8 +47,17 @@ enum OverlayRegistration {
   /// face's, so a centered block's width is no measure of the scan's); a
   /// block spanning the frame's measure (`spans`: its lines justified to
   /// it) on its box both ways.
+  /// Across, by the edge the block is set from (`anchor`, user
+  /// 2026-10-27): a left-set block's left edge on the rendered block's
+  /// left, a right-set block's right on its right, a centered or justified
+  /// one centered. A left-set page's lines start where the print's do,
+  /// whatever the edition face's widths: before the fit tunes them, a
+  /// face wider than the print's runs its lines past the measure, and the
+  /// block centered on that wider edition stood every line's start half
+  /// the overrun right (Hamlet Q1, a whole page off by its starts).
   static func laid(
-    _ box: [Double], zone: [Double], size: (width: Double, height: Double), spans: Bool, typeScale: Double
+    _ box: [Double], zone: [Double], size: (width: Double, height: Double), spans: Bool, typeScale: Double,
+    anchor: OverlayAnchor = .center
   ) -> [Double] {
     guard box.count == 4, zone.count == 8 else { return box }
     if typeScale <= 0 && spans { return box }
@@ -52,9 +67,25 @@ enum OverlayRegistration {
     guard down > 0 else { return box }
     let typed = typeScale > 0
     let scale = typed ? typeScale : (box[3] - box[1]) / down
-    let half = across * scale / 2
-    let middle = (box[0] + box[2]) / 2
-    return [middle - half, box[1], middle + half, typed ? box[1] + down * scale : box[3]]
+    let width = across * scale
+    let left: Double
+    switch anchor {
+    case .left: left = box[0]
+    case .right: left = box[2] - width
+    case .center: left = (box[0] + box[2]) / 2 - width / 2
+    }
+    return [left, box[1], left + width, typed ? box[1] + down * scale : box[3]]
+  }
+
+  /// The edge a block's lines are mostly set from: left or right where more
+  /// than half of them are set so (`StructureAlignment`), else its center (a
+  /// centered block, a justified one, a mix).
+  static func anchor(_ alignments: [StructureAlignment]) -> OverlayAnchor {
+    let left = alignments.filter { $0 == .left }.count
+    let right = alignments.filter { $0 == .right }.count
+    if left * 2 > alignments.count { return .left }
+    if right * 2 > alignments.count { return .right }
+    return .center
   }
 
   /// The space a zone's corners are in, over the whole image.

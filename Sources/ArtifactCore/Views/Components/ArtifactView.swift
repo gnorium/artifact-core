@@ -2273,7 +2273,7 @@
         _ = self.currentStructure()
       }
       if on && !self.overlayOn {
-        self.overlayTarget = ("", [], false, 0)
+        self.overlayTarget = ("", [], false, 0, .center)
         self.overlayView = nil
         self.overlayZoomed = false
         self.overlayLeavesToFit = false
@@ -2493,7 +2493,8 @@
       let page = root.querySelector(".artifact-markup .tei-page[data-active='true']")
       let scanEm = OverlayRegistration.scanEm(page?.getAttribute(data("scan-em")) ?? "", width: size.width)
       let typeScale = scanEm > 0 && overlayTarget.em > 0 ? overlayTarget.em * unit / scanEm : 0
-      return OverlayRegistration.laid(box, zone: zone, size: size, spans: overlayTarget.spans, typeScale: typeScale)
+      return OverlayRegistration.laid(
+        box, zone: zone, size: size, spans: overlayTarget.spans, typeScale: typeScale, anchor: overlayTarget.anchor)
     }
 
     /// The shown layer's size unzoomed, its scale's frame's.
@@ -2619,17 +2620,24 @@
               (edges.bottom - box.y) / zoom,
             ],
             true,
-            em
+            em,
+            .center
           )
           return overlayTarget.box
         }
         var ink = InkExtent()
+        // How each line is set (`StructureAlignment`, as the structure's
+        // edition rows read it): the edge the scan is laid on across
+        // (`OverlayRegistration.anchor`).
+        var alignments: [StructureAlignment] = []
         if let context = document.createElement("canvas").getContext("2d") {
           let walker = document.createTreeWalker(frame, DOM.NodeFilter.SHOW_TEXT)
           let range = document.createRange()
           while let next = walker.nextNode() {
             guard let node = next as? DOM.Text, let parent = node.parentElement else { continue }
             measureInk(of: node, in: parent, context: context, range: range, into: &ink)
+            let alignment = Self.alignment(of: window.getComputedStyle(parent))
+            for _ in inkLines(of: node, in: parent, context: context, range: range) { alignments.append(alignment) }
           }
         }
         for drawn in frame.querySelectorAll(".tei-rule, .tei-figure-image, .tei-frame") {
@@ -2666,10 +2674,22 @@
             (measured[3] - box.y) / zoom,
           ],
           spans,
-          em
+          em,
+          OverlayRegistration.anchor(alignments)
         )
       }
       return overlayTarget.box
+    }
+
+    /// The edges a line is set by, from its element's computed text-align
+    /// and direction (gnorium-python `layout_preview._LINES`).
+    static func alignment(of style: ComputedStyle) -> StructureAlignment {
+      let align = style.getPropertyValue("text-align")
+      let rightToLeft = stringEquals(style.getPropertyValue("direction"), "rtl")
+      return stringEquals(align, "justify") ? .justified
+        : stringEquals(align, "center") ? .center
+        : stringEquals(align, "right") || (stringEquals(align, "end") && !rightToLeft)
+          || (stringEquals(align, "start") && rightToLeft) ? .right : .left
     }
 
     /// Whether an element draws a border on any side: a style other than
@@ -2796,7 +2816,9 @@
     /// (left, top, right, bottom), by its page's image and its layer.
     /// Its em there too (its frame's type, the work's body): the
     /// registration's type scale (`laid`).
-    private var overlayTarget: (page: String, box: [Double], spans: Bool, em: Double) = ("", [], false, 0)
+    private var overlayTarget: (page: String, box: [Double], spans: Bool, em: Double, anchor: OverlayAnchor) = (
+      "", [], false, 0, .center
+    )
 
     /// The overlay's framing of the shown layer (`OverlayFraming`) in the
     /// pane's room as it is now (`overlayRoom`): the whole scan image, the
@@ -4461,13 +4483,7 @@
             // How its line is set: the edges the print aligns, and its
             // type's em (CSS pixels, the layer's own).
             let style = window.getComputedStyle(parent)
-            let align = style.getPropertyValue("text-align")
-            let rightToLeft = stringEquals(style.getPropertyValue("direction"), "rtl")
-            let alignment: StructureAlignment =
-              stringEquals(align, "justify") ? .justified
-              : stringEquals(align, "center") ? .center
-              : stringEquals(align, "right") || (stringEquals(align, "end") && !rightToLeft)
-                || (stringEquals(align, "start") && rightToLeft) ? .right : .left
+            let alignment = Self.alignment(of: style)
             let em = pixels(style.getPropertyValue("font-size"))
             for line in inkLines(of: node, in: parent, context: context, range: range) {
               let row = StructureRow(
