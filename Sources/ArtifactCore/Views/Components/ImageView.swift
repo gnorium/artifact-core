@@ -344,6 +344,15 @@
     /// What the image shows now, nil until it has a size.
     var region: ViewerZoom.Region? { surface.region }
 
+    /// The image's size in its pixels, its fit (the viewport's pixels per
+    /// image pixel at it) and its viewport's size: what a region of the
+    /// image is in the text's terms (`ArtifactView`'s sync); nil before it
+    /// has them.
+    var sizing: (width: Double, height: Double, fit: Double, viewportWidth: Double, viewportHeight: Double)? {
+      guard imageW > 0, imageH > 0, minZoom > 0, viewportW > 0 else { return nil }
+      return (Double(imageW), Double(imageH), minZoom, viewportW, viewportH)
+    }
+
     /// The image at `region`: its zoom over its fit, clamped, the point at
     /// its middle. Told to no one: it is the text's move, matched.
     func show(region: ViewerZoom.Region) {

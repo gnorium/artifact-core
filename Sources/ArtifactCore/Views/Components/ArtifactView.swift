@@ -1404,7 +1404,7 @@
         self.showLayers()
         self.showMarkup(for: self.canvasIndex)
         if self.syncs, let region = self.shownCanvas?.region {
-          self.applyMatchText(region)
+          self.applyMatchText(self.textTerms(region))
         }
       }
       if stringIsEmpty(manifestURL) {
@@ -3305,7 +3305,67 @@
     /// match and stay matched; with no image, to 100%.
     private var matchedMaxScale: Double? {
       guard canvasShown && !rawVisible && !reflowOn else { return nil }
-      return shownCanvas?.region?.maxScale
+      return shownCanvas?.region.map(textTerms)?.maxScale
+    }
+
+    /// The page's main text block on both sides, the two panes' sync's
+    /// common ground (user, 2026-10-28: the image is the photograph—its
+    /// facing leaf, its ruler, its mount—and the text its leaf alone, so a
+    /// fraction of one is no fraction of the other): the scan's text block
+    /// (its zone's bounds, in the image's pixels) and the rendered one (its
+    /// ink, as the overlay registers by: `textBlock(in:drawnAt:)`, in the
+    /// shown layer at zoom 1), and the layer's size at zoom 1. Nil where
+    /// the page has no text block or none is drawn; then each pane is
+    /// matched by its whole, as before.
+    private func syncBlocks() -> (image: [Double], text: [Double], layer: (width: Double, height: Double))? {
+      guard let sizing = shownCanvas?.sizing, let zone = overlayZone(), let layer = shownLayer(),
+        let layerBox = layer.getBoundingClientRect(), layerBox.width > 0
+      else { return nil }
+      let zoom = parseDouble(layer.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
+      guard zoom > 0, let ink = textBlock(in: layer, drawnAt: zoom), ink.count == 4, ink[2] > ink[0], ink[3] > ink[1]
+      else { return nil }
+      let xs = [zone[0], zone[2], zone[4], zone[6]].map { $0 / Self.zoneExtent * sizing.width }
+      let ys = [zone[1], zone[3], zone[5], zone[7]].map { $0 / Self.zoneExtent * sizing.height }
+      guard let left = xs.min(), let right = xs.max(), let top = ys.min(), let bottom = ys.max(), right > left, bottom > top
+      else { return nil }
+      return ([left, top, right, bottom], ink, (layerBox.width / zoom, layerBox.height / zoom))
+    }
+
+    /// A region of the text (fractions of its layer, its zoom over its fit)
+    /// as the image's: the same point of the text block, and the same
+    /// share of its width in view (`syncBlocks`).
+    private func imageTerms(_ text: ViewerZoom.Region) -> ViewerZoom.Region {
+      guard let blocks = syncBlocks(), let sizing = shownCanvas?.sizing, let pane = markupPane, lastFit > 0,
+        pane.clientWidth > 0
+      else { return text }
+      let (image, block, layer) = blocks
+      let u = (text.centerX * layer.width - block[0]) / (block[2] - block[0])
+      let v = (text.centerY * layer.height - block[1]) / (block[3] - block[1])
+      // The share of the block's width the text pane shows, and the image's zoom that shows the same.
+      let share = Double(pane.clientWidth) / (text.scale * lastFit) / (block[2] - block[0])
+      let zoom = sizing.viewportWidth / (share * (image[2] - image[0]))
+      let factor = zoom / sizing.fit / text.scale
+      return .init(
+        centerX: (image[0] + u * (image[2] - image[0])) / sizing.width,
+        centerY: (image[1] + v * (image[3] - image[1])) / sizing.height,
+        scale: text.scale * factor, maxScale: text.maxScale * factor)
+    }
+
+    /// A region of the image as the text's (`imageTerms` the other way).
+    private func textTerms(_ image: ViewerZoom.Region) -> ViewerZoom.Region {
+      guard let blocks = syncBlocks(), let sizing = shownCanvas?.sizing, let pane = markupPane, lastFit > 0,
+        pane.clientWidth > 0, image.scale > 0
+      else { return image }
+      let (scan, block, layer) = blocks
+      let u = (image.centerX * sizing.width - scan[0]) / (scan[2] - scan[0])
+      let v = (image.centerY * sizing.height - scan[1]) / (scan[3] - scan[1])
+      let share = sizing.viewportWidth / (image.scale * sizing.fit) / (scan[2] - scan[0])
+      let zoom = Double(pane.clientWidth) / (share * (block[2] - block[0]))
+      let factor = zoom / lastFit / image.scale
+      return .init(
+        centerX: (block[0] + u * (block[2] - block[0])) / layer.width,
+        centerY: (block[1] + v * (block[3] - block[1])) / layer.height,
+        scale: image.scale * factor, maxScale: image.maxScale * factor)
     }
 
     /// The most the text zooms in, its fit being `fit`.
@@ -3348,6 +3408,7 @@
         matchText(to: target)
         return
       }
+      let target = textTerms(target)
       let ticket = textMatchAnimation
       let began = window.performance.now()
       @Sendable func step() {
@@ -3367,7 +3428,7 @@
     /// The text at the image's region, at the next frame.
     private func matchText(to region: ViewerZoom.Region) {
       textMatchAnimation += 1
-      pendingTextRegion = region
+      pendingTextRegion = textTerms(region)
       pendingImageMatch = false
       scheduleMatch()
     }
@@ -3386,7 +3447,7 @@
         if let region {
           self.applyMatchText(region)
         } else if image, self.syncs, let canvas = self.shownCanvas, let region = self.textRegion() {
-          canvas.show(region: region)
+          canvas.show(region: self.imageTerms(region))
         }
       }
     }
