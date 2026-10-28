@@ -2837,6 +2837,7 @@
       frame.style.setProperty("width", doubleToString(natural.width * view.zoom) + "px")
       frame.style.setProperty("height", doubleToString(natural.height * view.zoom) + "px")
       frame.style.setProperty("margin-inline-start", "0")
+      frame.style.setProperty("margin-block-start", "0")
       layer.style.setProperty("transform", "scale(" + doubleToString(view.zoom) + ")")
       layer.setAttribute(data("zoom"), doubleToString(view.zoom))
       pane.scrollLeft = 0
@@ -3540,8 +3541,9 @@
       let existing = stringEquals(parent.getAttribute(data("page-scale")) ?? "", "true")
       let margin = existing ? pixels(parent.style.getPropertyValue("margin-inline-start"))
         : pixels(layer.style.getPropertyValue("margin-inline-start")) * previous
+      let marginDown = existing ? pixels(parent.style.getPropertyValue("margin-block-start")) : 0
       let insetX = max(0, oldBox.x - paneBox.x + oldScroll.x - margin)
-      let insetY = max(0, oldBox.y - paneBox.y + oldScroll.y)
+      let insetY = max(0, oldBox.y - paneBox.y + oldScroll.y - marginDown)
       let style = window.getComputedStyle(pane)
       let borderX = pixels(style.getPropertyValue("border-left-width")) + pixels(style.getPropertyValue("border-right-width"))
       let borderY = pixels(style.getPropertyValue("border-top-width")) + pixels(style.getPropertyValue("border-bottom-width"))
@@ -3611,6 +3613,9 @@
       frame.style.setProperty("width", doubleToString(natural.width * zoom) + "px")
       frame.style.setProperty("height", doubleToString(natural.height * zoom) + "px")
       frame.style.setProperty("margin-inline-start", doubleToString(max(0, (pane.clientWidth - 2 * insetX - natural.width * zoom) / 2)) + "px")
+      // Down too, as the image is in its pane (user, 2026-10-28): a page
+      // shorter than its pane stands in its middle.
+      frame.style.setProperty("margin-block-start", doubleToString(max(0, (pane.clientHeight - 2 * insetY - natural.height * zoom) / 2)) + "px")
       layer.style.setProperty("transform", "scale(" + doubleToString(zoom) + ")")
       layer.setAttribute(data("zoom"), doubleToString(zoom))
       lastFit = fit
