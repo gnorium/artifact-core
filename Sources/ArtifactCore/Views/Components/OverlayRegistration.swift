@@ -98,6 +98,62 @@ enum OverlayRegistration {
     return distances.count % 2 == 1 ? distances[middle] : (distances[middle - 1] + distances[middle]) / 2
   }
 
+  /// What a pairing costs as `StructurePairing.pair` weighs it: twice each
+  /// pair's baselines' distance, a leading for each row left alone.
+  /// gnorium-python `layout_measure.pairing_cost`.
+  static func pairingCost(_ matches: [StructurePairing.Match], edition: [StructureRow], scan: [StructureRow], leading: Double)
+    -> Double
+  {
+    var cost = 0.0
+    for match in matches {
+      if case .pair(let e, let s, _) = match {
+        cost += 2 * abs(edition[e].seated - scan[s].seated)
+      } else {
+        cost += leading
+      }
+    }
+    return cost
+  }
+
+  /// How far down the scan's rows are laid on the edition's and the main
+  /// text's matches there (user, 2026-10-28). The median of one pairing on
+  /// the text block's registration (`baselineShift`) is not enough: where
+  /// the edition stands half a leading off the scan, part of its rows pair
+  /// with their neighbors, and that median locks every row one off (Hamlet
+  /// Q1 p. 4: 31 rows each paired with the next). So each place one leading
+  /// either side of that median is paired too, each settled at its own
+  /// pairs' median, and the scan is laid where its rows pair at the least
+  /// cost (`pairingCost`); not moved under three pairs. gnorium-python
+  /// `layout_measure.registration_down`.
+  static func registrationDown(edition: [StructureRow], scan: [StructureRow], leading: Double)
+    -> (down: Double, matches: [StructurePairing.Match])
+  {
+    func lowered(_ by: Double) -> [StructureRow] {
+      scan.map { row in
+        var moved = row
+        moved.top += by
+        moved.bottom += by
+        moved.baseline = row.baseline.map { $0 + by }
+        return moved
+      }
+    }
+    let matches = StructurePairing.pair(edition: edition, scan: scan, leading: leading)
+    var paired = 0
+    for match in matches { if case .pair = match { paired += 1 } }
+    guard paired >= 3 else { return (0, matches) }
+    let first = baselineShift(matches, edition: edition, scan: scan)
+    var best: (cost: Double, down: Double, matches: [StructurePairing.Match])?
+    for start in [first, first - leading, first + leading] {
+      let tried = lowered(start)
+      let down = start + baselineShift(StructurePairing.pair(edition: edition, scan: tried, leading: leading), edition: edition, scan: tried)
+      let laid = lowered(down)
+      let found = StructurePairing.pair(edition: edition, scan: laid, leading: leading)
+      let cost = pairingCost(found, edition: edition, scan: laid, leading: leading)
+      if best.map({ cost < $0.cost - 1e-9 }) ?? true { best = (cost, down, found) }
+    }
+    return best.map { ($0.down, $0.matches) } ?? (0, matches)
+  }
+
   /// How far across the page the scan is laid after the text block's
   /// registration (user, 2026-10-28): the median distance from the scan's
   /// paired lines to the edition's by the edges each edition line is set

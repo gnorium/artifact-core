@@ -187,4 +187,29 @@ final class OverlayRegistrationTests: XCTestCase {
       [[746.1, 386.4, 897.24, 408.67], [283.2, 513.43, 418.39, 535.4]])
     XCTAssertEqual(OverlayRegistration.wordBoxes(["p3-wz99"], in: zones), [])
   }
+
+  /// Hamlet Q1 p. 4 (user, 2026-10-28): the edition stood half a leading
+  /// and more below its scan, more so down the page; one pairing's median
+  /// laid the scan the wrong way and paired every line with the next. The
+  /// scan is laid where its rows pair at least cost: each with its own.
+  /// gnorium-python `test_the_scan_is_laid_down_where_its_lines_pair_at_least_cost_never_a_row_off`.
+  func testTheScanIsLaidDownWhereItsRowsPairAtLeastCostNeverARowOff() {
+    let leading = 20.0
+    let scan = (0..<36).map { n in StructureRow(left: 10, top: 20 * Double(n), right: 30, bottom: 20 * Double(n) + 10) }
+    let edition = (0..<36).map { n in
+      StructureRow(
+        left: 10, top: 20 * Double(n) + 9.4 + 0.13 * Double(n), right: 30, bottom: 20 * Double(n) + 19.4 + 0.13 * Double(n))
+    }
+    let first = OverlayRegistration.baselineShift(
+      StructurePairing.pair(edition: edition, scan: scan, leading: leading), edition: edition, scan: scan)
+    XCTAssertLessThan(first, 0, "the median of the first pairing lays the scan the wrong way")
+    let laid = OverlayRegistration.registrationDown(edition: edition, scan: scan, leading: leading)
+    XCTAssertGreaterThan(laid.down, 9.4)
+    XCTAssertLessThan(laid.down, 14)
+    var pairs: [[Int]] = []
+    for match in laid.matches { if case .pair(let e, let s, _) = match { pairs.append([e, s]) } }
+    XCTAssertEqual(pairs, (0..<36).map { [$0, $0] })
+    XCTAssertEqual(
+      OverlayRegistration.registrationDown(edition: Array(edition[0..<2]), scan: Array(scan[0..<2]), leading: leading).down, 0)
+  }
 }

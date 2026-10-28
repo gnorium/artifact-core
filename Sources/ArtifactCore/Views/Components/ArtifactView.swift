@@ -2435,7 +2435,8 @@
     /// 2026-10-28): after the text block's registration, across by the
     /// median distance between the main text's paired lines' set edges
     /// (`OverlayRegistration.edgeShift`) and down the page by the median
-    /// distance between their baselines (`baselineShift`), in the layer's
+    /// distance between their baselines, where the rows pair at least cost
+    /// (`registrationDown`), in the layer's
     /// own pixels, for the page and layer it was read on
     /// (`overlayTarget.page`'s key). A block's box is its ink's: a faint
     /// running head stood every line under it off by the same, a line set
@@ -4652,12 +4653,11 @@
       // Laid down the page by the main text's lines (`registrationShift`): read on the text block's
       // registration once, then the structure measured again with it.
       if !stringEquals(registrationShift.key, key) {
-        let matches = StructurePairing.pair(
-          edition: editionMain, scan: scanMain.map { $0.box }, leading: leading)
         let scanned = scanMain.map { $0.box }
+        // Down where the rows pair at least cost, never a row off (`OverlayRegistration.registrationDown`).
+        let laid = OverlayRegistration.registrationDown(edition: editionMain, scan: scanned, leading: leading)
         registrationShift = (
-          key, OverlayRegistration.edgeShift(matches, edition: editionMain, scan: scanned),
-          OverlayRegistration.baselineShift(matches, edition: editionMain, scan: scanned)
+          key, OverlayRegistration.edgeShift(laid.matches, edition: editionMain, scan: scanned), laid.down
         )
         if registrationShift.dx != 0 || registrationShift.dy != 0 { return currentStructure() }
       }
