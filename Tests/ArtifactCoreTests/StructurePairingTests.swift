@@ -120,6 +120,19 @@ final class StructureAlignmentTests: XCTestCase {
     XCTAssertTrue(StructurePairing.aligned(Self.row(100, 280, .none), scan))
   }
 
+  /// A speech and its stage direction set to the measure's right on one
+  /// baseline (Hamlet Q1 p. 19, user 2026-10-28): one row, judged by the
+  /// speech's start and the direction's end, never the speech's start alone.
+  func testALeftSetLineBesideARightSetOneIsJudgedByBothEdges() {
+    let row = Self.row(100, 300, .left, block: 1).joined(Self.row(500, 700, .right, block: 2))
+    XCTAssertEqual(row.alignment, .justified)
+    XCTAssertEqual(row.block, -1)
+    let scan = StructureRow(left: 100, top: 0, right: 640, bottom: 10)
+    XCTAssertFalse(StructurePairing.aligned(row, scan), "the direction set 60px (almost four ems) past the print's end")
+    XCTAssertTrue(StructurePairing.aligned(row, StructureRow(left: 100, top: 0, right: 690, bottom: 10)))
+    XCTAssertEqual(StructurePairing.lastLinesLeft([row]).first?.alignment, .justified)
+  }
+
   func testAJustifiedBlocksLastLineIsSetFromItsStartAlone() {
     let rows = StructurePairing.lastLinesLeft([
       Self.row(0, 100, .justified, block: 1), Self.row(0, 60, .justified, block: 1), Self.row(0, 100, .justified, block: 2),

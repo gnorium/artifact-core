@@ -35,11 +35,20 @@ struct StructureRow: Equatable {
   /// (gnorium-python `layout_measure.baseline`).
   var seated: Double { baseline ?? bottom }
 
-  /// The box around both, the first's setting kept; the baseline the
+  /// The box around both, the first's setting kept (a left-set and a
+  /// right-set line both edges); the baseline the
   /// larger type's (a superscript's or a small note's is not the row's),
   /// the lower of equal ones (gnorium-python `layout_preview._LINES`).
   func joined(_ other: StructureRow) -> StructureRow {
     var joined = self
+    // A left-set line beside a right-set one (a speech and its stage
+    // direction set to the measure's right, Hamlet Q1 p. 19, user
+    // 2026-10-28): the row is judged by both edges, the first's start and
+    // the other's end, never the first's alone; no block's last line.
+    if (alignment == .left && other.alignment == .right) || (alignment == .right && other.alignment == .left) {
+      joined.alignment = .justified
+      joined.block = -1
+    }
     joined.left = min(left, other.left)
     joined.top = min(top, other.top)
     joined.right = max(right, other.right)

@@ -495,11 +495,15 @@
           scrollbarWidth(.none)
           pseudoElement(.webkitScrollbar) { display(.none).important() }
         }
-        // The host's controls take the rest of the row, at its end (the
-        // start in RTL), the page's label alone at the row's start.
+        // The host's controls at the row's end (the start in RTL), their
+        // own width: the page's label takes the rest of the row, never
+        // fading while there is room for it (user, 2026-10-28: grown, the
+        // controls took half the row's spare width and the label faded
+        // short of them).
         descendant(".artifact-header-actions") {
           display(.flex)
-          flexGrow(1)
+          flexGrow(0)
+          flexShrink(0)
           alignItems(.center)
           justifyContent(.flexEnd)
           gap(spacing8)
@@ -2493,9 +2497,25 @@
       let page = root.querySelector(".artifact-markup .tei-page[data-active='true']")
       let scanEm = OverlayRegistration.scanEm(page?.getAttribute(data("scan-em")) ?? "", width: size.width)
       let typeScale = scanEm > 0 && overlayTarget.em > 0 ? overlayTarget.em * unit / scanEm : 0
-      return OverlayRegistration.laid(
+      var laid = OverlayRegistration.laid(
         box, zone: zone, size: size, spans: overlayTarget.spans, typeScale: typeScale, anchor: overlayTarget.anchor)
+      // Down the page by its lines (`registrationShift`), once the page's structure has read them.
+      if laid.count == 4, !stringIsEmpty(overlayTarget.page), stringEquals(registrationShift.key, overlayTarget.page) {
+        laid[1] += registrationShift.dy * unit
+        laid[3] += registrationShift.dy * unit
+      }
+      return laid
     }
+
+    /// The scan laid down the page by its lines (user, 2026-10-28): after
+    /// the text block's registration, by the median distance between the
+    /// main text's paired baselines (`OverlayRegistration.baselineShift`),
+    /// in the layer's own pixels, for the page and layer it was read on
+    /// (`overlayTarget.page`'s key). A block's top is its first line's ink:
+    /// a faint running head, its ascenders lost, stood every line under it
+    /// off by the same; the page's place on the scan is noise, its lines'
+    /// places to one another are the typesetting.
+    private var registrationShift: (key: String, dy: Double) = ("", 0)
 
     /// The shown layer's size unzoomed, its scale's frame's.
     private func naturalSize(of layer: DOM.Element) -> (width: Double, height: Double)? {
@@ -4603,6 +4623,14 @@
         StructureRow(
           left: row.left - shift.x, top: row.top - shift.y, right: row.right - shift.x, bottom: row.bottom - shift.y,
           baseline: row.baseline.map { $0 - shift.y }, baselineEm: row.baselineEm)
+      }
+      // Laid down the page by the main text's lines (`registrationShift`): read on the text block's
+      // registration once, then the structure measured again with it.
+      if !stringEquals(registrationShift.key, key) {
+        let matches = StructurePairing.pair(
+          edition: editionMain, scan: scanMain.map { $0.box }, leading: leading)
+        registrationShift = (key, OverlayRegistration.baselineShift(matches, edition: editionMain, scan: scanMain.map { $0.box }))
+        if registrationShift.dy != 0 { return currentStructure() }
       }
       for (edition, scan, from, to, leading) in groups {
         editionRowsAll += edition

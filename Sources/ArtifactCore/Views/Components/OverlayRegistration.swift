@@ -77,6 +77,23 @@ enum OverlayRegistration {
     return [left, box[1], left + width, typed ? box[1] + down * scale : box[3]]
   }
 
+  /// How far down the page the scan is laid after the text block's
+  /// registration (user, 2026-10-28): the median distance from the scan's
+  /// paired baselines (`StructureRow.seated`) to the edition's, positive
+  /// where the edition's stand lower; 0 under three pairs (too few to say
+  /// where the page's lines are). gnorium-python
+  /// `layout_measure.baseline_shift`.
+  static func baselineShift(_ matches: [StructurePairing.Match], edition: [StructureRow], scan: [StructureRow]) -> Double {
+    var distances: [Double] = []
+    for match in matches {
+      if case .pair(let e, let s, _) = match { distances.append(edition[e].seated - scan[s].seated) }
+    }
+    guard distances.count >= 3 else { return 0 }
+    distances.sort()
+    let middle = distances.count / 2
+    return distances.count % 2 == 1 ? distances[middle] : (distances[middle - 1] + distances[middle]) / 2
+  }
+
   /// The edge a block's lines are mostly set from: left or right where more
   /// than half of them are set so (`StructureAlignment`), else its center (a
   /// centered block, a justified one, a mix).
