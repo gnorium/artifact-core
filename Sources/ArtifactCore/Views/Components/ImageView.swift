@@ -202,9 +202,9 @@
           backgroundColor(backgroundColorBackdropLight)
           whiteSpace(.nowrap)
         }
-        // Zoomed in past half again its fit, the edges' names put away: the
-        // lines and the pointer's place name every point there (user,
-        // 2026-10-27).
+        // Under twice its fit (`gridLabelsFrom`), the edges' names put away:
+        // there they crowd the image, the pointer's place names a point
+        // (user, 2026-10-28).
         selector("& .image-grid[data-labels='off'] .image-grid-label") { display(.none) }
         // Everything but the region dimmed, as an image editor marks a
         // selection: a backdrop over the viewport, the region (and its ring)
@@ -898,12 +898,16 @@
       return grid
     }
 
+    /// How many times its fit the image is zoomed before the grid's edges
+    /// are named (`data-labels`).
+    static let gridLabelsFrom = 2.0
+
     /// The grid's levels, those whose lines stand at least 4px apart as
     /// the image is shown: each a gradient a line wide, tiled at its
     /// spacing, one an axis, the finer the fainter. Named on the grid
     /// (`data-levels`, "100 50 10") for whoever reads it.
     private func drawGridLevels(_ grid: DOM.Element) {
-      grid.setAttribute(data("labels"), zoom > minZoom * 1.5 ? "off" : "on")
+      grid.setAttribute(data("labels"), zoom < minZoom * Self.gridLabelsFrom ? "off" : "on")
       let shownW = Double(imageW) * zoom
       let shownH = Double(imageH) * zoom
       var layers: [String] = []
