@@ -448,658 +448,10 @@
       // The English switch's state, which a host's rules within the viewer
       // follow; a viewer with no switch leaves the page's to its ancestors.
       .style {
-        selector("&") {
-          display(.flex)
-          flexDirection(.column)
-          width(perc(100))
-          height(perc(100))
-          borderRadius(borderRadiusBase)
-          overflow(.hidden)
-          border(borderWidthBase, .solid, borderColorSubtle)
-          backgroundColor(backgroundColorBase)
-        }
-
-        selector(".artifact-header", ".artifact-footer") {
-          display(.flex)
-          alignItems(.center)
-          backgroundColor(backgroundColorBase)
-        }
-        selector(".artifact-header") {
-          // The controls' row, and the host's bar in a row of its own under
-          // it.
-          flexDirection(.column)
-          alignItems(.stretch)
-          // No gap: the bar carries the 12 above it as its own inset, so
-          // closed to no height it takes no room, and its opening animates
-          // its height alone (`TestamentFindHydration`).
-          // The bar is 56 and its controls medium, 40 (user, 2026-10-10):
-          // the 8 on every side of them is the row's own, so its label and
-          // controls clear the box's rounded corners and its scrollport
-          // takes in a control's focus ring, which it would otherwise cut
-          // off.
-          padding(0)
-          borderBlockEnd(borderWidthBase, .solid, borderColorSubtle)
-          minHeight(minSizeInteractiveTouch)
-        }
-        // One row, never wrapped: past its width it scrolls sideways under
-        // a swipe, with no scrollbar drawn (the tabs' pattern), and never
-        // the page.
-        descendant(".artifact-header-row") {
-          display(.flex)
-          alignItems(.center)
-          gap(spacing12)
-          minWidth(0)
-          padding(spacing8)
-          overflowX(.auto)
-          overflowY(.hidden)
-          scrollbarWidth(.none)
-          pseudoElement(.webkitScrollbar) { display(.none).important() }
-        }
-        // The host's controls at the row's end (the start in RTL), their
-        // own width: the page's label takes the rest of the row, never
-        // fading while there is room for it (user, 2026-10-28: grown, the
-        // controls took half the row's spare width and the label faded
-        // short of them).
-        descendant(".artifact-header-actions") {
-          display(.flex)
-          flexGrow(0)
-          flexShrink(0)
-          alignItems(.center)
-          justifyContent(.flexEnd)
-          gap(spacing8)
-        }
-        // The row above it again: 32 controls, 4 on every side, 8 under
-        // the row (its 4 and the panel's 4). The inset is the panel's,
-        // never the shell's: a shell's height counts its padding, so
-        // animated to 0 it stopped at its padding and stalled there, then
-        // grew.
-        descendant(".artifact-header-bar") {
-          minWidth(0)
-        }
-        descendant(".artifact-header-bar-panel") {
-          minWidth(0)
-          padding(spacing8)
-        }
-        descendant(".artifact-header-bar[data-open='false']") {
-          display(.none)
-        }
-        selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-header-toggle", "& .artifact-english-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle", "& .artifact-overlay-toggle") {
-          flexShrink(0)
-        }
-        // Its total unknown, the pager waits unseen rather than read "of —".
-        selector("&[data-pages-known='false'] .artifact-page-nav") {
-          visibility(.hidden)
-        }
-        selector("&[data-canvas-confirmed='false'] .artifact-canvas-toggle") {
-          display(.none)
-        }
-        // Beside the switch it explains, the footer's own gap from it.
-        descendant(".artifact-raw-info") {
-          flexShrink(0)
-          display(.inlineFlex)
-          alignItems(.center)
-        }
-        // Raw at the footer's start, the pager and fullscreen at its end.
-        descendant(".artifact-footer-start") {
-          display(.flex)
-          flex(1)
-          alignItems(.center)
-          gap(spacing8)
-          minWidth(0)
-        }
-        descendant(".artifact-viewer-container") {
-          flex(1)
-          display(.flex)
-          position(.relative)
-          width(perc(100))
-          minWidth(0)
-          maxWidth(perc(100))
-          overflow(.hidden)
-          // Side by side is a comparison; stacked is what fits. On a narrow
-          // screen the object takes the top half and its markup the bottom,
-          // rather than two columns too thin to read either.
-          media(maxWidth(maxWidthBreakpointMobile)) {
-            flexDirection(.column).important()
-          }
-        }
-        descendant(".artifact-object") {
-          flex(1, 1, perc(50))
-          display(.flex)
-          position(.relative)
-          minWidth(0)
-          minHeight(0)
-          overflow(.hidden)
-        }
-        descendant(".artifact-markup-frame") {
-          flex(1, 1, perc(50))
-          position(.relative)
-          minWidth(0)
-          minHeight(0)
-          overflow(.hidden)
-          // The pane, then what the host shows under it (`underMarkup`).
-          display(.flex)
-          flexDirection(.column)
-        }
-        // Its 1px edge is always there, transparent until the pane is ringed
-        // (the host colors it): ringed or not, the text stands in the same
-        // place, under the header's label.
-        descendant(".artifact-markup-box") {
-          position(.relative)
-          border(borderWidthBase, .solid, borderColorTransparent)
-          display(.flex)
-          flexDirection(.column)
-          flex("1 1 auto")
-          minHeight(0)
-          minWidth(0)
-        }
-        descendant(".artifact-markup-box > .artifact-markup") {
-          width(perc(100))
-          flex("1 1 auto")
-          minHeight(0)
-        }
-        // Under the markup pane, in its column, a zone as the pane is: one
-        // scrollport, both ways, at the pane's level (user, 2026-10-15);
-        // what it holds never scrolls within it. The pane keeps the rest of
-        // the column.
-        descendant(".artifact-under-markup") {
-          flexShrink(0)
-          minWidth(0)
-          maxHeight(perc(40))
-          overflow(.auto)
-        }
-        // A diff under its pane on the page's own ground, as the pane above
-        // it is: never the scan or the edition showing through it while the
-        // overlay leaves (user, 2026-10-27).
-        selector("& .artifact-under-markup", "& .artifact-under-header") { backgroundColor(backgroundColorBase) }
-        // The document's header, under its switch (user, 2026-10-21): code,
-        // read-only on the code's own gray, the whole column while it is on,
-        // a zone that scrolls both ways. It and the XML switch share the
-        // column as radio toggles do: the header on puts the markup's pane
-        // (and what stands under it, a page's diff) away, never stacked
-        // with the page's code.
-        descendant(".artifact-document-header") {
-          display(.none)
-          border(borderWidthBase, .solid, borderColorTransparent)
-        }
-        descendant(".artifact-under-header") {
-          display(.none)
-        }
-        for (state, color) in [("added", borderColorGreen), ("removed", borderColorRed), ("changed", borderColorOrange)] {
-          selector("& .artifact-document-header[data-ring='\(state)']") {
-            border(borderWidthBase, .solid, color)
-            outline(borderWidthBase, .solid, color)
-            CSS.Property("outline-offset", "calc(-2 * \(borderWidthBase.value))")
-          }
-          // The switch wears the ring only while the header is put away;
-          // shown, the pane wears it (user, 2026-10-26).
-          selector("&:not([data-header='true']) .artifact-header-toggle[data-ring='\(state)'] > .button-view") {
-            borderColor(color).important()
-            outline(borderWidthBase, .solid, color).important()
-            outlineOffset(px(0)).important()
-          }
-        }
-        selector("&[data-header='true'] .artifact-document-header") {
-          display(.flex)
-          flexDirection(.column)
-          flex("1 1 auto")
-          minWidth(0)
-          minHeight(0)
-          overflow(.auto)
-          backgroundColor(backgroundColorNeutralSubtle)
-        }
-        // A diff under the header pane splits the column evenly with it, as a
-        // page's diff splits the column with the markup pane (user, 2026-10-26).
-        selector("&[data-header='true']:has(.artifact-under-header) .artifact-document-header") {
-          flex("1 1 0")
-        }
-        // Laid out so while the overlay it put away leaves too (`overlayAside`):
-        // the diff as it will rest, never its whole length pushing the header
-        // out of the column and then snapping (user, 2026-10-27).
-        selector(
-          "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-under-header",
-          "&[data-header='true'][data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-under-header"
-        ) {
-          display(.flex)
-          flexDirection(.column)
-          flex("1 1 0")
-          minWidth(0)
-          minHeight(0)
-          overflow(.auto)
-        }
-        selector(
-          "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-markup-box",
-          "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-under-markup"
-        ) {
-          display(.none).important()
-        }
-        // The zone scrolls, never the code within it: its lines as wide as
-        // the longest, on the gray the whole way.
-        descendant(".artifact-document-header .code-view") {
-          flex("1 0 auto")
-          minWidth(perc(100))
-          width(.maxContent)
-          maxWidth(.none)
-          overflow(.visible)
-          borderRadius(0)
-        }
-        // Reflowed, its long lines wrap as the markup's code's do.
-        selector("&[data-reflow='true'] .artifact-document-header .code-view") {
-          width(perc(100)).important()
-        }
-        // Switched off with no markup, the column goes and the images take
-        // the whole viewer, as an object's with no markup do.
-        selector("&[data-header='false'] .artifact-markup-frame[data-header-only='true']") {
-          display(.none).important()
-        }
-        selector("&[data-header='false']:has(.artifact-markup-frame[data-header-only='true']) .artifact-object") {
-          CSS.Property("inset-inline-start", "0").important()
-          CSS.Property("inset-block-start", "0").important()
-          width(perc(100)).important()
-          height(perc(100)).important()
-        }
-        // The overlay lays the markup's pane on the image: the header is
-        // put away while it holds them.
-        selector("&[data-overlay-active='true'] .artifact-document-header", "&[data-overlay-registered='true'] .artifact-document-header") {
-          display(.none).important()
-        }
-        descendant(".artifact-markup") {
-          // Half the surface, whichever way the two are laid out. Without the
-          // zero minimums a flex item never shrinks past its content, and a
-          // page of verse would take two thirds of the viewer.
-          flex(1, 1, perc(50))
-          minWidth(0)
-          minHeight(0)
-          overflow(.auto)
-          // No padding of its own (user, 2026-10-10): the markup view
-          // carries the text's inset, so a state ring drawn on the pane
-          // (TestamentView) sits on the pane's own edges, with the canvas
-          // shown and put away alike.
-          padding(0)
-          // The divider sits on the markup's far edge, because the markup
-          // comes first: to its right when the two are side by side, under it
-          // when they stack. It used to be a leading border, from when the
-          // object led and the markup sat to its right.
-          borderInlineEnd(borderWidthBase, .solid, borderColorSubtle)
-          backgroundColor(backgroundColorBase)
-          media(maxWidth(maxWidthBreakpointMobile)) {
-            borderInlineEnd(.none).important()
-            borderBlockEnd(borderWidthBase, .solid, borderColorSubtle).important()
-          }
-        }
-        // The page images switched off: the markup alone, the whole
-        // width, with no divider beside or under it.
-        selector("&[data-canvas-shown='false'] .artifact-object") {
-          display(.none)
-        }
-        selector("&[data-canvas-shown='false'] .artifact-markup") {
-          borderInlineEnd(.none).important()
-          borderBlockEnd(.none).important()
-        }
-        // The switch is in the header and the layers are in the pane, so the
-        // rule that ties them lives on the viewer, where both are in scope.
-        selector("&:has(.artifact-xml-toggle[aria-pressed='true']) .artifact-markup [data-layer='rendering']") {
-          display(.none)
-        }
-        // Flex, not block: a layer holding one element also holds the
-        // whitespace around it in the markup, and a block container turns that
-        // into a line box above and below—a gap that looks like padding
-        // nobody asked for. A flex container drops whitespace-only children.
-        selector("&:has(.artifact-xml-toggle[aria-pressed='true']) .artifact-markup [data-layer='markup']") {
-          display(.flex)
-          flexDirection(.column)
-          width(perc(100))
-          minWidth(0)
-          maxWidth(perc(100))
-          // The markup pane owns both scrollbars. Giving this layer an
-          // overflow value creates a second vertical scroller in Raw mode.
-          overflow(.visible)
-        }
-        // Raw XML is intentionally preformatted and can contain very long
-        // lines. Let it contribute overflow to `.artifact-markup`, which is
-        // the single scroll owner for the entire markup half.
-        // The rendered page's lines, Reflow off, overflow into the pane too
-        // (user, 2026-10-12): `.artifact-markup` the one scroller for both
-        // axes, as under Raw, so its sideways bar stays at the pane's edge
-        // at every scroll, never at the foot of a tall page. (TEIView
-        // scrolls its own lines where no pane holds it.)
-        descendant(".artifact-markup .tei-page-text") {
-          overflow(.visible).important()
-        }
-        // Reflow off, a page's layer is as wide as its longest line: the
-        // shape its zoom fits (`ArtifactReader.applyZoom`).
-        // Two fingers on the pane pinch the text, never the page.
-        selector("&:not([data-reflow='true']) .artifact-markup [data-layer]") {
-          width(.maxContent).important()
-          maxWidth(.none).important()
-        }
-        // The rendered page takes the pane's cursor (the hand where a drag
-        // pans, the I-beam over its text), whatever its view sets for itself
-        // (an editable reader's, a Revise page's, sets the arrow, user,
-        // 2026-10-14); a word with a gloss keeps its own.
-        selector("& .artifact-markup [data-layer='rendering']", "& .artifact-markup [data-layer='translated-rendering']") {
-          CSS.Property("cursor", "inherit").important()
-        }
-        descendant(".artifact-markup[data-over-text='true']") { cursor(.text) }
-        descendant(".artifact-markup[data-dragging='true']") { cursor(.grabbing) }
-        selector("& .artifact-markup") {
-          CSS.Property("touch-action", "pan-x pan-y")
-          // Its scroll is the reader's or the sync's alone: the browser's
-          // anchoring would move it again after each zoom.
-          CSS.Property("overflow-anchor", "none")
-          // A swipe at its edge stays in it, as the image's does.
-          CSS.Property("overscroll-behavior", "contain")
-          // Panned by a drag off its text, as the image is: the text keeps
-          // its I-beam, the rest of the pane the hand.
-          cursor(.grab)
-        }
-        // Reflowed, it is a text pane that scrolls (user, 2026-10-14): the
-        // browser's own cursor, the I-beam over its text; nothing pans.
-        // So is its code (user, 2026-10-15): XML on, the browser's own
-        // cursor, the I-beam over the code, the arrow elsewhere; nothing
-        // pans. `data-raw` is the hydrated state (`showLayers`), never a
-        // `:has()` the browser may not reevaluate.
-        selector("&[data-reflow='true'] .artifact-markup", "&[data-raw='true'] .artifact-markup") {
-          cursor(.auto)
-        }
-        // The same two positioned frames interpolate into an overlay,
-        // rather than switching layout models halfway through the reveal.
-        selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-markup-frame", "&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
-          position(.absolute)
-          CSS.Property("inset-block-start", "0")
-          CSS.Property("inset-inline-start", "0")
-          width(perc(50))
-          height(perc(100))
-          // On the overlay's one clock and curve (`OverlayMotion`).
-          CSS.Property("transition", Self.overlayTransition)
-          media(maxWidth(maxWidthBreakpointMobile)) {
-            width(perc(100))
-            height(perc(50))
-          }
-          CSS.Property("will-change", "width, height, inset-inline-start, inset-block-start")
-          media("(prefers-reduced-motion: reduce)") { CSS.Property("transition", "none") }
-        }
-        selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
-          CSS.Property("inset-inline-start", "50%")
-          media(maxWidth(maxWidthBreakpointMobile)) {
-            CSS.Property("inset-inline-start", "0")
-            CSS.Property("inset-block-start", "50%")
-          }
-        }
-        selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-frame") {
-          CSS.Property("inset-inline-start", "0").important()
-          CSS.Property("inset-block-start", "0").important()
-          width(perc(100)).important()
-          height(perc(100)).important()
-        }
-        selector("&[data-overlay-active='true'] .artifact-viewer-container") {
-          display(.block)
-        }
-        selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-frame") {
-          position(.absolute)
-          width(perc(100)).important()
-          height(perc(100)).important()
-        }
-        selector("&[data-overlay-active='true'] .artifact-markup-frame") {
-          zIndex(1)
-        }
-        selector("&[data-overlay-active='true'] .artifact-markup") {
-          overflow(.hidden).important()
-        }
-        // The overlay draws structure, never the scan's pixels (user,
-        // 2026-10-14): from overlay on until off has run, the text on no
-        // ground of its own, the scan fading out under it and back on the
-        // overlay's one clock (`--artifact-overlay-progress`), gone at rest.
-        selector("&[data-overlay-fading='true'] .artifact-markup") {
-          backgroundColor(.transparent).important()
-        }
-        selector("&[data-overlay-fading='true'] .artifact-object") {
-          CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
-        }
-        // A pane that is not the rendering putting the overlay away (the
-        // XML, the header, Reflow: `overlayAside`), on the overlay's own
-        // exit (user, 2026-10-26): the panes slide apart and the image fades
-        // in under it as on any Overlay off; in the moving column the
-        // edition fades out while that pane—the header and its diff, the
-        // XML's code and the page's diff—fades in where it will rest, on the
-        // same clock (`--artifact-overlay-progress`, 1 to 0 on the way out).
-        // The edition's box is out of the column's flow meanwhile, over it,
-        // so the incoming panes lay out as they will stand. Put away, the
-        // edition fades back in on its way onto the scan.
-        selector("&[data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-markup-box") {
-          position(.absolute).important()
-          CSS.Property("inset", "0").important()
-          zIndex(1)
-          CSS.Property("opacity", "var(--artifact-overlay-progress, 0)")
-        }
-        selector(
-          "&[data-overlay-put-away='true'][data-overlay-fading='true'][data-header='true'] .artifact-document-header",
-          "&[data-overlay-put-away='true'][data-overlay-fading='true'][data-header='true']:has(.artifact-under-header .diff-view) .artifact-under-header"
-        ) {
-          display(.flex).important()
-          CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
-        }
-        // The XML's code and the page's diff under it, in a box of their own
-        // in the column (`xmlHandoff`), the edition's own box leaving over it.
-        selector("&[data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-xml-handoff") {
-          display(.flex).important()
-          flexDirection(.column)
-          flex("1 1 auto")
-          minHeight(0)
-          overflow(.hidden)
-          backgroundColor(backgroundColorNeutralSubtle)
-          CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
-        }
-        descendant(".artifact-xml-handoff") { display(.none) }
-        selector("&[data-overlay-put-away='true'][data-overlay-fading='true'][data-raw='true'] .artifact-under-markup") {
-          CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
-        }
-        // A code pane's numbered lines (the XML's, the header's) each hold
-        // their number inside their own box, the gutter their own padding
-        // and the code view's inset reached by their margin: a line laid
-        // out as it comes into view paints within its box alone (below),
-        // and a number drawn outside it, in the code's padding, was clipped
-        // away (user, 2026-10-27); so too a line's ground runs the whole row.
-        selector("& .artifact-markup .code-view[data-lined='true'] .code-code", "& .artifact-document-header .code-view[data-lined='true'] .code-code", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-code") {
-          CSS.Property("padding-inline-start", "0")
-        }
-        selector("& .artifact-markup .code-view[data-lined='true'] .code-line", "& .artifact-document-header .code-view[data-lined='true'] .code-line", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line") {
-          CSS.Property("margin-inline", "calc(-1 * \(spacing16.value))")
-          CSS.Property("padding-inline-start", "calc(\(spacing16.value) + var(--gutter) + 2 * \(spacing4.value))")
-          CSS.Property("padding-inline-end", spacing16.value)
-        }
-        selector("& .artifact-markup .code-view[data-lined='true'] .code-line::before", "& .artifact-document-header .code-view[data-lined='true'] .code-line::before", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line::before") {
-          CSS.Property("inset-inline-start", spacing16.value)
-        }
-        // A code line whose box the image shows as the pointer is on it
-        // (`markRegionLine`): its ground a selected line's, gutter to edge,
-        // its number in the text's color, as the editor marks the line its
-        // caret is on.
-        descendant(".code-line[data-region-hover='true']") { backgroundColor(backgroundColorCurrentLine) }
-        descendant(".code-line[data-region-hover='true']::before") { color(colorBase) }
-        // A code pane's lines and its diff's rows laid out only as they come
-        // into view: a Hamlet header's 688 lines and 1,209 diff rows took a
-        // 180 ms frame to show, 20 ms so (dev, 2026-10-26). Unwrapped alone,
-        // every line one line high, so a line not laid out yet stands
-        // exactly where it will (the diff's scroll sync reads them).
-        selector(
-          "&:not([data-reflow='true']) .artifact-document-header .code-line",
-          "&:not([data-reflow='true']) .artifact-markup .code-line",
-          "&:not([data-reflow='true']) .artifact-xml-handoff .code-line",
-          "&:not([data-reflow='true']) .artifact-under-header .diff-row",
-          "&:not([data-reflow='true']) .artifact-under-markup .diff-row"
-        ) {
-          CSS.Property("content-visibility", "auto")
-          CSS.Property("contain-intrinsic-block-size", "auto 1lh")
-        }
-        selector("&[data-overlay-active='true'] .image-viewport") { CSS.Property("touch-action", "none") }
-        selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled") {
-          backgroundColor(backgroundColorBlue).important()
-          borderColor(backgroundColorBlue).important()
-          CSS.Property("opacity", "0.5")
-        }
-        selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled .button-icon", "& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled .button-label") {
-          color(colorOnSolid).important()
-        }
-        // A page whose main text block was measured on its scan (user,
-        // 2026-10-14), from overlay on until overlay off has run: the
-        // edition's page on top, never scrolled (its zoom and pan the
-        // overlay's own), the scan's structure drawn over it
-        // (`.artifact-structure`).
-        selector("&[data-overlay-registered='true'] .artifact-markup-frame") {
-          zIndex(1)
-        }
-        selector("&[data-overlay-registered='true'] .artifact-markup") {
-          overflow(.hidden).important()
-          CSS.Property("touch-action", "none")
-        }
-        // The structure overlay's scene (`drawStructure`), in the layer's
-        // own pixels: the edition's outlines solid, the scan's dashed, a
-        // stroke the screen's width whatever the zoom; quiet within the
-        // tolerance, the diff's colors past it—orange a pair off, green an
-        // edition line the scan lacks, red a scan line the edition lacks.
-        descendant(".artifact-structure") {
-          // Fading in as the scan fades out, on the same clock.
-          CSS.Property("opacity", "var(--artifact-overlay-progress, 1)")
-          position(.absolute)
-          CSS.Property("left", "0")
-          CSS.Property("top", "0")
-          width(0)
-          height(0)
-          overflow(.visible)
-          pointerEvents(.none)
-        }
-        descendant(".artifact-structure svg") {
-          position(.absolute)
-          CSS.Property("left", "0")
-          CSS.Property("top", "0")
-          width(px(1))
-          height(px(1))
-          overflow(.visible)
-        }
-        selector("& .artifact-structure rect", "& .artifact-structure polygon") {
-          CSS.Property("fill", "none")
-          CSS.Property("stroke", borderColorSubtle.value)
-          CSS.Property("stroke-width", borderWidthBase.value)
-          CSS.Property("vector-effect", "non-scaling-stroke")
-        }
-        descendant(".artifact-structure [data-side='scan']") {
-          CSS.Property("stroke-dasharray", spacing4.value + " " + spacing4.value)
-        }
-        selector("& .artifact-structure [data-state='off']", "& .artifact-structure [data-state='extra']", "& .artifact-structure [data-state='missing']") {
-          CSS.Property("stroke-width", "calc(2 * " + borderWidthBase.value + ")")
-        }
-        descendant(".artifact-structure [data-state='off']") { CSS.Property("stroke", colorOrange.value) }
-        descendant(".artifact-structure [data-state='extra']") { CSS.Property("stroke", colorGreen.value) }
-        descendant(".artifact-structure [data-state='missing']") { CSS.Property("stroke", colorRed.value) }
-        // The edition's word the scan's under the pointer is (user,
-        // 2026-10-14), as the scan's band marks it: the band's yellow at its
-        // opacity (user, 2026-10-18), a pair.
-        descendant(".artifact-markup .tei-word[data-corresponding='true']") {
-          CSS.Property("background-color", "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)")
-        }
-        // Hugging the word: the fill drawn as one band at the glyphs'
-        // extent (`band`), the span's own box left clear.
-        descendant(".artifact-markup .tei-word[data-corresponding='true'][data-band='true']") {
-          backgroundColor(.transparent)
-          CSS.Property(
-            "background-image",
-            "linear-gradient(" + "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ", " + "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ")")
-          CSS.Property("background-repeat", "no-repeat")
-          CSS.Property("background-size", "var(--artifact-band-width) var(--artifact-band-height)")
-          CSS.Property("background-position", "var(--artifact-band-x) var(--artifact-band-y)")
-        }
-        // The code in the pane on the page's ground, gutter and all, as an
-        // editor's (Xcode's) is (user, 2026-10-12); a code block in prose
-        // keeps the code's gray, to stand apart from it.
-        selector("& .artifact-markup .code-view", "& .artifact-markup .code-view .code-gutter") {
-          backgroundColor(backgroundColorBase).important()
-        }
-        descendant(".artifact-markup [data-layer='markup'] .code-view") {
-          width(perc(100))
-          minWidth(0)
-          maxWidth(perc(100))
-          overflow(.visible)
-        }
-        // The code itself keeps the width of its longest line (CodeView's
-        // own): the block above holds the row at the pane's width, so the
-        // line overflows into the pane's scroller rather than widening the
-        // row, and the text's box still spans its text—what a selection
-        // dragged past the pane's edge extends into.
-        // Only the markup and the canvas of the page on screen. The rest
-        // stay in the document so that paging is a class change, not a fetch.
-        selector(
-          ".artifact-markup [data-service-id][data-active='false']",
-          ".artifact-object [data-service-id][data-active='false']"
-        ) {
-          display(.none)
-        }
-        // 56, as the header: 40 controls, 8 on every side of them. The
-        // pager and fullscreen at the row's end, the start in RTL.
-        // Never squeezed by the viewer's column: a header grown tall (its
-        // find bar open) takes the markup's room, never the pager's.
-        descendant(".artifact-footer") {
-          flexShrink(0)
-          justifyContent(.flexEnd)
-          gap(spacing8)
-          padding(spacing8)
-          minHeight(minSizeInteractiveTouch)
-          boxSizing(.borderBox)
-          borderBlockStart(borderWidthBase, .solid, borderColorSubtle)
-        }
-        // Its text where the rendered text starts below when left-aligned
-        // (user, 2026-10-12): the text's 16 inset in its layer, inside the
-        // TEI view's 1px ring padding inside the box's 1px edge (ringed or
-        // not), less the row's 8.
-        descendant(".artifact-canvas-label") {
-          fontSize(fontSizeMedium16)
-          color(colorBase)
-          flex(1)
-          minWidth(0)
-          CSS.Property(
-            "padding-inline-start",
-            "calc(\(spacing16.value) - \(spacing8.value) + 2 * \(borderWidthBase.value))")
-        }
-        edgeFadeView("& .artifact-canvas-label")
-        selector(".artifact-fullscreen-button") {
-          display(.flex)
-          alignItems(.center)
-          justifyContent(.center)
-          width(minSizeInteractiveTouch)
-          height(minSizeInteractiveTouch)
-          borderRadius(borderRadiusBase)
-          border(.none)
-          backgroundColor(.transparent)
-          color(colorBase)
-          cursor(.pointer)
-          flexShrink(0)
-        }
-        selector("& .artifact-fullscreen-exit", "&:fullscreen .artifact-fullscreen-enter") {
-          display(.none)
-        }
-        selector("&:fullscreen .artifact-fullscreen-exit") {
-          display(.flex)
-        }
-        // On a phone (below 480px) the viewer is never narrower than its
-        // footer's one row at its own size (user, 2026-10-12)—Raw, Reflow,
-        // the pager and fullscreen, their gaps, the footer's inset and the
-        // viewer's border—whatever the pager's total holds: the footer is
-        // as wide as its contents (`max-content`) and the viewer as wide as
-        // that (`min-content`), measured from the footer alone. A page that
-        // nests the viewer deeper scrolls
-        // sideways, as the outliner's does; nothing in it is resized.
-        media(maxWidth(maxWidthBreakpointPhoneNarrow)) {
-          selector("&") { CSS.Property("min-width", "min-content").important() }
-          selector("& .artifact-footer") { CSS.Property("min-width", "max-content").important() }
-          // Only the footer sets it: the rest (the header row, the pane and
-          // its unwrapped lines) is as wide as the viewer, whatever it holds.
-          selector("& > :not(.artifact-footer)") { CSS.Property("contain", "inline-size") }
-          // Option B (`ButtonView.phoneStep`): fullscreen small with every
-          // medium button; its icon stays on the 22px line, as theirs does.
-          selector("\(ButtonView.phoneStep) & .artifact-fullscreen-button") {
-            width(ButtonView.smallMinSize).important()
-            height(ButtonView.smallMinSize).important()
-          }
-        }
+        artifactFrameCSS()
+        artifactPanesCSS()
+        artifactOverlayCSS()
+        artifactControlsCSS()
       }
     }
   }
@@ -1108,6 +460,683 @@
     /// The panes' move into the overlay and out of it.
     static let overlayTransition = ["width", "height", "inset-inline-start", "inset-block-start"]
       .map { $0 + " " + OverlayMotion.timing }.joined(separator: ", ")
+    /// The scan under the overlay (user, 2026-10-28): its own opacity
+    /// fading to a quarter on the overlay's clock, back to whole going off.
+    static let overlayScanFade = "calc(1 - 0.75 * var(--artifact-overlay-progress, 0))"
+  }
+
+  extension ArtifactView {
+    // The view's style sheet in four parts, out of the builder: whole, it
+    // grew past what the type-checker resolves in time (user, 2026-10-28).
+    @CSSBuilder
+    private func artifactFrameCSS() -> [CSSOM.CSSRule] {
+      selector("&") {
+        display(.flex)
+        flexDirection(.column)
+        width(perc(100))
+        height(perc(100))
+        borderRadius(borderRadiusBase)
+        overflow(.hidden)
+        border(borderWidthBase, .solid, borderColorSubtle)
+        backgroundColor(backgroundColorBase)
+      }
+
+      selector(".artifact-header", ".artifact-footer") {
+        display(.flex)
+        alignItems(.center)
+        backgroundColor(backgroundColorBase)
+      }
+      selector(".artifact-header") {
+        // The controls' row, and the host's bar in a row of its own under
+        // it.
+        flexDirection(.column)
+        alignItems(.stretch)
+        // No gap: the bar carries the 12 above it as its own inset, so
+        // closed to no height it takes no room, and its opening animates
+        // its height alone (`TestamentFindHydration`).
+        // The bar is 56 and its controls medium, 40 (user, 2026-10-10):
+        // the 8 on every side of them is the row's own, so its label and
+        // controls clear the box's rounded corners and its scrollport
+        // takes in a control's focus ring, which it would otherwise cut
+        // off.
+        padding(0)
+        borderBlockEnd(borderWidthBase, .solid, borderColorSubtle)
+        minHeight(minSizeInteractiveTouch)
+      }
+      // One row, never wrapped: past its width it scrolls sideways under
+      // a swipe, with no scrollbar drawn (the tabs' pattern), and never
+      // the page.
+      descendant(".artifact-header-row") {
+        display(.flex)
+        alignItems(.center)
+        gap(spacing12)
+        minWidth(0)
+        padding(spacing8)
+        overflowX(.auto)
+        overflowY(.hidden)
+        scrollbarWidth(.none)
+        pseudoElement(.webkitScrollbar) { display(.none).important() }
+      }
+      // The host's controls at the row's end (the start in RTL), their
+      // own width: the page's label takes the rest of the row, never
+      // fading while there is room for it (user, 2026-10-28: grown, the
+      // controls took half the row's spare width and the label faded
+      // short of them).
+      descendant(".artifact-header-actions") {
+        display(.flex)
+        flexGrow(0)
+        flexShrink(0)
+        alignItems(.center)
+        justifyContent(.flexEnd)
+        gap(spacing8)
+      }
+      // The row above it again: 32 controls, 4 on every side, 8 under
+      // the row (its 4 and the panel's 4). The inset is the panel's,
+      // never the shell's: a shell's height counts its padding, so
+      // animated to 0 it stopped at its padding and stalled there, then
+      // grew.
+      descendant(".artifact-header-bar") {
+        minWidth(0)
+      }
+      descendant(".artifact-header-bar-panel") {
+        minWidth(0)
+        padding(spacing8)
+      }
+      descendant(".artifact-header-bar[data-open='false']") {
+        display(.none)
+      }
+      selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-header-toggle", "& .artifact-english-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle", "& .artifact-overlay-toggle") {
+        flexShrink(0)
+      }
+      // Its total unknown, the pager waits unseen rather than read "of —".
+      selector("&[data-pages-known='false'] .artifact-page-nav") {
+        visibility(.hidden)
+      }
+      selector("&[data-canvas-confirmed='false'] .artifact-canvas-toggle") {
+        display(.none)
+      }
+      // Beside the switch it explains, the footer's own gap from it.
+      descendant(".artifact-raw-info") {
+        flexShrink(0)
+        display(.inlineFlex)
+        alignItems(.center)
+      }
+      // Raw at the footer's start, the pager and fullscreen at its end.
+      descendant(".artifact-footer-start") {
+        display(.flex)
+        flex(1)
+        alignItems(.center)
+        gap(spacing8)
+        minWidth(0)
+      }
+      descendant(".artifact-viewer-container") {
+        flex(1)
+        display(.flex)
+        position(.relative)
+        width(perc(100))
+        minWidth(0)
+        maxWidth(perc(100))
+        overflow(.hidden)
+        // Side by side is a comparison; stacked is what fits. On a narrow
+        // screen the object takes the top half and its markup the bottom,
+        // rather than two columns too thin to read either.
+        media(maxWidth(maxWidthBreakpointMobile)) {
+          flexDirection(.column).important()
+        }
+      }
+      descendant(".artifact-object") {
+        flex(1, 1, perc(50))
+        display(.flex)
+        position(.relative)
+        minWidth(0)
+        minHeight(0)
+        overflow(.hidden)
+      }
+      descendant(".artifact-markup-frame") {
+        flex(1, 1, perc(50))
+        position(.relative)
+        minWidth(0)
+        minHeight(0)
+        overflow(.hidden)
+        // The pane, then what the host shows under it (`underMarkup`).
+        display(.flex)
+        flexDirection(.column)
+      }
+      // Its 1px edge is always there, transparent until the pane is ringed
+      // (the host colors it): ringed or not, the text stands in the same
+      // place, under the header's label.
+      descendant(".artifact-markup-box") {
+        position(.relative)
+        border(borderWidthBase, .solid, borderColorTransparent)
+        display(.flex)
+        flexDirection(.column)
+        flex("1 1 auto")
+        minHeight(0)
+        minWidth(0)
+      }
+      descendant(".artifact-markup-box > .artifact-markup") {
+        width(perc(100))
+        flex("1 1 auto")
+        minHeight(0)
+      }
+      // Under the markup pane, in its column, a zone as the pane is: one
+      // scrollport, both ways, at the pane's level (user, 2026-10-15);
+      // what it holds never scrolls within it. The pane keeps the rest of
+      // the column.
+      descendant(".artifact-under-markup") {
+        flexShrink(0)
+        minWidth(0)
+        maxHeight(perc(40))
+        overflow(.auto)
+      }
+      // A diff under its pane on the page's own ground, as the pane above
+      // it is: never the scan or the edition showing through it while the
+      // overlay leaves (user, 2026-10-27).
+      selector("& .artifact-under-markup", "& .artifact-under-header") { backgroundColor(backgroundColorBase) }
+      // The document's header, under its switch (user, 2026-10-21): code,
+      // read-only on the code's own gray, the whole column while it is on,
+      // a zone that scrolls both ways. It and the XML switch share the
+      // column as radio toggles do: the header on puts the markup's pane
+      // (and what stands under it, a page's diff) away, never stacked
+      // with the page's code.
+      descendant(".artifact-document-header") {
+        display(.none)
+        border(borderWidthBase, .solid, borderColorTransparent)
+      }
+      descendant(".artifact-under-header") {
+        display(.none)
+      }
+      for (state, color) in [("added", borderColorGreen), ("removed", borderColorRed), ("changed", borderColorOrange)] {
+        selector("& .artifact-document-header[data-ring='\(state)']") {
+          border(borderWidthBase, .solid, color)
+          outline(borderWidthBase, .solid, color)
+          CSS.Property("outline-offset", "calc(-2 * \(borderWidthBase.value))")
+        }
+        // The switch wears the ring only while the header is put away;
+        // shown, the pane wears it (user, 2026-10-26).
+        selector("&:not([data-header='true']) .artifact-header-toggle[data-ring='\(state)'] > .button-view") {
+          borderColor(color).important()
+          outline(borderWidthBase, .solid, color).important()
+          outlineOffset(px(0)).important()
+        }
+      }
+    }
+
+    @CSSBuilder
+    private func artifactPanesCSS() -> [CSSOM.CSSRule] {
+      selector("&[data-header='true'] .artifact-document-header") {
+        display(.flex)
+        flexDirection(.column)
+        flex("1 1 auto")
+        minWidth(0)
+        minHeight(0)
+        overflow(.auto)
+        backgroundColor(backgroundColorNeutralSubtle)
+      }
+      // A diff under the header pane splits the column evenly with it, as a
+      // page's diff splits the column with the markup pane (user, 2026-10-26).
+      selector("&[data-header='true']:has(.artifact-under-header) .artifact-document-header") {
+        flex("1 1 0")
+      }
+      // Laid out so while the overlay it put away leaves too (`overlayAside`):
+      // the diff as it will rest, never its whole length pushing the header
+      // out of the column and then snapping (user, 2026-10-27).
+      selector(
+        "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-under-header",
+        "&[data-header='true'][data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-under-header"
+      ) {
+        display(.flex)
+        flexDirection(.column)
+        flex("1 1 0")
+        minWidth(0)
+        minHeight(0)
+        overflow(.auto)
+      }
+      selector(
+        "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-markup-box",
+        "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-under-markup"
+      ) {
+        display(.none).important()
+      }
+      // The zone scrolls, never the code within it: its lines as wide as
+      // the longest, on the gray the whole way.
+      descendant(".artifact-document-header .code-view") {
+        flex("1 0 auto")
+        minWidth(perc(100))
+        width(.maxContent)
+        maxWidth(.none)
+        overflow(.visible)
+        borderRadius(0)
+      }
+      // Reflowed, its long lines wrap as the markup's code's do.
+      selector("&[data-reflow='true'] .artifact-document-header .code-view") {
+        width(perc(100)).important()
+      }
+      // Switched off with no markup, the column goes and the images take
+      // the whole viewer, as an object's with no markup do.
+      selector("&[data-header='false'] .artifact-markup-frame[data-header-only='true']") {
+        display(.none).important()
+      }
+      selector("&[data-header='false']:has(.artifact-markup-frame[data-header-only='true']) .artifact-object") {
+        CSS.Property("inset-inline-start", "0").important()
+        CSS.Property("inset-block-start", "0").important()
+        width(perc(100)).important()
+        height(perc(100)).important()
+      }
+      // The overlay lays the markup's pane on the image: the header is
+      // put away while it holds them.
+      selector("&[data-overlay-active='true'] .artifact-document-header", "&[data-overlay-registered='true'] .artifact-document-header") {
+        display(.none).important()
+      }
+      descendant(".artifact-markup") {
+        // Half the surface, whichever way the two are laid out. Without the
+        // zero minimums a flex item never shrinks past its content, and a
+        // page of verse would take two thirds of the viewer.
+        flex(1, 1, perc(50))
+        minWidth(0)
+        minHeight(0)
+        overflow(.auto)
+        // No padding of its own (user, 2026-10-10): the markup view
+        // carries the text's inset, so a state ring drawn on the pane
+        // (TestamentView) sits on the pane's own edges, with the canvas
+        // shown and put away alike.
+        padding(0)
+        // The divider sits on the markup's far edge, because the markup
+        // comes first: to its right when the two are side by side, under it
+        // when they stack. It used to be a leading border, from when the
+        // object led and the markup sat to its right.
+        borderInlineEnd(borderWidthBase, .solid, borderColorSubtle)
+        backgroundColor(backgroundColorBase)
+        media(maxWidth(maxWidthBreakpointMobile)) {
+          borderInlineEnd(.none).important()
+          borderBlockEnd(borderWidthBase, .solid, borderColorSubtle).important()
+        }
+      }
+      // The page images switched off: the markup alone, the whole
+      // width, with no divider beside or under it.
+      selector("&[data-canvas-shown='false'] .artifact-object") {
+        display(.none)
+      }
+      selector("&[data-canvas-shown='false'] .artifact-markup") {
+        borderInlineEnd(.none).important()
+        borderBlockEnd(.none).important()
+      }
+      // The switch is in the header and the layers are in the pane, so the
+      // rule that ties them lives on the viewer, where both are in scope.
+      selector("&:has(.artifact-xml-toggle[aria-pressed='true']) .artifact-markup [data-layer='rendering']") {
+        display(.none)
+      }
+      // Flex, not block: a layer holding one element also holds the
+      // whitespace around it in the markup, and a block container turns that
+      // into a line box above and below—a gap that looks like padding
+      // nobody asked for. A flex container drops whitespace-only children.
+      selector("&:has(.artifact-xml-toggle[aria-pressed='true']) .artifact-markup [data-layer='markup']") {
+        display(.flex)
+        flexDirection(.column)
+        width(perc(100))
+        minWidth(0)
+        maxWidth(perc(100))
+        // The markup pane owns both scrollbars. Giving this layer an
+        // overflow value creates a second vertical scroller in Raw mode.
+        overflow(.visible)
+      }
+      // Raw XML is intentionally preformatted and can contain very long
+      // lines. Let it contribute overflow to `.artifact-markup`, which is
+      // the single scroll owner for the entire markup half.
+      // The rendered page's lines, Reflow off, overflow into the pane too
+      // (user, 2026-10-12): `.artifact-markup` the one scroller for both
+      // axes, as under Raw, so its sideways bar stays at the pane's edge
+      // at every scroll, never at the foot of a tall page. (TEIView
+      // scrolls its own lines where no pane holds it.)
+      descendant(".artifact-markup .tei-page-text") {
+        overflow(.visible).important()
+      }
+      // Reflow off, a page's layer is as wide as its longest line: the
+      // shape its zoom fits (`ArtifactReader.applyZoom`).
+      // Two fingers on the pane pinch the text, never the page.
+      selector("&:not([data-reflow='true']) .artifact-markup [data-layer]") {
+        width(.maxContent).important()
+        maxWidth(.none).important()
+      }
+      // The rendered page takes the pane's cursor (the hand where a drag
+      // pans, the I-beam over its text), whatever its view sets for itself
+      // (an editable reader's, a Revise page's, sets the arrow, user,
+      // 2026-10-14); a word with a gloss keeps its own.
+      selector("& .artifact-markup [data-layer='rendering']", "& .artifact-markup [data-layer='translated-rendering']") {
+        CSS.Property("cursor", "inherit").important()
+      }
+      descendant(".artifact-markup[data-over-text='true']") { cursor(.text) }
+      descendant(".artifact-markup[data-dragging='true']") { cursor(.grabbing) }
+      selector("& .artifact-markup") {
+        CSS.Property("touch-action", "pan-x pan-y")
+        // Its scroll is the reader's or the sync's alone: the browser's
+        // anchoring would move it again after each zoom.
+        CSS.Property("overflow-anchor", "none")
+        // A swipe at its edge stays in it, as the image's does.
+        CSS.Property("overscroll-behavior", "contain")
+        // Panned by a drag off its text, as the image is: the text keeps
+        // its I-beam, the rest of the pane the hand.
+        cursor(.grab)
+      }
+      // Reflowed, it is a text pane that scrolls (user, 2026-10-14): the
+      // browser's own cursor, the I-beam over its text; nothing pans.
+      // So is its code (user, 2026-10-15): XML on, the browser's own
+      // cursor, the I-beam over the code, the arrow elsewhere; nothing
+      // pans. `data-raw` is the hydrated state (`showLayers`), never a
+      // `:has()` the browser may not reevaluate.
+      selector("&[data-reflow='true'] .artifact-markup", "&[data-raw='true'] .artifact-markup") {
+        cursor(.auto)
+      }
+      // The same two positioned frames interpolate into an overlay,
+      // rather than switching layout models halfway through the reveal.
+      selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-markup-frame", "&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
+        position(.absolute)
+        CSS.Property("inset-block-start", "0")
+        CSS.Property("inset-inline-start", "0")
+        width(perc(50))
+        height(perc(100))
+        // On the overlay's one clock and curve (`OverlayMotion`).
+        CSS.Property("transition", Self.overlayTransition)
+        media(maxWidth(maxWidthBreakpointMobile)) {
+          width(perc(100))
+          height(perc(50))
+        }
+        CSS.Property("will-change", "width, height, inset-inline-start, inset-block-start")
+        media("(prefers-reduced-motion: reduce)") { CSS.Property("transition", "none") }
+      }
+    }
+
+    @CSSBuilder
+    private func artifactOverlayCSS() -> [CSSOM.CSSRule] {
+      selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
+        CSS.Property("inset-inline-start", "50%")
+        media(maxWidth(maxWidthBreakpointMobile)) {
+          CSS.Property("inset-inline-start", "0")
+          CSS.Property("inset-block-start", "50%")
+        }
+      }
+      selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-frame") {
+        CSS.Property("inset-inline-start", "0").important()
+        CSS.Property("inset-block-start", "0").important()
+        width(perc(100)).important()
+        height(perc(100)).important()
+      }
+      selector("&[data-overlay-active='true'] .artifact-viewer-container") {
+        display(.block)
+      }
+      selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-frame") {
+        position(.absolute)
+        width(perc(100)).important()
+        height(perc(100)).important()
+      }
+      selector("&[data-overlay-active='true'] .artifact-markup-frame") {
+        zIndex(1)
+      }
+      selector("&[data-overlay-active='true'] .artifact-markup") {
+        overflow(.hidden).important()
+      }
+      // The overlay draws structure over a faint scan (user, 2026-10-28:
+      // the scan at a quarter, `overlayScanFade`): from overlay on
+      // until off has run, the text on no ground of its own, the scan
+      // fading under it to a quarter and back on the overlay's one clock
+      // (`--artifact-overlay-progress`).
+      selector("&[data-overlay-fading='true'] .artifact-markup") {
+        backgroundColor(.transparent).important()
+      }
+      selector("&[data-overlay-fading='true'] .artifact-object") {
+        CSS.Property("opacity", Self.overlayScanFade)
+      }
+      // A pane that is not the rendering putting the overlay away (the
+      // XML, the header, Reflow: `overlayAside`), on the overlay's own
+      // exit (user, 2026-10-26): the panes slide apart and the image fades
+      // in under it as on any Overlay off; in the moving column the
+      // edition fades out while that pane—the header and its diff, the
+      // XML's code and the page's diff—fades in where it will rest, on the
+      // same clock (`--artifact-overlay-progress`, 1 to 0 on the way out).
+      // The edition's box is out of the column's flow meanwhile, over it,
+      // so the incoming panes lay out as they will stand. Put away, the
+      // edition fades back in on its way onto the scan.
+      selector("&[data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-markup-box") {
+        position(.absolute).important()
+        CSS.Property("inset", "0").important()
+        zIndex(1)
+        CSS.Property("opacity", "var(--artifact-overlay-progress, 0)")
+      }
+      selector(
+        "&[data-overlay-put-away='true'][data-overlay-fading='true'][data-header='true'] .artifact-document-header",
+        "&[data-overlay-put-away='true'][data-overlay-fading='true'][data-header='true']:has(.artifact-under-header .diff-view) .artifact-under-header"
+      ) {
+        display(.flex).important()
+        CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
+      }
+      // The XML's code and the page's diff under it, in a box of their own
+      // in the column (`xmlHandoff`), the edition's own box leaving over it.
+      selector("&[data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-xml-handoff") {
+        display(.flex).important()
+        flexDirection(.column)
+        flex("1 1 auto")
+        minHeight(0)
+        overflow(.hidden)
+        backgroundColor(backgroundColorNeutralSubtle)
+        CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
+      }
+      descendant(".artifact-xml-handoff") { display(.none) }
+      selector("&[data-overlay-put-away='true'][data-overlay-fading='true'][data-raw='true'] .artifact-under-markup") {
+        CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
+      }
+      // A code pane's numbered lines (the XML's, the header's) each hold
+      // their number inside their own box, the gutter their own padding
+      // and the code view's inset reached by their margin: a line laid
+      // out as it comes into view paints within its box alone (below),
+      // and a number drawn outside it, in the code's padding, was clipped
+      // away (user, 2026-10-27); so too a line's ground runs the whole row.
+      selector("& .artifact-markup .code-view[data-lined='true'] .code-code", "& .artifact-document-header .code-view[data-lined='true'] .code-code", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-code") {
+        CSS.Property("padding-inline-start", "0")
+      }
+      selector("& .artifact-markup .code-view[data-lined='true'] .code-line", "& .artifact-document-header .code-view[data-lined='true'] .code-line", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line") {
+        CSS.Property("margin-inline", "calc(-1 * \(spacing16.value))")
+        CSS.Property("padding-inline-start", "calc(\(spacing16.value) + var(--gutter) + 2 * \(spacing4.value))")
+        CSS.Property("padding-inline-end", spacing16.value)
+      }
+      selector("& .artifact-markup .code-view[data-lined='true'] .code-line::before", "& .artifact-document-header .code-view[data-lined='true'] .code-line::before", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line::before") {
+        CSS.Property("inset-inline-start", spacing16.value)
+      }
+      // A code line whose box the image shows as the pointer is on it
+      // (`markRegionLine`): its ground a selected line's, gutter to edge,
+      // its number in the text's color, as the editor marks the line its
+      // caret is on.
+      descendant(".code-line[data-region-hover='true']") { backgroundColor(backgroundColorCurrentLine) }
+      descendant(".code-line[data-region-hover='true']::before") { color(colorBase) }
+      // A code pane's lines and its diff's rows laid out only as they come
+      // into view: a Hamlet header's 688 lines and 1,209 diff rows took a
+      // 180 ms frame to show, 20 ms so (dev, 2026-10-26). Unwrapped alone,
+      // every line one line high, so a line not laid out yet stands
+      // exactly where it will (the diff's scroll sync reads them).
+      selector(
+        "&:not([data-reflow='true']) .artifact-document-header .code-line",
+        "&:not([data-reflow='true']) .artifact-markup .code-line",
+        "&:not([data-reflow='true']) .artifact-xml-handoff .code-line",
+        "&:not([data-reflow='true']) .artifact-under-header .diff-row",
+        "&:not([data-reflow='true']) .artifact-under-markup .diff-row"
+      ) {
+        CSS.Property("content-visibility", "auto")
+        CSS.Property("contain-intrinsic-block-size", "auto 1lh")
+      }
+      selector("&[data-overlay-active='true'] .image-viewport") { CSS.Property("touch-action", "none") }
+      selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled") {
+        backgroundColor(backgroundColorBlue).important()
+        borderColor(backgroundColorBlue).important()
+        CSS.Property("opacity", "0.5")
+      }
+    }
+
+    @CSSBuilder
+    private func artifactControlsCSS() -> [CSSOM.CSSRule] {
+      selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled .button-icon", "& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled .button-label") {
+        color(colorOnSolid).important()
+      }
+      // A page whose main text block was measured on its scan (user,
+      // 2026-10-14), from overlay on until overlay off has run: the
+      // edition's page on top, never scrolled (its zoom and pan the
+      // overlay's own), the scan's structure drawn over it
+      // (`.artifact-structure`).
+      selector("&[data-overlay-registered='true'] .artifact-markup-frame") {
+        zIndex(1)
+      }
+      selector("&[data-overlay-registered='true'] .artifact-markup") {
+        overflow(.hidden).important()
+        CSS.Property("touch-action", "none")
+      }
+      // The structure overlay's scene (`drawStructure`), in the layer's
+      // own pixels: the edition's outlines solid, the scan's dashed, a
+      // stroke the screen's width whatever the zoom; quiet within the
+      // tolerance, the diff's colors past it—orange a pair off, green an
+      // edition line the scan lacks, red a scan line the edition lacks.
+      descendant(".artifact-structure") {
+        // Fading in as the scan fades out, on the same clock.
+        CSS.Property("opacity", "var(--artifact-overlay-progress, 1)")
+        position(.absolute)
+        CSS.Property("left", "0")
+        CSS.Property("top", "0")
+        width(0)
+        height(0)
+        overflow(.visible)
+        pointerEvents(.none)
+      }
+      descendant(".artifact-structure svg") {
+        position(.absolute)
+        CSS.Property("left", "0")
+        CSS.Property("top", "0")
+        width(px(1))
+        height(px(1))
+        overflow(.visible)
+      }
+      selector("& .artifact-structure rect", "& .artifact-structure polygon") {
+        CSS.Property("fill", "none")
+        CSS.Property("stroke", borderColorSubtle.value)
+        CSS.Property("stroke-width", borderWidthBase.value)
+        CSS.Property("vector-effect", "non-scaling-stroke")
+      }
+      descendant(".artifact-structure [data-side='scan']") {
+        CSS.Property("stroke-dasharray", spacing4.value + " " + spacing4.value)
+      }
+      selector("& .artifact-structure [data-state='off']", "& .artifact-structure [data-state='extra']", "& .artifact-structure [data-state='missing']") {
+        CSS.Property("stroke-width", "calc(2 * " + borderWidthBase.value + ")")
+      }
+      descendant(".artifact-structure [data-state='off']") { CSS.Property("stroke", colorOrange.value) }
+      descendant(".artifact-structure [data-state='extra']") { CSS.Property("stroke", colorGreen.value) }
+      descendant(".artifact-structure [data-state='missing']") { CSS.Property("stroke", colorRed.value) }
+      // The edition's word the scan's under the pointer is (user,
+      // 2026-10-14), as the scan's band marks it: the band's yellow at its
+      // opacity (user, 2026-10-18), a pair.
+      descendant(".artifact-markup .tei-word[data-corresponding='true']") {
+        CSS.Property("background-color", "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)")
+      }
+      // Hugging the word: the fill drawn as one band at the glyphs'
+      // extent (`band`), the span's own box left clear.
+      descendant(".artifact-markup .tei-word[data-corresponding='true'][data-band='true']") {
+        backgroundColor(.transparent)
+        CSS.Property(
+          "background-image",
+          "linear-gradient(" + "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ", " + "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ")")
+        CSS.Property("background-repeat", "no-repeat")
+        CSS.Property("background-size", "var(--artifact-band-width) var(--artifact-band-height)")
+        CSS.Property("background-position", "var(--artifact-band-x) var(--artifact-band-y)")
+      }
+      // The code in the pane on the page's ground, gutter and all, as an
+      // editor's (Xcode's) is (user, 2026-10-12); a code block in prose
+      // keeps the code's gray, to stand apart from it.
+      selector("& .artifact-markup .code-view", "& .artifact-markup .code-view .code-gutter") {
+        backgroundColor(backgroundColorBase).important()
+      }
+      descendant(".artifact-markup [data-layer='markup'] .code-view") {
+        width(perc(100))
+        minWidth(0)
+        maxWidth(perc(100))
+        overflow(.visible)
+      }
+      // The code itself keeps the width of its longest line (CodeView's
+      // own): the block above holds the row at the pane's width, so the
+      // line overflows into the pane's scroller rather than widening the
+      // row, and the text's box still spans its text—what a selection
+      // dragged past the pane's edge extends into.
+      // Only the markup and the canvas of the page on screen. The rest
+      // stay in the document so that paging is a class change, not a fetch.
+      selector(
+        ".artifact-markup [data-service-id][data-active='false']",
+        ".artifact-object [data-service-id][data-active='false']"
+      ) {
+        display(.none)
+      }
+      // 56, as the header: 40 controls, 8 on every side of them. The
+      // pager and fullscreen at the row's end, the start in RTL.
+      // Never squeezed by the viewer's column: a header grown tall (its
+      // find bar open) takes the markup's room, never the pager's.
+      descendant(".artifact-footer") {
+        flexShrink(0)
+        justifyContent(.flexEnd)
+        gap(spacing8)
+        padding(spacing8)
+        minHeight(minSizeInteractiveTouch)
+        boxSizing(.borderBox)
+        borderBlockStart(borderWidthBase, .solid, borderColorSubtle)
+      }
+      // Its text where the rendered text starts below when left-aligned
+      // (user, 2026-10-12): the text's 16 inset in its layer, inside the
+      // TEI view's 1px ring padding inside the box's 1px edge (ringed or
+      // not), less the row's 8.
+      descendant(".artifact-canvas-label") {
+        fontSize(fontSizeMedium16)
+        color(colorBase)
+        flex(1)
+        minWidth(0)
+        CSS.Property(
+          "padding-inline-start",
+          "calc(\(spacing16.value) - \(spacing8.value) + 2 * \(borderWidthBase.value))")
+      }
+      edgeFadeView("& .artifact-canvas-label")
+      selector(".artifact-fullscreen-button") {
+        display(.flex)
+        alignItems(.center)
+        justifyContent(.center)
+        width(minSizeInteractiveTouch)
+        height(minSizeInteractiveTouch)
+        borderRadius(borderRadiusBase)
+        border(.none)
+        backgroundColor(.transparent)
+        color(colorBase)
+        cursor(.pointer)
+        flexShrink(0)
+      }
+      selector("& .artifact-fullscreen-exit", "&:fullscreen .artifact-fullscreen-enter") {
+        display(.none)
+      }
+      selector("&:fullscreen .artifact-fullscreen-exit") {
+        display(.flex)
+      }
+      // On a phone (below 480px) the viewer is never narrower than its
+      // footer's one row at its own size (user, 2026-10-12)—Raw, Reflow,
+      // the pager and fullscreen, their gaps, the footer's inset and the
+      // viewer's border—whatever the pager's total holds: the footer is
+      // as wide as its contents (`max-content`) and the viewer as wide as
+      // that (`min-content`), measured from the footer alone. A page that
+      // nests the viewer deeper scrolls
+      // sideways, as the outliner's does; nothing in it is resized.
+      media(maxWidth(maxWidthBreakpointPhoneNarrow)) {
+        selector("&") { CSS.Property("min-width", "min-content").important() }
+        selector("& .artifact-footer") { CSS.Property("min-width", "max-content").important() }
+        // Only the footer sets it: the rest (the header row, the pane and
+        // its unwrapped lines) is as wide as the viewer, whatever it holds.
+        selector("& > :not(.artifact-footer)") { CSS.Property("contain", "inline-size") }
+        // Option B (`ButtonView.phoneStep`): fullscreen small with every
+        // medium button; its icon stays on the 22px line, as theirs does.
+        selector("\(ButtonView.phoneStep) & .artifact-fullscreen-button") {
+          width(ButtonView.smallMinSize).important()
+          height(ButtonView.smallMinSize).important()
+        }
+      }
+    }
+
   }
 
   extension ArtifactView {
@@ -1469,35 +1498,6 @@
       // image on screen fitted to the room it has now.
       if case .none = markupPane { shownCanvas?.refit() }
     }
-
-    /// The text pane's fit before the overlay came on: the fit it goes back
-    /// to as the overlay goes off (`placeOverlay`).
-    private var overlayLeaveFit: Double?
-
-    /// The shown page's fit in its pane as the pane rests at that fit: its
-    /// whole box less its borders and the text's inset, no scrollbar taken
-    /// out of it (a page at its fit shows none), as `applyPageScale` fits it.
-    private func restingFit() -> Double? {
-      guard let pane = markupPane, let layer = shownLayer(), let paneBox = pane.getBoundingClientRect(),
-        let box = layer.getBoundingClientRect()
-      else { return nil }
-      let zoom = currentZoom()
-      guard zoom > 0 else { return nil }
-      let style = window.getComputedStyle(pane)
-      let borderX = pixels(style.getPropertyValue("border-left-width")) + pixels(style.getPropertyValue("border-right-width"))
-      let borderY = pixels(style.getPropertyValue("border-top-width")) + pixels(style.getPropertyValue("border-bottom-width"))
-      let margin = layer.parentElement.map { pixels($0.style.getPropertyValue("margin-inline-start")) } ?? 0
-      let insetX = max(0, box.x - paneBox.x + pane.scrollLeft - margin)
-      let insetY = max(0, box.y - paneBox.y + pane.scrollTop)
-      let width = paneBox.width - borderX - 2 * insetX
-      let height = paneBox.height - borderY - 2 * insetY
-      guard width > 0, height > 0 else { return nil }
-      return containFit(width: box.width / zoom, height: box.height / zoom, paneWidth: width, paneHeight: height)
-    }
-    /// The pane's size when `overlayLeaveFit` was read.
-    private var overlayLeavePane: (Double, Double) = (0, 0)
-    /// And the page it was read on.
-    private var overlayLeavePage = ""
 
     /// Whether a pane that is not the rendering put the overlay away
     /// (`overlayAside`): every such pane put away, the overlay comes back.
@@ -2186,32 +2186,14 @@
     /// in the overlay (user, 2026-10-14), or the text to its own pane's fit
     /// where they never zoomed there (user, 2026-10-17).
     private var overlayLeaving = false
-    /// The overlay's view at rest, where the reader zoomed and panned it
-    /// (user, 2026-10-14): the text and the structure over it move as one; nil
-    /// at its fit (`OverlayFraming.fitted`).
-    private var overlayView: (zoom: Double, x: Double, y: Double)?
-    /// Whether the reader has the overlay zoomed past its fit (user,
-    /// 2026-10-17): its view theirs, kept as overlay off slides the panes
-    /// apart; never zoomed, or zoomed back to its fit, the overlay keeps to
-    /// its fit, and off returns the text to its own pane's (`overlayLeavesToFit`).
+    /// Whether the reader has the overlay's image zoomed past its fit.
     private var overlayZoomed = false
-    /// Overlay off from its fit: the text slides from the overlay's fit to
-    /// its own pane's, in every layout, and is kept at its fit (user,
-    /// 2026-10-17).
-    private var overlayLeavesToFit = false
-    /// The overlay's framing last placed: what the reader's zoom and pan
-    /// are held to.
-    private var lastFraming: OverlayFraming?
     /// The room the overlay frames the page in: the text pane's own room
     /// for its fit (`applyPageScale`), its inset from the pane's box and its
     /// size, so a page fitted in the overlay is fitted as its pane fits it,
     /// and the zoom overlay off keeps fits there exactly, never a scrollbar
     /// taller (the pane's whole client box did, its text's inset not kept).
     private var overlayRoom = (x: 0.0, y: 0.0, width: 0.0, height: 0.0)
-    /// Where the reader was looking when the overlay went off: a point of
-    /// the page in its layer's own pixels and the zoom, which the text pane
-    /// keeps at its middle as the panes slide apart.
-    private var overlayFocus: (x: Double, y: Double, zoom: Double)?
     /// Whether the overlay lays the scan's structure over the text by the page's
     /// main text block (`overlayZone`), from overlay on until overlay off
     /// has run (user, 2026-10-14): the edition's page
@@ -2254,12 +2236,8 @@
     private func reflectPageMarkup() {
       if overlayOn && !overlayApplies {
         pressOverlay(false)
-        // Its image left as the page's turn showed it: the spot the overlay
-        // came on at was the last page's.
-        scanOwn = nil
         setOverlay(false)
       } else if overlayOn {
-        overlayView = nil
         overlayZoomed = false
         setOverlayRegistered(overlayZone() != nil)
       }
@@ -2278,22 +2256,8 @@
       }
       if on && !self.overlayOn {
         self.overlayTarget = ("", [], false, 0, .center)
-        self.overlayView = nil
         self.overlayZoomed = false
-        self.overlayLeavesToFit = false
-        self.overlayFocus = nil
         self.overlayZoomStart = self.currentZoom()
-        // The pane's own fit, read while it rests: kept for a pane of the same
-        // size, as the last exit's frames may have left another behind.
-        let paneSize = (Double(self.markupPane?.clientWidth ?? 0), Double(self.markupPane?.clientHeight ?? 0))
-        let page = self.root.querySelector(".artifact-markup .tei-page[data-active='true']")?.getAttribute("data-service-id") ?? ""
-        if !self.overlayLeaving,
-          self.overlayLeaveFit == nil || self.overlayLeavePane != paneSize || !stringEquals(self.overlayLeavePage, page)
-        {
-          self.overlayLeaveFit = self.restingFit() ?? self.lastFit
-          self.overlayLeavePane = paneSize
-          self.overlayLeavePage = page
-        }
         self.overlayScrollStart = (self.markupPane?.scrollLeft ?? 0, self.markupPane?.scrollTop ?? 0)
         self.overlayZoomBegan = window.performance.now()
         self.overlayLeaving = false
@@ -2302,10 +2266,12 @@
           // Laid by the page's text block, from what the text shows now,
           // the pane's zoom and scroll kept for the way back; the image
           // leaving from what it shows.
-          self.scanOwn = self.shownCanvas?.spot
-          self.scanBeforeOverlay = self.scanOwn
-          self.scanBeforeAtFit = self.shownCanvas?.isAtFit ?? false
+          // The edition leaves from where the reader had it, in its pane,
+          // and comes back there; the image stays as its pane shows it.
           self.overlayFrom = self.layerPlace()
+          if let from = self.overlayFrom, let paneBox = self.markupPane?.getBoundingClientRect() {
+            self.editionBefore = (from.zoom, from.x - paneBox.x, from.y - paneBox.y)
+          }
           self.setOverlayRegistered(true)
         } else {
           // Without one, the text fits its whole page and the scan stays
@@ -2313,6 +2279,7 @@
           self.setZoom(nil, atFit: true)
         }
       } else if !on, let before = self.beforeOverlay {
+        self.leavingBefore = before
         self.overlayZoomStart = self.currentZoom()
         self.overlayZoomBegan = window.performance.now()
         self.overlayLeaving = true
@@ -2321,9 +2288,9 @@
           // overlay, each keeping the spot the reader was looking at
           // (user, 2026-10-14); never zoomed there, the text to its own
           // pane's fit (user, 2026-10-17).
-          self.overlayLeavesToFit = !self.overlayZoomed
+          // The edition slides from where it lies on the image back to
+          // where the reader had it (`editionBefore`); the image stays.
           self.overlayFrom = self.layerPlace()
-          self.leaveOverlay()
         } else {
           self.setZoom(before.zoom, atFit: before.atFit)
         }
@@ -2359,50 +2326,23 @@
           // The XML that put it away shown now it has landed.
           if self.rawVisible { self.showLayers() }
           let registered = self.overlayRegistered
-          // The spot the pane's own layout can hold in its middle: the
-          // scan is sent to it, so the two show one point.
-          if registered, let focus = self.overlayFocus, let pane = self.markupPane, let layer = self.shownLayer(),
-            let natural = self.naturalSize(of: layer)
-          {
-            // The view is the room's (`overlayRoom`); its middle the client box's.
-            let view = self.leavingView(focus, natural: natural)
-            let room = self.overlayRoom
-            let middle = (
-              x: (Double(pane.clientLeft) + Double(pane.clientWidth) / 2 - room.x - view.x) / focus.zoom,
-              y: (Double(pane.clientTop) + Double(pane.clientHeight) / 2 - room.y - view.y) / focus.zoom
-            )
-            self.overlayFocus = (middle.x, middle.y, focus.zoom)
-            if !self.overlayPutAway, !self.overlayLeavesToFit, let spot = self.scanSpot(at: middle, zoom: focus.zoom) {
-              self.scanOwn = spot
-            }
-          }
-          // The image its own again, at the spot it came back to; back to
-          // its fit where it rested at its fit before the overlay and goes
-          // back to that view (`leaveOverlay`): a spot read at the fit of
-          // another layout is a zoom, never the fit (user, 2026-10-27).
-          self.shownCanvas?.endBlend()
-          if registered, self.overlayPutAway || self.overlayLeavesToFit, self.scanBeforeAtFit {
-            self.shownCanvas?.refit()
-          } else if registered, let own = self.scanOwn {
-            self.shownCanvas?.showSpot(centerX: own.centerX, centerY: own.centerY, zoom: own.zoom)
-          }
-          self.scanOwn = nil
-          self.overlayLeavesToFit = false
+          // The edition back where the reader had it before the overlay,
+          // its zoom and its pane's scroll; the image as its pane shows it,
+          // never moved by the overlay (user, 2026-10-28).
           self.setOverlayRegistered(false)
+          if registered, let before = self.leavingBefore {
+            self.setZoom(before.zoom, atFit: before.atFit)
+          }
           self.applyZoom(about: nil)
           if registered, let pane = self.markupPane {
-            if let focus = self.overlayFocus, let layer = self.shownLayer(), let box = layer.getBoundingClientRect(),
-              let paneBox = pane.getBoundingClientRect()
-            {
-              let zoom = self.currentZoom()
-              pane.scrollLeft += box.x - paneBox.x - Double(pane.clientLeft) + focus.x * zoom - Double(pane.clientWidth) / 2
-              pane.scrollTop += box.y - paneBox.y - Double(pane.clientTop) + focus.y * zoom - Double(pane.clientHeight) / 2
-            }
+            pane.scrollLeft = self.overlayScrollStart.x
+            pane.scrollTop = self.overlayScrollStart.y
             self.matchedScroll = (pane.scrollLeft, pane.scrollTop)
-            self.overlayFocus = nil
           } else if self.syncs {
             self.matchImage()
           }
+          self.leavingBefore = nil
+          self.editionBefore = nil
         } else {
           // Back on the scan: an edition that faded out as a pane took its
           // place has faded back in (`overlayAside`).
@@ -2412,78 +2352,60 @@
       _ = window.requestAnimationFrame { frame() }
     }
 
-    /// The overlay going off (user, 2026-10-14): the spot of the page at
-    /// the middle of the view, and the zoom, which the text keeps as its
-    /// pane slides back (`overlayFocus`); the scan sent to the same spot of
-    /// its image at the zoom it is seen at (`CanvasReader.showSpot`),
-    /// through the registration's homography taken back.
-    private func leaveOverlay() {
-      guard let pane = markupPane, let paneBox = pane.getBoundingClientRect(), let place = layerPlace(), place.zoom > 0
-      else { return }
-      let x = (paneBox.x + Double(pane.clientLeft) + Double(pane.clientWidth) / 2 - place.x) / place.zoom
-      let y = (paneBox.y + Double(pane.clientTop) + Double(pane.clientHeight) / 2 - place.y) / place.zoom
-      overlayFocus = (x, y, place.zoom)
-      // From its fit, to the text pane's fit (`placeOverlay` follows it).
-      setZoom(overlayLeavesToFit ? nil : place.zoom, atFit: overlayLeavesToFit)
-      // A pane taking the edition's place (`overlayAside`), or an overlay
-      // never zoomed (its text going back to its own fit): the image back to
-      // its own view from before the overlay, never the overlay's zoom it
-      // kept for a reading done there (user, 2026-10-27).
-      if overlayPutAway || overlayLeavesToFit, let before = scanBeforeOverlay {
-        scanOwn = before
-      } else if let spot = scanSpot(at: (x, y), zoom: place.zoom) {
-        scanOwn = spot
+    /// The edition's place before the overlay, in its pane (its zoom, and
+    /// its layer's top-left from the pane's box's): where overlay off
+    /// slides it back to (user, 2026-10-28).
+    private var editionBefore: (zoom: Double, x: Double, y: Double)?
+    /// The edition's stored zoom before the overlay, put back once it has
+    /// slid home.
+    private var leavingBefore: (zoom: Double?, atFit: Bool)?
+
+    /// The edition laid on the image (user, 2026-10-28: the image stays
+    /// as its pane shows it; the edition slides and zooms onto the image's
+    /// text block): the layer's zoom and its top-left in the window that
+    /// set its rendered text block where registration lays the scan's
+    /// (`OverlayRegistration.laid`, taken the other way): at the type's
+    /// scale, the image's zoom over the rendered em per scan pixel; across
+    /// by the edge the block is set from (`overlayTarget.anchor`); down
+    /// the page by the text block's top and the lines' median baseline
+    /// (`registrationShift`), which moves the edition, never the image.
+    /// Nil where the image has no place yet or the page no text block.
+    private func editionOnImage(_ layer: DOM.Element) -> (zoom: Double, x: Double, y: Double)? {
+      guard let image = shownCanvas?.placement, let zone = overlayZone(),
+        let measured = textBlock(in: layer, drawnAt: currentZoom()), measured.count == 4,
+        measured[2] > measured[0], measured[3] > measured[1]
+      else { return nil }
+      let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? image.width : image.height) }
+      let across = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
+      let down = ((corners[6] - corners[0]) * (corners[6] - corners[0]) + (corners[7] - corners[1]) * (corners[7] - corners[1])).squareRoot()
+      guard across > 0, down > 0 else { return nil }
+      let page = root.querySelector(".artifact-markup .tei-page[data-active='true']")
+      let scanEm = OverlayRegistration.scanEm(page?.getAttribute(data("scan-em")) ?? "", width: image.width)
+      // The layer's pixels per scan pixel at its zoom 1: the type's scale.
+      let typeScale = scanEm > 0 && overlayTarget.em > 0 ? overlayTarget.em / scanEm : 0
+      let zoom: Double
+      if typeScale > 0 {
+        zoom = image.zoom / typeScale
+      } else if overlayTarget.spans {
+        zoom = across * image.zoom / (measured[2] - measured[0])
+      } else {
+        zoom = down * image.zoom / (measured[3] - measured[1])
       }
-    }
-
-    /// The image's own view as the overlay came on (`leaveOverlay`), and
-    /// whether it rested at its fit then.
-    private var scanBeforeOverlay: (centerX: Double, centerY: Double, zoom: Double)?
-    private var scanBeforeAtFit = false
-
-    /// The image's own view the overlay leaves from, coming on, and goes
-    /// back to, going off (`CanvasReader.blend`).
-    private var scanOwn: (centerX: Double, centerY: Double, zoom: Double)?
-
-    /// The image moved with the overlay (user, 2026-10-14): between its own
-    /// view (`scanOwn`) and where the overlay lays it, by the rendered text
-    /// block, on the overlay's one clock and curve, as it fades.
-    private func blendScan(_ layer: DOM.Element) {
-      guard let canvas = shownCanvas, let own = scanOwn, overlayRegistered, overlayOn || overlayLeaving,
-        let zone = overlayZone(), let measured = renderedTextBlock(in: layer)
-      else { return }
-      let box = shownImageSize.map {
-        laid([measured[0], measured[1], measured[2], measured[5]], zone: zone, size: $0, unit: currentZoom())
+      guard zoom > 0 else { return nil }
+      // The scan's text block's top edge on screen.
+      let width = across * image.zoom
+      let left = image.x + image.panX + corners[0] * image.zoom
+      let top = image.y + image.panY + corners[1] * image.zoom
+      let anchor: OverlayAnchor = typeScale <= 0 && overlayTarget.spans ? .left : overlayTarget.anchor
+      let x: Double
+      switch anchor {
+      case .left: x = left - measured[0] * zoom
+      case .right: x = left + width - measured[2] * zoom
+      case .center: x = left + width / 2 - (measured[0] + measured[2]) / 2 * zoom
       }
-        ?? [measured[0], measured[1], measured[2], measured[5]]
-      // Going off, the scan leaves from where it lay when the overlay went
-      // off, straight to its own pane: never riding the text's zoom on its
-      // way to the text pane's fit, which drew it past both (user,
-      // 2026-10-26: the overlay frames the whole scan).
-      if overlayOn { leavingScanTarget = box }
-      canvas.blend(
-        own: own, zone: zone, target: overlayOn ? box : leavingScanTarget ?? box,
-        progress: overlayOn ? overlayProgress : 1 - overlayProgress)
-    }
-
-    /// Where the scan lay (its laid box in the window) the last time the
-    /// overlay was on: what its way back to its own pane starts from
-    /// (`blendScan`), the text's zoom leaving from elsewhere.
-    private var leavingScanTarget: [Double]?
-
-    /// The image's spot under `spot` (the page's point, in the layer's own
-    /// pixels) at the zoom the text is drawn at, through the registration's
-    /// homography taken back: where the overlay off leaves it.
-    private func scanSpot(at spot: (x: Double, y: Double), zoom: Double) -> (centerX: Double, centerY: Double, zoom: Double)? {
-      guard let zone = overlayZone(), overlayTarget.box.count == 4, let size = shownImageSize else { return nil }
-      let box = laid(overlayTarget.box, zone: zone, size: size)
-      let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
-      let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
-      guard let back = Homography(from: target, to: corners) else { return nil }
-      let point = back.apply(x: spot.x, y: spot.y)
-      let zoneSpan = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
-      guard zoneSpan > 0 else { return nil }
-      return (point.x / size.width, point.y / size.height, zoom * (box[2] - box[0]) / zoneSpan)
+      let shift =
+        !stringIsEmpty(overlayTarget.page) && stringEquals(registrationShift.key, overlayTarget.page) ? registrationShift.dy : 0
+      return (zoom, x, top - (measured[1] + shift) * zoom)
     }
 
     /// Where registration lays the zone on the rendered main text block's
@@ -2870,16 +2792,15 @@
       return OverlayFraming(content: content, width: room.width, height: room.height, actual: actual)
     }
 
-    /// The layer where the overlay frames it (user, 2026-10-14): on its
-    /// way in from where the reader had it to its fit, centered, the
-    /// whole scan image framed (`overlayFraming`); there, at the reader's
-    /// own zoom and pan, the text and the structure over it moving as one
-    /// (`overlayView`, held to the framing); on its way out at that zoom,
-    /// sliding into its own pane with the spot the reader was looking at in
-    /// its middle (`overlayFocus`). Set by the layer's scale and its frame's
-    /// translation, the pane never scrolled. Framed in `room` (its inset
-    /// from the pane's box and its size), the room the pane's fit is
-    /// measured in.
+    /// The layer where the overlay lays it (user, 2026-10-28): the image
+    /// stays as its pane shows it, and the edition slides and zooms onto
+    /// the image's text block (`editionOnImage`), from where the reader had
+    /// it; at rest there, following the image as the reader zooms and pans
+    /// it (`zoomOverlay`, `panOverlay`); going off, back to where it was
+    /// (`editionBefore`). Set by the layer's scale and its frame's
+    /// translation, the pane never scrolled. `room` (its inset from the
+    /// pane's box and its size) frames the page where the image has no
+    /// place yet.
     private func placeOverlay(
       _ layer: DOM.Element, frame: DOM.Element, in pane: DOM.Element, natural: DOM.Rect,
       room: (x: Double, y: Double, width: Double, height: Double), fit: Double, resting: Double
@@ -2887,44 +2808,26 @@
       guard let paneBox = pane.getBoundingClientRect() else { return }
       overlayRoom = room
       let framing = overlayFraming(layer: layer, natural: (natural.width, natural.height), in: (room.width, room.height))
-      lastFraming = framing
       let origin = (x: paneBox.x + room.x, y: paneBox.y + room.y)
       let progress = overlayProgress
       _ = frame.style.removeProperty("transform")
       var view: (zoom: Double, x: Double, y: Double)
       let from = overlayFrom.map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? framing.fitted
       func between(_ a: Double, _ b: Double) -> Double { a + (b - a) * progress }
+      // On the image: where its text block is as the image's pane shows it
+      // (`editionOnImage`), the overlay's room framing it where the image
+      // has no place yet.
+      let onImage = editionOnImage(layer).map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? framing.fitted
       if overlayOn && progress >= 1 {
-        // Never zoomed, its fit, as the pane's size moves it.
-        view = framing.held(overlayZoomed ? overlayView ?? framing.fitted : framing.fitted)
-        overlayView = view
+        view = onImage
       } else if overlayOn {
-        let to = framing.fitted
-        view = (between(from.zoom, to.zoom), between(from.x, to.x), between(from.y, to.y))
+        view = (between(from.zoom, onImage.zoom), between(from.x, onImage.x), between(from.y, onImage.y))
       } else {
-        // Out: at the overlay's zoom, the spot in the middle of the pane
-        // as it is now (it grows back to its own size on the same clock),
-        // as near as the pane's own layout lets it be.
-        // From its fit, to the pane's fit as it is now, the scan sent to
-        // the spot the text then shows (user, 2026-10-17).
-        var focus = overlayFocus ?? (x: 0, y: 0, zoom: from.zoom)
-        // The pane's fit as it will be once back in its own place, the fit
-        // it had before the overlay: never the fit of the pane mid-move,
-        // which swept the scan's aim up and back down (user, 2026-10-26).
-        let leaveFit = overlayLeaveFit ?? fit
-        if overlayLeavesToFit {
-          focus.zoom = leaveFit
-          overlayFocus = focus
-        }
-        let to = leavingView(focus, natural: (natural.width, natural.height))
-        if overlayLeavesToFit {
-          let middle = (
-            x: (Double(pane.clientLeft) + Double(pane.clientWidth) / 2 - room.x - to.x) / leaveFit,
-            y: (Double(pane.clientTop) + Double(pane.clientHeight) / 2 - room.y - to.y) / leaveFit
-          )
-          if let spot = scanSpot(at: middle, zoom: leaveFit) { scanOwn = spot }
-        }
-        view = (between(from.zoom, focus.zoom), between(from.x, to.x), between(from.y, to.y))
+        // Out: from where it lay on the image back to where the reader had
+        // it in its pane (`editionBefore`), the pane sliding back on the
+        // same clock.
+        let back = editionBefore.map { (zoom: $0.zoom, x: paneBox.x + $0.x - origin.x, y: paneBox.y + $0.y - origin.y) } ?? from
+        view = (between(from.zoom, back.zoom), between(from.x, back.x), between(from.y, back.y))
       }
       frame.style.setProperty("width", doubleToString(natural.width * view.zoom) + "px")
       frame.style.setProperty("height", doubleToString(natural.height * view.zoom) + "px")
@@ -2942,24 +2845,6 @@
       lastFit = fit
       matchedScroll = (pane.scrollLeft, pane.scrollTop)
       drawStructure()
-      blendScan(layer)
-    }
-
-    /// Where the text's pane holds the page at the overlay's zoom, the spot
-    /// the reader was looking at (`focus`, in the layer's own pixels) in
-    /// its middle, as near as the pane's own layout lets it be: a page no
-    /// wider than the pane's room (`overlayRoom`) centered across it, no
-    /// taller than it at its top; else no edge pulled in past the room's.
-    private func leavingView(
-      _ focus: (x: Double, y: Double, zoom: Double), natural: (width: Double, height: Double)
-    ) -> (x: Double, y: Double) {
-      let width = overlayRoom.width
-      let height = overlayRoom.height
-      let across = natural.width * focus.zoom
-      let down = natural.height * focus.zoom
-      let x = across <= width ? (width - across) / 2 : min(0, max(width - across, width / 2 - focus.x * focus.zoom))
-      let y = down <= height ? 0 : min(0, max(height - down, height / 2 - focus.y * focus.zoom))
-      return (x, y)
     }
 
     /// Whether the overlay is at rest, laid by registration: the reader's
@@ -2967,29 +2852,21 @@
     /// 2026-10-14).
     private var overlayRests: Bool { overlayRegistered && overlayOn && overlayProgress >= 1 }
 
-    /// The overlay's view zoomed to `value` about `anchor` (a point of the
-    /// pane's box), the page's point under it kept there, held to the
-    /// framing.
+    /// The overlay zoomed to `value` (the edition's zoom it asks for) about
+    /// `anchor` (a point of the pane's box): the image's zoom (user,
+    /// 2026-10-28: the image is the overlay's ground, the edition laid on
+    /// it follows), by the same factor about the same point.
     private func zoomOverlay(to value: Double, about anchor: (x: Double, y: Double)) {
-      guard let framing = lastFraming else { return }
-      let view = overlayView ?? framing.fitted
-      // The view is the room's: the anchor taken into it.
-      let at = (x: anchor.x - overlayRoom.x, y: anchor.y - overlayRoom.y)
-      let point = ((at.x - view.x) / view.zoom, (at.y - view.y) / view.zoom)
-      let zoom = framing.held((value, 0, 0)).zoom
-      overlayView = framing.held((zoom, at.x - point.0 * zoom, at.y - point.1 * zoom))
-      // Past its fit by a pixel or more, the reader's zoom; within one, its fit.
-      let extent = max(framing.content.right - framing.content.left, framing.content.bottom - framing.content.top)
-      overlayZoomed = (zoom - framing.fit) * extent >= 1
+      guard let canvas = shownCanvas, let paneBox = markupPane?.getBoundingClientRect(), currentZoom() > 0 else { return }
+      canvas.zoomInOverlay(by: value / currentZoom(), clientX: paneBox.x + anchor.x, clientY: paneBox.y + anchor.y)
+      overlayZoomed = !(canvas.isAtFit)
       applyZoom(about: nil)
     }
 
-    /// The overlay's view moved by `dx`, `dy` (the pane's pixels), held to
-    /// the framing.
+    /// The overlay moved by `dx`, `dy` (the pane's pixels): the image's
+    /// pan, the edition following.
     private func panOverlay(by dx: Double, _ dy: Double) {
-      guard let framing = lastFraming else { return }
-      let view = overlayView ?? framing.fitted
-      overlayView = framing.held((view.zoom, view.x + dx, view.y + dy))
+      shownCanvas?.panInOverlay(by: dx, dy)
       applyZoom(about: nil)
     }
 
@@ -3298,7 +3175,8 @@
         } else if stringEquals(key, "-") {
           zoomOverlay(to: currentZoom() * ViewerZoom.wheelFactor(ViewerZoom.wheelTravel), about: middle)
         } else if stringEquals(key, "0") {
-          overlayView = nil
+          // The image back to its fit, the edition on it.
+          shownCanvas?.refit()
           overlayZoomed = false
           applyZoom(about: nil)
         } else if stringEquals(key, "ArrowLeft") {

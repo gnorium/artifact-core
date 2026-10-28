@@ -587,6 +587,35 @@
       )
     }
 
+    /// Where the image is shown (user, 2026-10-28: the overlay lays the
+    /// edition on the image, never the image on the edition): its
+    /// viewport's place in the window, its pan and zoom (the viewport's
+    /// pixels per image pixel) and its own size in pixels; nil before it
+    /// has one.
+    var placement: (x: Double, y: Double, panX: Double, panY: Double, zoom: Double, width: Double, height: Double)? {
+      guard imageW > 0, imageH > 0, zoom > 0, let box = viewport?.getBoundingClientRect(), box.width > 0 else {
+        return nil
+      }
+      return (box.x, box.y, panX, panY, zoom, Double(imageW), Double(imageH))
+    }
+
+    /// The overlay's zoom, the image's (user, 2026-10-28): by `factor`
+    /// about a point of the window, held to its fit and its actual size,
+    /// the edition laid on it following. The overlay holds the image's own
+    /// gestures (`locked`); this is the overlay's.
+    func zoomInOverlay(by factor: Double, clientX: Double, clientY: Double) {
+      guard imageW > 0, imageH > 0, factor > 0, let box = viewport?.getBoundingClientRect() else { return }
+      surface.zoom(to: zoom * factor, aboutX: clientX - box.x, y: clientY - box.y)
+      updateTransform()
+    }
+
+    /// The overlay's pan, the image's, by `dx`, `dy` (the window's pixels).
+    func panInOverlay(by dx: Double, _ dy: Double) {
+      guard imageW > 0, imageH > 0 else { return }
+      surface.pan(by: dx, dy)
+      updateTransform()
+    }
+
     /// Whether the overlay is moving the image (`blend`): its viewport's
     /// resizing leaves it be.
     private var blending = false
