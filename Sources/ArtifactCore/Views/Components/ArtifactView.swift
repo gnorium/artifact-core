@@ -2543,10 +2543,17 @@
     /// The page's rendered text block (`renderedTextBlock`) in its layer's
     /// own pixels (left, top, right, bottom), the layer drawn at `zoom`:
     /// measured once a page and kept (`overlayTarget`).
-    private func textBlock(in layer: DOM.Element, drawnAt zoom: Double) -> [Double]? {
+    private func textBlock(in layer: DOM.Element, drawnAt stated: Double) -> [Double]? {
       guard let page = layer.closest(".tei-page"), let box = layer.getBoundingClientRect(), box.width > 0 else {
         return nil
       }
+      // The scale it is drawn at, its box over its own width: what it is
+      // measured in, kept for the page. The zoom its attribute states can
+      // run ahead of its transform (a page turned to, measured before its
+      // scale is set), and a box kept in it was off by their ratio (the
+      // title page's 2.5 times, user 2026-10-28: the panes' sync zoomed
+      // the image far past the text).
+      let zoom = layer.offsetWidth > 0 ? box.width / layer.offsetWidth : stated
       let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
       if !stringEquals(overlayTarget.page, id) || overlayTarget.box.count != 4 {
         let frame = layer.querySelector(".tei-text-block") ?? layer
