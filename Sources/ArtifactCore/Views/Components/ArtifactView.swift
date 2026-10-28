@@ -2403,9 +2403,9 @@
       case .right: x = left + width - measured[2] * zoom
       case .center: x = left + width / 2 - (measured[0] + measured[2]) / 2 * zoom
       }
-      let shift =
-        !stringIsEmpty(overlayTarget.page) && stringEquals(registrationShift.key, overlayTarget.page) ? registrationShift.dy : 0
-      return (zoom, x, top - (measured[1] + shift) * zoom)
+      let read = !stringIsEmpty(overlayTarget.page) && stringEquals(registrationShift.key, overlayTarget.page)
+      let shift = read ? (registrationShift.dx, registrationShift.dy) : (0, 0)
+      return (zoom, x - shift.0 * zoom, top - (measured[1] + shift.1) * zoom)
     }
 
     /// Where registration lays the zone on the rendered main text block's
@@ -2421,23 +2421,28 @@
       let typeScale = scanEm > 0 && overlayTarget.em > 0 ? overlayTarget.em * unit / scanEm : 0
       var laid = OverlayRegistration.laid(
         box, zone: zone, size: size, spans: overlayTarget.spans, typeScale: typeScale, anchor: overlayTarget.anchor)
-      // Down the page by its lines (`registrationShift`), once the page's structure has read them.
+      // By its lines (`registrationShift`), once the page's structure has read them.
       if laid.count == 4, !stringIsEmpty(overlayTarget.page), stringEquals(registrationShift.key, overlayTarget.page) {
+        laid[0] += registrationShift.dx * unit
+        laid[2] += registrationShift.dx * unit
         laid[1] += registrationShift.dy * unit
         laid[3] += registrationShift.dy * unit
       }
       return laid
     }
 
-    /// The scan laid down the page by its lines (user, 2026-10-28): after
-    /// the text block's registration, by the median distance between the
-    /// main text's paired baselines (`OverlayRegistration.baselineShift`),
-    /// in the layer's own pixels, for the page and layer it was read on
-    /// (`overlayTarget.page`'s key). A block's top is its first line's ink:
-    /// a faint running head, its ascenders lost, stood every line under it
-    /// off by the same; the page's place on the scan is noise, its lines'
-    /// places to one another are the typesetting.
-    private var registrationShift: (key: String, dy: Double) = ("", 0)
+    /// The scan and the edition laid on one another by their lines (user,
+    /// 2026-10-28): after the text block's registration, across by the
+    /// median distance between the main text's paired lines' set edges
+    /// (`OverlayRegistration.edgeShift`) and down the page by the median
+    /// distance between their baselines (`baselineShift`), in the layer's
+    /// own pixels, for the page and layer it was read on
+    /// (`overlayTarget.page`'s key). A block's box is its ink's: a faint
+    /// running head stood every line under it off by the same, a line set
+    /// wider than the print's (the face's width before the fit) every
+    /// centered line across; the page's place on the scan is noise, its
+    /// lines' places to one another are the typesetting.
+    private var registrationShift: (key: String, dx: Double, dy: Double) = ("", 0, 0)
 
     /// The shown layer's size unzoomed, its scale's frame's.
     private func naturalSize(of layer: DOM.Element) -> (width: Double, height: Double)? {
@@ -4507,8 +4512,12 @@
       if !stringEquals(registrationShift.key, key) {
         let matches = StructurePairing.pair(
           edition: editionMain, scan: scanMain.map { $0.box }, leading: leading)
-        registrationShift = (key, OverlayRegistration.baselineShift(matches, edition: editionMain, scan: scanMain.map { $0.box }))
-        if registrationShift.dy != 0 { return currentStructure() }
+        let scanned = scanMain.map { $0.box }
+        registrationShift = (
+          key, OverlayRegistration.edgeShift(matches, edition: editionMain, scan: scanned),
+          OverlayRegistration.baselineShift(matches, edition: editionMain, scan: scanned)
+        )
+        if registrationShift.dx != 0 || registrationShift.dy != 0 { return currentStructure() }
       }
       for (edition, scan, from, to, leading) in groups {
         editionRowsAll += edition

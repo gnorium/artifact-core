@@ -135,10 +135,14 @@ final class OverlayRegistrationTests: XCTestCase {
     XCTAssertEqual(OverlayRegistration.anchor([.left, .center, .center, .justified]), .center)
   }
 
-  /// With no frame declared, a spanning block is laid on its box both ways.
-  func testWithNoFrameASpanningBlockIsLaidOnItsBox() {
+  /// With no frame declared, a spanning block is laid by its width, from
+  /// its left, at one scale both ways: the image never stretched (user,
+  /// 2026-10-28).
+  func testWithNoFrameASpanningBlockIsLaidByItsWidth() {
     let box = [100.0, 50.0, 526.4, 163.2]
-    XCTAssertEqual(OverlayRegistration.laid(box, zone: Self.textBlock, size: Self.size, spans: true, typeScale: 0), box)
+    let laid = OverlayRegistration.laid(box, zone: Self.textBlock, size: Self.size, spans: true, typeScale: 0)
+    XCTAssertEqual(Array(laid[0..<3]), Array(box[0..<3]))
+    XCTAssertEqual(laid[3], 163.2, accuracy: 0.01)
   }
 
   /// The title's "OF THE" on prod madrigal dd5cc0b2's page 3 (2026-10-18),

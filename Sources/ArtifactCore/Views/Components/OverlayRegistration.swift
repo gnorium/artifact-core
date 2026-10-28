@@ -46,7 +46,7 @@ enum OverlayRegistration {
   /// across it, the scan's own proportions kept (a line's width is the
   /// face's, so a centered block's width is no measure of the scan's); a
   /// block spanning the frame's measure (`spans`: its lines justified to
-  /// it) on its box both ways.
+  /// it) by its width, from its left, its proportions kept too.
   /// Across, by the edge the block is set from (`anchor`, user
   /// 2026-10-27): a left-set block's left edge on the rendered block's
   /// left, a right-set block's right on its right, a centered or justified
@@ -60,21 +60,25 @@ enum OverlayRegistration {
     anchor: OverlayAnchor = .center
   ) -> [Double] {
     guard box.count == 4, zone.count == 8 else { return box }
-    if typeScale <= 0 && spans { return box }
     let corners = (0..<8).map { zone[$0] / zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
     let across = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
     let down = ((corners[6] - corners[0]) * (corners[6] - corners[0]) + (corners[7] - corners[1]) * (corners[7] - corners[1])).squareRoot()
     guard down > 0 else { return box }
     let typed = typeScale > 0
-    let scale = typed ? typeScale : (box[3] - box[1]) / down
+    // With no frame declared, by the block's height; a block spanning the
+    // measure by its width, from its left: one scale both ways, the image
+    // never stretched (user, 2026-10-28: the image stays as its pane shows
+    // it, the edition laid on it).
+    let spanning = !typed && spans && across > 0
+    let scale = typed ? typeScale : spanning ? (box[2] - box[0]) / across : (box[3] - box[1]) / down
     let width = across * scale
     let left: Double
-    switch anchor {
+    switch spanning ? OverlayAnchor.left : anchor {
     case .left: left = box[0]
     case .right: left = box[2] - width
     case .center: left = (box[0] + box[2]) / 2 - width / 2
     }
-    return [left, box[1], left + width, typed ? box[1] + down * scale : box[3]]
+    return [left, box[1], left + width, typed || spanning ? box[1] + down * scale : box[3]]
   }
 
   /// How far down the page the scan is laid after the text block's
@@ -87,6 +91,33 @@ enum OverlayRegistration {
     var distances: [Double] = []
     for match in matches {
       if case .pair(let e, let s, _) = match { distances.append(edition[e].seated - scan[s].seated) }
+    }
+    guard distances.count >= 3 else { return 0 }
+    distances.sort()
+    let middle = distances.count / 2
+    return distances.count % 2 == 1 ? distances[middle] : (distances[middle - 1] + distances[middle]) / 2
+  }
+
+  /// How far across the page the scan is laid after the text block's
+  /// registration (user, 2026-10-28): the median distance from the scan's
+  /// paired lines to the edition's by the edges each edition line is set
+  /// by (`StructureAlignment`: a left-set line's start, a right-set one's
+  /// end, a centered one's middle, a justified one's both, halved), positive
+  /// where the edition's stand right; 0 under three such pairs.
+  /// gnorium-python `layout_measure.edge_shift`.
+  static func edgeShift(_ matches: [StructurePairing.Match], edition: [StructureRow], scan: [StructureRow]) -> Double {
+    var distances: [Double] = []
+    for match in matches {
+      guard case .pair(let e, let s, _) = match else { continue }
+      let a = edition[e]
+      let b = scan[s]
+      switch a.alignment {
+      case .left: distances.append(a.left - b.left)
+      case .right: distances.append(a.right - b.right)
+      case .center: distances.append((a.left + a.right) / 2 - (b.left + b.right) / 2)
+      case .justified: distances.append((a.left - b.left + a.right - b.right) / 2)
+      case .none: break
+      }
     }
     guard distances.count >= 3 else { return 0 }
     distances.sort()
