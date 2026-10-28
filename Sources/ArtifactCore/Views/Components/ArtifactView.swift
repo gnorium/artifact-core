@@ -2841,15 +2841,65 @@
       layer.setAttribute(data("zoom"), doubleToString(view.zoom))
       pane.scrollLeft = 0
       pane.scrollTop = 0
-      if let base = layer.getBoundingClientRect() {
-        frame.style.setProperty(
-          "transform",
-          "translate(" + doubleToString(origin.x + view.x - base.x) + "px, " + doubleToString(origin.y + view.y - base.y)
-            + "px)")
+      overlayWarp = nil
+      if let base = layer.getBoundingClientRect(), let unmoved = frame.getBoundingClientRect() {
+        let shift = (x: origin.x + view.x - base.x, y: origin.y + view.y - base.y)
+        let plain = "translate(" + doubleToString(shift.x) + "px, " + doubleToString(shift.y) + "px)"
+        frame.style.setProperty("transform", plain)
+        // Turned as the scan is photographed (user, 2026-10-28: the image
+        // stays as it is, the edition laid on it): the leveled block the
+        // registration lays on the image's text block taken to that
+        // block's own four corners, the edition and its structure with
+        // it, eased in and out with the slide.
+        let warp = overlayOn ? progress : 1 - progress
+        if warp > 0, let quads = imageZoneQuads() {
+          var from: [Double] = []
+          var to: [Double] = []
+          for corner in 0..<4 {
+            let leveled = (x: quads.leveled[2 * corner], y: quads.leveled[2 * corner + 1])
+            from.append(leveled.x - unmoved.x - shift.x)
+            from.append(leveled.y - unmoved.y - shift.y)
+            to.append(leveled.x + (quads.photographed[2 * corner] - leveled.x) * warp - unmoved.x)
+            to.append(leveled.y + (quads.photographed[2 * corner + 1] - leveled.y) * warp - unmoved.y)
+          }
+          if let turned = Homography(from: from, to: to) {
+            var entries: [String] = []
+            for value in turned.cssMatrix3D { entries.append(doubleToString(value)) }
+            let matrix = "matrix3d(" + stringJoin(entries, separator: ", ") + ")"
+            frame.style.setProperty("transform-origin", "0 0")
+            frame.style.setProperty("transform", matrix)
+            overlayWarp = (frame, plain)
+          }
+        }
       }
       lastFit = fit
       matchedScroll = (pane.scrollLeft, pane.scrollTop)
       drawStructure()
+    }
+
+    /// The edition's frame while the overlay turns it onto the image
+    /// (`placeOverlay`), and its transform unturned: what the structure is
+    /// measured under, its rows the layout's own, never a turned box's
+    /// bounds.
+    private var overlayWarp: (frame: DOM.Element, plain: String)?
+
+    /// The image's text block on screen as the image's pane shows it: its
+    /// four corners as photographed, and the leveled block registration
+    /// lays the edition's on (`editionOnImage`): from its first corner,
+    /// its sides' own lengths, upright. Nil before the image has a place.
+    private func imageZoneQuads() -> (photographed: [Double], leveled: [Double])? {
+      guard let image = shownCanvas?.placement, let zone = overlayZone() else { return nil }
+      var photographed: [Double] = []
+      for index in 0..<8 {
+        let pixel = zone[index] / Self.zoneExtent * (index % 2 == 0 ? image.width : image.height)
+        photographed.append((index % 2 == 0 ? image.x + image.panX : image.y + image.panY) + pixel * image.zoom)
+      }
+      let across = ((photographed[2] - photographed[0]) * (photographed[2] - photographed[0])
+        + (photographed[3] - photographed[1]) * (photographed[3] - photographed[1])).squareRoot()
+      let down = ((photographed[6] - photographed[0]) * (photographed[6] - photographed[0])
+        + (photographed[7] - photographed[1]) * (photographed[7] - photographed[1])).squareRoot()
+      let left = photographed[0], top = photographed[1]
+      return (photographed, [left, top, left + across, top, left + across, top + down, left, top + down])
     }
 
     /// Whether the overlay is at rest, laid by registration: the reader's
@@ -3479,7 +3529,9 @@
       // (`placeOverlay`) is set again below.
       if let parent = layer.parentElement, stringEquals(parent.getAttribute(data("page-scale")) ?? "", "true") {
         _ = parent.style.removeProperty("transform")
+        _ = parent.style.removeProperty("transform-origin")
       }
+      overlayWarp = nil
       guard let oldBox = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect(),
         let parent = layer.parentElement else { return }
       let previous = currentZoom()
@@ -4301,6 +4353,17 @@
       guard !rawVisible, !reflowOn, let layer = shownLayer(), let page = layer.closest(".tei-page") else { return nil }
       let key = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
       if let structure, stringEquals(structure.key, key) { return structure }
+      // Measured unturned (`overlayWarp`): the layout's own rows.
+      if let warp = overlayWarp {
+        let turned = warp.frame.style.getPropertyValue("transform")
+        warp.frame.style.setProperty("transform", warp.plain)
+        defer { warp.frame.style.setProperty("transform", turned) }
+        return measuredStructure(layer, page: page, key: key)
+      }
+      return measuredStructure(layer, page: page, key: key)
+    }
+
+    private func measuredStructure(_ layer: DOM.Element, page: DOM.Element, key: String) -> Structure? {
       let zones = scanLayout(of: page)
       guard !zones.isEmpty, let leadingRem = parseDouble(page.getAttribute(data("body-leading")) ?? ""),
         let scale = drawnScale(of: layer), let size = shownImageSize, let map = scanToLayer(layer, drawnAt: scale),
