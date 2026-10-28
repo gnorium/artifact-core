@@ -3658,7 +3658,9 @@
       // A page with nothing set on it (a blank, a gap) rests at its fit:
       // there is nothing to read closer, and the zoom kept from the page
       // before opened it on a corner of its white (user, 2026-10-28).
-      if anchor == nil, layer.querySelector(".tei-line:not(.tei-line-gap)") == nil { resting = fit }
+      // Only as it opens: matched to the image (`matching`), it follows the
+      // image's zoom as any page does.
+      if anchor == nil, !matching, layer.querySelector(".tei-line:not(.tei-line-gap)") == nil { resting = fit }
       // Within a pixel of its fit the page is at its fit: a zoom a hair
       // over it (one read back from its attribute, a sync's ratio, the
       // overlay's kept as it went off) made the pane a scrollbar for a
