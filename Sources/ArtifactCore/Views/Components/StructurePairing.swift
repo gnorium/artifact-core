@@ -156,6 +156,39 @@ enum StructurePairing {
     }
   }
 
+  /// Whether an edition's line is set at its print line's size (user,
+  /// 2026-10-28: Hamlet Q1 p. 19's "you this." set at 0.74 of the body,
+  /// its start where the print's, passed): its width against the print
+  /// line's, by the page's own ratio of the two (`widthRatio`, the edition
+  /// face's width over the print's), within an em of its type or
+  /// `widthShare` of the width, whichever is more. No ratio (0), no
+  /// judgment.
+  static func sized(_ edition: StructureRow, _ scan: StructureRow, ratio: Double) -> Bool {
+    let expected = (scan.right - scan.left) * ratio
+    guard ratio > 0, expected > 0 else { return true }
+    return abs((edition.right - edition.left) - expected) <= max(edition.em, expected * widthShare)
+  }
+
+  /// How far a line's width may stray from the page's ratio: Noto set at
+  /// the print's measured size runs within a few percent of the print's
+  /// line widths across a page (Hamlet Q1 p. 19: 1–5%); a line a sixth
+  /// narrower or wider is set at another size.
+  static let widthShare = 0.15
+
+  /// The page's ratio of the edition's line widths to the print's: the
+  /// median over its paired rows (`matches`); 0 with none.
+  static func widthRatio(_ matches: [Match], edition: [StructureRow], scan: [StructureRow]) -> Double {
+    var ratios: [Double] = []
+    for match in matches {
+      guard case .pair(let e, let s, _) = match, scan[s].right > scan[s].left else { continue }
+      ratios.append((edition[e].right - edition[e].left) / (scan[s].right - scan[s].left))
+    }
+    guard !ratios.isEmpty else { return 0 }
+    ratios.sort()
+    let middle = ratios.count / 2
+    return ratios.count % 2 == 1 ? ratios[middle] : (ratios[middle - 1] + ratios[middle]) / 2
+  }
+
   /// A justified block's last line set from its start alone (a paragraph's
   /// ragged end): each row whose block no later row is of.
   static func lastLinesLeft(_ rows: [StructureRow]) -> [StructureRow] {

@@ -4582,6 +4582,11 @@
         )
         if registrationShift.dx != 0 || registrationShift.dy != 0 { return currentStructure() }
       }
+      // The page's ratio of the edition's line widths to the print's, by
+      // its main text: what each line's size is judged by (`sized`).
+      let ratio = StructurePairing.widthRatio(
+        StructurePairing.pair(edition: editionMain, scan: scanMain.map { $0.box }, leading: leading),
+        edition: editionMain, scan: scanMain.map { $0.box })
       for (edition, scan, from, to, leading) in groups {
         editionRowsAll += edition
         scanRowsAll += scan
@@ -4596,7 +4601,9 @@
             // note regularized to its canonical place (a bookplate
             // centered) is orange where its measured place differs past
             // its own tolerance (user, 2026-10-14).
-            let within = StructurePairing.within(edition[e], scan[s].box, leading: leading)
+            let within =
+              StructurePairing.within(edition[e], scan[s].box, leading: leading)
+              && StructurePairing.sized(edition[e], scan[s].box, ratio: ratio)
             editionState[e] = within ? "within" : "off"
             scanState[s] = within ? "within" : "off"
           case .extra(let e):

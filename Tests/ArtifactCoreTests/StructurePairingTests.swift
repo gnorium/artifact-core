@@ -140,3 +140,23 @@ final class StructureAlignmentTests: XCTestCase {
     XCTAssertEqual(rows.map(\.alignment), [.justified, .left, .left])
   }
 }
+
+/// A line's size, by the page's ratio of the edition's widths to the
+/// print's (user, 2026-10-28).
+final class StructureSizeTests: XCTestCase {
+  func testALineSetSmallerThanItsPrintIsOffItsStartWhereThePrintsIs() {
+    let lines = (0..<5).map { StructureRow(left: 0, top: Double($0) * 20, right: 400, bottom: Double($0) * 20 + 12, em: 16) }
+    let scans = lines.map { StructureRow(left: 0, top: $0.top, right: 380, bottom: $0.bottom) }
+    let ratio = StructurePairing.widthRatio(
+      StructurePairing.pair(edition: lines, scan: scans, leading: 20), edition: lines, scan: scans)
+    XCTAssertEqual(ratio, 400.0 / 380, accuracy: 1e-9)
+    // "you this.": 285 wide in print, 215 in the edition, set at 0.74.
+    let small = StructureRow(left: 0, top: 0, right: 215, bottom: 10, alignment: .left, em: 12)
+    let print = StructureRow(left: 0, top: 0, right: 285 / ratio, bottom: 10)
+    XCTAssertFalse(StructurePairing.sized(small, print, ratio: ratio))
+    // A long line a few percent off, a short one an em off: the face.
+    XCTAssertTrue(StructurePairing.sized(StructureRow(left: 0, top: 0, right: 1640, bottom: 10, em: 44), StructureRow(left: 0, top: 0, right: 1700 / ratio, bottom: 10), ratio: ratio))
+    XCTAssertTrue(StructurePairing.sized(StructureRow(left: 0, top: 0, right: 40, bottom: 10, em: 16), StructureRow(left: 0, top: 0, right: 30 / ratio, bottom: 10), ratio: ratio))
+    XCTAssertTrue(StructurePairing.sized(small, print, ratio: 0))
+  }
+}
