@@ -166,13 +166,13 @@
         }
         // The edition's word the reader points at, on the scan (user,
         // 2026-10-14): a translucent band, the scan seen through it in
-        // either scheme. Yellow, as the quote highlight and the find
-        // bar's matches are (user, 2026-10-18), the edition's marked word
-        // wearing the same yellow at the same opacity.
+        // either scheme. Blue (user, 2026-10-29): yellow is Find's alone,
+        // and a pointed word in yellow read as a match; the edition's word
+        // wears the same blue at the same opacity.
         descendant(".image-word") {
           position(.absolute)
           zIndex(1)
-          backgroundColor(colorYellow)
+          backgroundColor(colorBlue)
           opacity(opacityLow)
           pointerEvents(.none)
         }

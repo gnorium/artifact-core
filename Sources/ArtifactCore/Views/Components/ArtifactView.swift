@@ -1027,10 +1027,10 @@
       descendant(".artifact-structure [data-state='extra']") { CSS.Property("stroke", colorGreen.value) }
       descendant(".artifact-structure [data-state='missing']") { CSS.Property("stroke", colorRed.value) }
       // The edition's word the scan's under the pointer is (user,
-      // 2026-10-14), as the scan's band marks it: the band's yellow at its
-      // opacity (user, 2026-10-18), a pair.
+      // 2026-10-14), as the scan's band marks it: the band's blue at its
+      // opacity (user, 2026-10-29: yellow is Find's alone), a pair.
       descendant(".artifact-markup .tei-word[data-corresponding='true']") {
-        CSS.Property("background-color", "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)")
+        CSS.Property("background-color", "color-mix(in srgb, " + colorBlue.value + " calc(" + opacityLow.value + " * 100%), transparent)")
       }
       // Hugging the word: the fill drawn as one band at the glyphs'
       // extent (`band`), the span's own box left clear.
@@ -1038,7 +1038,7 @@
         backgroundColor(.transparent)
         CSS.Property(
           "background-image",
-          "linear-gradient(" + "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ", " + "color-mix(in srgb, " + colorYellow.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ")")
+          "linear-gradient(" + "color-mix(in srgb, " + colorBlue.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ", " + "color-mix(in srgb, " + colorBlue.value + " calc(" + opacityLow.value + " * 100%), transparent)" + ")")
         CSS.Property("background-repeat", "no-repeat")
         CSS.Property("background-size", "var(--artifact-band-width) var(--artifact-band-height)")
         CSS.Property("background-position", "var(--artifact-band-x) var(--artifact-band-y)")
