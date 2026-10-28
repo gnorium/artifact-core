@@ -182,7 +182,7 @@
         // only once its lines stand 4px apart on screen (its gradients set
         // as the image is scaled), each 100 named along the top and the left
         // edges. Above the dim, under the region's ring.
-        descendant(".image-grid") {
+        selector("& .image-grid", "& .image-grid-lines") {
           position(.absolute)
           zIndex(3)
           pointerEvents(.none)
@@ -394,6 +394,9 @@
     private var regionBox: DOM.Element?
     private var regionDim: DOM.Element?
     private var grid: DOM.Element?
+    /// The grid's lines (`drawGridLevels`), over the part of the image the
+    /// viewport shows.
+    private var gridLines: DOM.Element?
     private var readout: DOM.Element?
     /// An encoded zone on the image hovered by the pointer, in the 0–1000
     /// space (width 0: none), and its neutral outline element over the image.
@@ -832,14 +835,17 @@
         regionBox?.setAttribute(.hidden, "")
         regionDim?.setAttribute(.hidden, "")
         grid?.setAttribute(.hidden, "")
+        gridLines?.setAttribute(.hidden, "")
         readout?.setAttribute(.hidden, "")
         return
       }
       if case .none = grid { grid = gridElement() }
+      if case .none = gridLines { gridLines = overlay("image-grid-lines") }
       if let grid {
         place(grid, x: 0, y: 0, width: Double(imageW), height: Double(imageH))
-        drawGridLevels(grid)
+        grid.setAttribute(data("labels"), zoom < minZoom * Self.gridLabelsFrom ? "off" : "on")
       }
+      if let gridLines { drawGridLevels(gridLines) }
       if case .none = regionDim { regionDim = overlay("image-region-dim") }
       if case .none = regionBox { regionBox = overlay("image-region") }
       guard let box = regionBox else { return }
@@ -903,42 +909,56 @@
     static let gridLabelsFrom = 2.0
 
     /// The grid's levels, those whose lines stand at least 4px apart as
-    /// the image is shown: each a gradient a line wide, tiled at its
-    /// spacing, one an axis, the finer the fainter. Named on the grid
-    /// (`data-levels`, "100 50 10") for whoever reads it.
-    private func drawGridLevels(_ grid: DOM.Element) {
-      grid.setAttribute(data("labels"), zoom < minZoom * Self.gridLabelsFrom ? "off" : "on")
+    /// the image is shown: each a gradient a line wide, repeating at its
+    /// spacing, one an axis, the finer the fainter, on a layer over the
+    /// part of the image the viewport shows, each level's phase the pan's
+    /// (user, 2026-10-28: drawn over the whole image at its zoom, tens of
+    /// thousands of pixels, the browser left the lines out at some zooms).
+    /// Named on the layer (`data-levels`, "100 50 10") for whoever reads it.
+    private func drawGridLevels(_ lines: DOM.Element) {
       let shownW = Double(imageW) * zoom
       let shownH = Double(imageH) * zoom
+      let left = max(0, panX)
+      let top = max(0, panY)
+      let right = min(viewportW, panX + shownW)
+      let bottom = min(viewportH, panY + shownH)
+      guard right > left, bottom > top else {
+        lines.setAttribute(.hidden, "")
+        return
+      }
+      lines.removeAttribute(.hidden)
+      lines.style.setProperty("left", pixels(left))
+      lines.style.setProperty("top", pixels(top))
+      lines.style.setProperty("width", pixels(right - left))
+      lines.style.setProperty("height", pixels(bottom - top))
       var layers: [String] = []
-      var sizes: [String] = []
       var names: [String] = []
       for (units, strength) in [(100, "40%"), (50, "28%"), (10, "20%"), (5, "14%"), (1, "10%")] {
         let stepX = shownW * Double(units) / 1000
         let stepY = shownH * Double(units) / 1000
         guard stepX >= 4, stepY >= 4 else { break }
         let color = stringJoin(["color-mix(in srgb, var(--color-base) ", strength, ", transparent)"], separator: "")
-        // One gradient over the whole grid, repeating at the level's exact
-        // pitch, never a tile the browser rounds to a pixel: tiles rounded
-        // level by level drifted the fine lines off the coarse ones as the
-        // image was zoomed (user, 2026-10-27).
-        layers.append(
-          stringJoin(
-            ["repeating-linear-gradient(to right, ", color, " 0 1px, transparent 1px ", pixels(stepX), ")"], separator: ""))
-        sizes.append("100% 100%")
-        layers.append(
-          stringJoin(
-            ["repeating-linear-gradient(to bottom, ", color, " 0 1px, transparent 1px ", pixels(stepY), ")"], separator: ""))
-        sizes.append("100% 100%")
+        // Repeating at the level's exact pitch from where the image's own
+        // lines fall on the layer, never a tile the browser rounds to a
+        // pixel: tiles rounded level by level drifted the fine lines off
+        // the coarse ones as the image was zoomed (user, 2026-10-27).
+        for (direction, step, offset) in [("right", stepX, left - panX), ("bottom", stepY, top - panY)] {
+          let phase = offset - (offset / step).rounded(.down) * step
+          layers.append(
+            stringJoin(
+              [
+                "repeating-linear-gradient(to ", direction, ", ", color, " ", pixels(-phase), " ", pixels(1 - phase),
+                ", transparent ", pixels(1 - phase), " ", pixels(step - phase), ")",
+              ], separator: ""))
+        }
         names.append(intToString(units))
       }
       let levels = stringJoin(names, separator: " ")
-      let key = stringJoin([levels, "|", doubleToString(shownW), "|", doubleToString(shownH)], separator: "")
+      let key = stringJoin(layers, separator: ", ")
       guard !stringEquals(key, gridLevels) else { return }
       gridLevels = key
-      grid.setAttribute(data("levels"), levels)
-      grid.style.setProperty("background-image", stringJoin(layers, separator: ", "))
-      grid.style.setProperty("background-size", stringJoin(sizes, separator: ", "))
+      lines.setAttribute(data("levels"), levels)
+      lines.style.setProperty("background-image", key)
     }
 
     /// The pointer's place in the 0–1000 space beside it, while a region
