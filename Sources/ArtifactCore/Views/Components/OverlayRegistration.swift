@@ -115,6 +115,28 @@ enum OverlayRegistration {
     return cost
   }
 
+  /// How many of a pairing's pairs stand where their print rows do, by
+  /// what neither side's place across sets: their baselines (`seated`)
+  /// within a quarter of the `leading` and the edition's row set at its
+  /// print row's size (`StructurePairing.sized`, by the pairing's own
+  /// `StructurePairing.widthRatio`). gnorium-python
+  /// `layout_measure.agreeing`.
+  static func agreeing(_ matches: [StructurePairing.Match], edition: [StructureRow], scan: [StructureRow], leading: Double)
+    -> Int
+  {
+    let ratio = StructurePairing.widthRatio(matches, edition: edition, scan: scan)
+    var count = 0
+    for match in matches {
+      guard case .pair(let e, let s, _) = match else { continue }
+      if abs(edition[e].seated - scan[s].seated) <= leading / 4
+        && StructurePairing.sized(edition[e], scan[s], ratio: ratio)
+      {
+        count += 1
+      }
+    }
+    return count
+  }
+
   /// How far down the scan's rows are laid on the edition's and the main
   /// text's matches there (user, 2026-10-28). The median of one pairing on
   /// the text block's registration (`baselineShift`) is not enough: where
@@ -122,8 +144,14 @@ enum OverlayRegistration {
   /// with their neighbors, and that median locks every row one off (Hamlet
   /// Q1 p. 4: 31 rows each paired with the next). So each place one leading
   /// either side of that median is paired too, each settled at its own
-  /// pairs' median, and the scan is laid where its rows pair at the least
-  /// cost (`pairingCost`); not moved under three pairs. gnorium-python
+  /// pairs' median, and the scan is laid where the most of its rows agree
+  /// with their partners (`agreeing`: baselines and widths), the least cost
+  /// (`pairingCost`) of those; not moved under three pairs. Baselines alone
+  /// cannot tell a row off from the right one: on a page whose rows all
+  /// stand a leading apart, every row paired with its neighbor sits on its
+  /// baseline as well, and a page with a row the other lacks at each end
+  /// costs the same either way (Hamlet Q1 p. 37 and p. 58: laid a row low,
+  /// each row's start and end its neighbor's). gnorium-python
   /// `layout_measure.registration_down`.
   static func registrationDown(edition: [StructureRow], scan: [StructureRow], leading: Double)
     -> (down: Double, matches: [StructurePairing.Match])
@@ -142,14 +170,17 @@ enum OverlayRegistration {
     for match in matches { if case .pair = match { paired += 1 } }
     guard paired >= 3 else { return (0, matches) }
     let first = baselineShift(matches, edition: edition, scan: scan)
-    var best: (cost: Double, down: Double, matches: [StructurePairing.Match])?
+    var best: (agree: Int, cost: Double, down: Double, matches: [StructurePairing.Match])?
     for start in [first, first - leading, first + leading] {
       let tried = lowered(start)
       let down = start + baselineShift(StructurePairing.pair(edition: edition, scan: tried, leading: leading), edition: edition, scan: tried)
       let laid = lowered(down)
       let found = StructurePairing.pair(edition: edition, scan: laid, leading: leading)
+      let agree = agreeing(found, edition: edition, scan: laid, leading: leading)
       let cost = pairingCost(found, edition: edition, scan: laid, leading: leading)
-      if best.map({ cost < $0.cost - 1e-9 }) ?? true { best = (cost, down, found) }
+      if best.map({ agree > $0.agree || (agree == $0.agree && cost < $0.cost - 1e-9) }) ?? true {
+        best = (agree, cost, down, found)
+      }
     }
     return best.map { ($0.down, $0.matches) } ?? (0, matches)
   }
