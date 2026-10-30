@@ -3411,13 +3411,37 @@
         let layerBox = layer.getBoundingClientRect(), layerBox.width > 0
       else { return nil }
       let zoom = parseDouble(layer.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
-      guard zoom > 0, let ink = textBlock(in: layer, drawnAt: zoom), ink.count == 4, ink[2] > ink[0], ink[3] > ink[1]
+      guard zoom > 0, let ink = textBlock(in: layer, drawnAt: zoom), ink.count == 4, ink[2] > ink[0], ink[3] > ink[1],
+        let scan = scanBlock(zone: zone, sizing: (sizing.width, sizing.height))
       else { return nil }
+      return (scan, ink, (layerBox.width / zoom, layerBox.height / zoom))
+    }
+
+    /// The scan's text block (left, top, right, bottom) in the image's
+    /// pixels: its zone's bounds, the zone in the 0–1000 space.
+    private func scanBlock(zone: [Double], sizing: (width: Double, height: Double)) -> [Double]? {
       let xs = [zone[0], zone[2], zone[4], zone[6]].map { $0 / Self.zoneExtent * sizing.width }
       let ys = [zone[1], zone[3], zone[5], zone[7]].map { $0 / Self.zoneExtent * sizing.height }
       guard let left = xs.min(), let right = xs.max(), let top = ys.min(), let bottom = ys.max(), right > left, bottom > top
       else { return nil }
-      return ([left, top, right, bottom], ink, (layerBox.width / zoom, layerBox.height / zoom))
+      return [left, top, right, bottom]
+    }
+
+    /// The text's zoom that shows its page as the image at its fit shows
+    /// the scan (`textTerms` of the image's whole, its scale 1): the text
+    /// block the same share of its pane's width as the scan's of the
+    /// image's. Fully zoomed out the two then correspond, the leaf drawn
+    /// at the size it has in the scan (user, 2026-10-31: in a narrow pane
+    /// the leaf filling the pane read as cut off beside the whole
+    /// photograph). Nil where the image is not shown beside the text or
+    /// either text block is unknown.
+    private func scanFit(of layer: DOM.Element, in pane: DOM.Element) -> Double? {
+      guard canvasShown, !rawVisible, !reflowOn, let sizing = shownCanvas?.sizing, sizing.viewportWidth > 0,
+        pane.clientWidth > 0, let zone = overlayZone(), let scan = scanBlock(zone: zone, sizing: (sizing.width, sizing.height)),
+        let block = textBlock(in: layer, drawnAt: currentZoom()), block.count == 4, block[2] > block[0]
+      else { return nil }
+      let fit = pane.clientWidth * sizing.fit * (scan[2] - scan[0]) / (sizing.viewportWidth * (block[2] - block[0]))
+      return fit > 0 ? fit : nil
     }
 
     /// A region of the text (fractions of its layer, its zoom over its fit)
@@ -3753,7 +3777,13 @@
       layer.style.setProperty("transform", "none")
       guard let shown = layer.getBoundingClientRect(), shown.width > 0, shown.height > 0 else { return }
       let natural = (width: shown.width / screen.x, height: shown.height / screen.y)
-      let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
+      // Its fit: the whole leaf in the pane, and, the image beside it, no
+      // closer than the image at its fit shows the scan (`scanFit`), so
+      // fully zoomed out the two panes agree in scale. The overlay frames
+      // the page by its own fit.
+      let whole = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
+      let overlaid = overlayRegistered && (overlayOn || overlayLeaving)
+      let fit = overlaid ? whole : min(whole, scanFit(of: layer, in: pane) ?? whole)
       let stored = storedZoom()
       var resting = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
       // A page with nothing set on it (a blank, a gap) rests at its fit:
@@ -3769,7 +3799,7 @@
       let span = max(natural.width, natural.height)
       if (resting - fit) * span < 1 { resting = fit }
       fadeOverlay()
-      if overlayRegistered && (overlayOn || overlayLeaving) {
+      if overlaid {
         placeOverlay(
           layer, frame: frame, in: pane, natural: natural, room: (insetX, insetY, paneWidth, paneHeight), fit: fit,
           resting: resting)
