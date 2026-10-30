@@ -3474,23 +3474,6 @@
       return [left, top, right, bottom]
     }
 
-    /// The text's zoom that shows its page as the image at its fit shows
-    /// the scan (`textTerms` of the image's whole, its scale 1): the text
-    /// block the same share of its pane's width as the scan's of the
-    /// image's. Fully zoomed out the two then correspond, the leaf drawn
-    /// at the size it has in the scan (user, 2026-10-31: in a narrow pane
-    /// the leaf filling the pane read as cut off beside the whole
-    /// photograph). Nil where the image is not shown beside the text or
-    /// either text block is unknown.
-    private func scanFit(of layer: DOM.Element, in pane: DOM.Element) -> Double? {
-      guard canvasShown, !rawVisible, !reflowOn, let sizing = shownCanvas?.sizing, sizing.viewportWidth > 0,
-        pane.clientWidth > 0, let zone = overlayZone(), let scan = scanBlock(zone: zone, sizing: (sizing.width, sizing.height)),
-        let block = textBlock(in: layer, drawnAt: currentZoom()), block.count == 4, block[2] > block[0]
-      else { return nil }
-      let fit = pane.clientWidth * sizing.fit * (scan[2] - scan[0]) / (sizing.viewportWidth * (block[2] - block[0]))
-      return fit > 0 ? fit : nil
-    }
-
     /// A region of the text (fractions of its layer, its zoom over its fit)
     /// as the image's: the same point of the text block, and the same
     /// share of its width in view (`syncBlocks`).
@@ -3505,10 +3488,16 @@
       let share = Double(pane.clientWidth) / (text.scale * lastFit) / (block[2] - block[0])
       let zoom = sizing.viewportWidth / (share * (image[2] - image[0]))
       let factor = zoom / sizing.fit / text.scale
+      // The text at its fit is the image at its fit, as `textTerms` has it
+      // the other way: a mode, never a number. The leaf fills its pane and
+      // the photograph holds more than the leaf (user, 2026-10-31), so the
+      // text block's share mapped as a number zoomed Hamlet Q1's cover
+      // past its fit, its edge cut off, and the text, mapped back, past
+      // its own, a scrollbar across.
       return .init(
         centerX: (image[0] + u * (image[2] - image[0])) / sizing.width,
         centerY: (image[1] + v * (image[3] - image[1])) / sizing.height,
-        scale: text.scale * factor, maxScale: text.maxScale * factor)
+        scale: text.scale <= Self.wholeScale ? 1 : text.scale * factor, maxScale: text.maxScale * factor)
     }
 
     /// A region of the image as the text's (`imageTerms` the other way).
@@ -3522,8 +3511,8 @@
       let share = sizing.viewportWidth / (image.scale * sizing.fit) / (scan[2] - scan[0])
       let zoom = Double(pane.clientWidth) / (share * (block[2] - block[0]))
       let factor = zoom / lastFit / image.scale
-      // The image at its fit is the text at its fit (`scanFit` makes the
-      // two one scale): a mode, never a number. Mapped as a number, it was
+      // The image at its fit is the text at its fit, each its whole in
+      // its pane: a mode, never a number. Mapped as a number, it was
       // the fit of the page turned from (`lastFit`) over a layer not yet
       // laid out, and the page turned to (Hamlet Q1's cover from p. 3,
       // user 2026-10-31) opened at that zoom, its leaf cut off.
@@ -3846,13 +3835,12 @@
       guard let shown = layer.getBoundingClientRect(), shown.width > 0, shown.height > 0 else { return }
       let natural = (width: shown.width / screen.x, height: shown.height / screen.y)
       watchLeaf(layer, natural: natural)
-      // Its fit: the whole leaf in the pane, and, the image beside it, no
-      // closer than the image at its fit shows the scan (`scanFit`), so
-      // fully zoomed out the two panes agree in scale. The overlay frames
-      // the page by its own fit.
-      let whole = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
+      // Its fit: the whole leaf in the pane, no room past it (user,
+      // 2026-10-31: the pane shows the leaf alone—the rest of the
+      // photograph is not in the TEI—so fully zoomed out is the leaf
+      // fitting the pane, the image beside it or not).
+      let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
       let overlaid = overlayRegistered && (overlayOn || overlayLeaving)
-      let fit = overlaid ? whole : min(whole, scanFit(of: layer, in: pane) ?? whole)
       let stored = storedZoom()
       var resting = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
       // A page with nothing set on it (a blank, a gap) rests at its fit:
