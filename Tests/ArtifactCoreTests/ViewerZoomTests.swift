@@ -158,4 +158,76 @@ final class ViewerZoomTests: XCTestCase {
     XCTAssertNil(surface.region)
     XCTAssertFalse(surface.canZoom)
   }
+
+  // MARK: - The zoom kept across images (user, 2026-10-30)
+
+  func testTheScaleIsTheZoomOverTheFit() {
+    var surface = surface()
+    XCTAssertEqual(surface.scale, 1, accuracy: 1e-12, "at the fit")
+    surface.zoom(to: 1, aboutX: 250, y: 200)
+    XCTAssertEqual(surface.scale, 2, accuracy: 1e-12, "the actual size over a fit of 0.5")
+    XCTAssertEqual(surface.scale, surface.region?.scale ?? 0, accuracy: 1e-12, "the same scale a region carries")
+    XCTAssertEqual(ViewerZoom.Surface().scale, 1, accuracy: 1e-12, "no fit yet: at it")
+  }
+
+  func testLaidAtAScaleTheNextImageKeepsTheZoomOverItsOwnFit() {
+    // A landscape page zoomed to 1.5 times its fit, then a portrait page
+    // of another resolution laid at the kept scale: 1.5 times its own fit,
+    // not the same pixels per image pixel.
+    var landscape = surface()
+    landscape.zoom(to: 0.75, aboutX: 100, y: 100)
+    let kept = landscape.scale
+    XCTAssertEqual(kept, 1.5, accuracy: 1e-12)
+    var portrait = ViewerZoom.Surface()
+    portrait.imageWidth = 800
+    portrait.imageHeight = 1200
+    let fit = ViewerZoom.Surface.fit(imageWidth: 800, imageHeight: 1200, viewportWidth: 500, viewportHeight: 400)
+    XCTAssertEqual(fit, 400.0 / 1200.0, accuracy: 1e-12)
+    portrait.lay(viewportWidth: 500, viewportHeight: 400, fit: fit, scale: kept)
+    XCTAssertEqual(portrait.scale, 1.5, accuracy: 1e-9)
+    XCTAssertEqual(portrait.zoom, fit * 1.5, accuracy: 1e-9)
+    XCTAssertNotEqual(portrait.zoom, landscape.zoom, "a zoom over the fit, not an absolute one")
+    XCTAssertFalse(portrait.atFit)
+    // Centered: narrower than the surface, it stands in the middle across;
+    // taller, its middle at the surface's.
+    XCTAssertEqual(portrait.panX, (500 - 800 * portrait.zoom) / 2, accuracy: 1e-9)
+    XCTAssertEqual(portrait.panY, (400 - 1200 * portrait.zoom) / 2, accuracy: 1e-9)
+    // And where the kept pan would leave a gap, none: centered is inside.
+    var clamped = portrait
+    clamped.clampPan()
+    XCTAssertEqual(clamped.panX, portrait.panX, accuracy: 1e-9)
+    XCTAssertEqual(clamped.panY, portrait.panY, accuracy: 1e-9)
+  }
+
+  func testAScaleAtOrUnderTheFitLaysItAtTheFitAndOneTooLargeAtTheActualSize() {
+    var atFit = ViewerZoom.Surface()
+    atFit.imageWidth = 1000
+    atFit.imageHeight = 800
+    atFit.lay(viewportWidth: 500, viewportHeight: 400, fit: 0.5, scale: 0.4)
+    XCTAssertEqual(atFit.zoom, 0.5, accuracy: 1e-12, "never below the fit")
+    XCTAssertTrue(atFit.atFit)
+    atFit.lay(viewportWidth: 500, viewportHeight: 400, fit: 0.5, scale: 1)
+    XCTAssertTrue(atFit.atFit, "a scale of 1 is the fit")
+    atFit.lay(viewportWidth: 500, viewportHeight: 400, fit: 0.5, scale: nil)
+    XCTAssertTrue(atFit.atFit, "none kept: the fit")
+    var past = ViewerZoom.Surface()
+    past.imageWidth = 1000
+    past.imageHeight = 800
+    past.lay(viewportWidth: 500, viewportHeight: 400, fit: 0.5, scale: 10)
+    XCTAssertEqual(past.zoom, 1, accuracy: 1e-12, "no further than the actual size")
+    XCTAssertFalse(past.atFit)
+    XCTAssertEqual(past.scale, 2, accuracy: 1e-12)
+  }
+
+  func testAFitLargerThanTheActualSizeTakesAnyScaleToTheFit() {
+    // A small image in a large surface: its fit is past its actual size, so
+    // the fit is all the zoom it has, whatever scale was kept.
+    var small = ViewerZoom.Surface()
+    small.imageWidth = 400
+    small.imageHeight = 300
+    small.lay(viewportWidth: 1000, viewportHeight: 750, fit: 2.5, scale: 1.5)
+    XCTAssertEqual(small.zoom, 2.5, accuracy: 1e-12)
+    XCTAssertTrue(small.atFit)
+    XCTAssertEqual(small.scale, 1, accuracy: 1e-12)
+  }
 }

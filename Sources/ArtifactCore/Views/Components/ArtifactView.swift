@@ -3239,8 +3239,9 @@
         } else if stringEquals(key, "-") {
           zoomOverlay(to: currentZoom() * ViewerZoom.wheelFactor(ViewerZoom.wheelTravel), about: middle)
         } else if stringEquals(key, "0") {
-          // The image back to its fit, the edition on it.
-          shownCanvas?.refit()
+          // The image back to its fit, the edition on it; the fit kept for
+          // the pages turned to next (user, 2026-10-30).
+          shownCanvas?.fitInOverlay()
           overlayZoomed = false
           applyZoom(about: nil)
         } else if stringEquals(key, "ArrowLeft") {
@@ -4865,9 +4866,10 @@
         self.scanPress = (event.clientX, event.clientY)
         self.pointScan(x: event.clientX, y: event.clientY)
       }
-      // A click on a word's band opens the word's gloss, as a click on the
-      // word in the text does (user, 2026-10-18); a click on an encoded zone
-      // on the image opens its gloss on the image side.
+      // A click on a word's band opens the word's gloss (user, 2026-10-18),
+      // on the image side, as a click on an encoded zone on the image opens
+      // its gloss there (user, 2026-10-30); a click on the word in the text
+      // opens it in the text pane.
       _ = object.addEventListener(.click) { [self] event in self.openScanWord(x: event.clientX, y: event.clientY) }
       _ = object.addEventListener(.mouseleave) { [self] _ in
         self.markEdition([])
@@ -4894,13 +4896,18 @@
       return best.map { ($0.index, $0.box) }
     }
 
-    /// The edition's word of the scan's word at a point of the window, as a
-    /// click on it in the text: the pane brought to it the least it takes,
-    /// then the word itself clicked, so whatever a click on a word does (its
-    /// gloss opens, in the pane it is in) is done, never a copy of it. A
-    /// click on a copy-evidence / encoded zone on the image opens its gloss
-    /// sheet on the image side. A press that moved panned the image: nothing
-    /// opens.
+    /// The edition's word of the scan's word at a point of the window: the
+    /// text pane brought to it the least it takes, its parts marked, and
+    /// its gloss opened on the image side (user, 2026-10-30), as a click on
+    /// a copy-evidence / encoded zone on the image opens that zone's gloss
+    /// sheet there—never in the text pane, where a click on the word itself
+    /// opens it. Each is told as an event that bubbles to the document,
+    /// where the gloss's dialog listens (gnorium-web `GlossHydration`):
+    /// `artifact-image-word` on the edition's word (its page, line and
+    /// place are its own attributes; the image's service its detail),
+    /// `artifact-image-element` on the image pane with the image's service
+    /// and the element's index. A press that moved panned the image:
+    /// nothing opens.
     private func openScanWord(x: Double, y: Double) {
       guard let press = scanPress, press.x == x, press.y == y else { return }
       scanPress = nil
@@ -4911,14 +4918,14 @@
         linked.boxes.contains { point.x >= $0[0] && point.x <= $0[2] && point.y >= $0[1] && point.y <= $0[3] }
       }), let part = word.parts.first {
         markEdition(word.parts)
-        part.click()
+        part.dispatchEvent(CustomEvent(type: "artifact-image-word", detail: canvas.serviceID, bubbles: true))
         return
       }
       if let element = elementAt(point, in: links), let object {
         object.dispatchEvent(
           CustomEvent(
             type: "artifact-image-element",
-            detail: stringJoin([canvas.serviceID, intToString(element.index)], separator: " ")))
+            detail: stringJoin([canvas.serviceID, intToString(element.index)], separator: " "), bubbles: true))
       }
     }
 

@@ -14,7 +14,10 @@ public enum ViewerZoom {
   /// of the text, to one CSS pixel. The most a view zooms in, unless its
   /// fit is larger still.
   public static let actualSize = 1.0
-  /// The session's image zoom: "fit", or a zoom.
+  /// The session's image zoom: "fit", or its zoom over its fit (`Surface.scale`),
+  /// so it stands as the reader turns images of any size or shape (user,
+  /// 2026-10-30): a page zoomed to twice its fit turns to the next page at
+  /// twice that page's fit, never at the same pixels per image pixel.
   static let imageKey = "gnorium:artifact-zoom:image"
 
   /// What a view shows of its page (pane sync, a dev experiment, user
@@ -104,6 +107,12 @@ public enum ViewerZoom {
     /// larger.
     public var maxZoom: Double { max(minZoom, ViewerZoom.actualSize) }
 
+    /// Its zoom over its fit: 1 at the fit, 2 at twice it. What a zoom is
+    /// across images of different sizes and shapes (`lay`'s start, the
+    /// session's kept zoom), as a `Region`'s is; 1 before it has an image
+    /// and its fit.
+    public var scale: Double { imageWidth > 0 && imageHeight > 0 && minZoom > 0 ? zoom / minZoom : 1 }
+
     /// Whether the image has a size and any zoom to give: one shown at its
     /// actual size (or larger) has none to zoom in to.
     public var canZoom: Bool {
@@ -143,14 +152,18 @@ public enum ViewerZoom {
     }
 
     /// Laid out afresh in a viewport of this size, whose fit is `fit`: at
-    /// `start` (clamped) where given, else at the fit; centered.
+    /// `start` times the fit (a zoom over the fit, as `scale` gives it;
+    /// clamped to the fit and the actual size) where given, else at the
+    /// fit; centered. Over the fit, not a zoom: the next image, of another
+    /// size or shape, lays at the same zoom over its own fit (user,
+    /// 2026-10-30).
     public mutating func lay(
-      viewportWidth width: Double, viewportHeight height: Double, fit: Double, zoom start: Double? = nil
+      viewportWidth width: Double, viewportHeight height: Double, fit: Double, scale start: Double? = nil
     ) {
       viewportWidth = width
       viewportHeight = height
       minZoom = fit
-      zoom = start.map { max(minZoom, min(maxZoom, $0)) } ?? minZoom
+      zoom = start.map { max(minZoom, min(maxZoom, minZoom * $0)) } ?? minZoom
       atFit = zoom <= minZoom
       panX = (viewportWidth - imageWidth * zoom) / 2
       panY = (viewportHeight - imageHeight * zoom) / 2

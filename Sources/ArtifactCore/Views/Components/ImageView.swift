@@ -362,8 +362,18 @@
       // fit leaves the image at its fit for the next page too, never at the
       // zoom it had before, which the next page's text then matched—fitted
       // to its width instead of whole (user, 2026-10-26).
-      sessionStorage.setItem(ViewerZoom.imageKey, atFit ? "fit" : doubleToString(zoom))
+      keepZoom()
       updateTransform()
+    }
+
+    /// The image's zoom kept for the session (`ViewerZoom.imageKey`): "fit",
+    /// or its zoom over its fit, which the next image shown lays at
+    /// (`fitToViewport`) whatever its size or shape (user, 2026-10-30).
+    /// Every zoom the reader makes keeps it—the image's own, the overlay's,
+    /// and the text's matched onto it—so a turn never zooms back to a zoom
+    /// the reader left.
+    private func keepZoom() {
+      sessionStorage.setItem(ViewerZoom.imageKey, atFit ? "fit" : doubleToString(surface.scale))
     }
 
     private func tellRegion() {
@@ -510,7 +520,9 @@
       clearElement()
     }
 
-    /// Fitted again, the viewport having changed its size (fullscreen).
+    /// Laid again, the viewport having changed its size (fullscreen, the
+    /// markup's pane put away): at its fit, or the session's zoom over it
+    /// (`fitToViewport`).
     func refit() {
       guard imageW > 0, imageH > 0 else { return }
       fitToViewport()
@@ -549,14 +561,16 @@
       guard let vp = viewport, let rect = vp.getBoundingClientRect() else { return }
       let width = rect.width > 0 ? rect.width : 900
       let height = rect.height > 0 ? rect.height : 500
-      // At its fit, unless the session zoomed the images in (a reload keeps
-      // it).
+      // At its fit, unless the session zoomed the images (a turn and a
+      // reload keep it): at the kept zoom over this image's own fit
+      // (`keepZoom`), so an image of another size or shape shows as much
+      // of its page as the last did (user, 2026-10-30).
       surface.lay(
         viewportWidth: width, viewportHeight: height,
         fit: ViewerZoom.Surface.fit(
           imageWidth: surface.imageWidth, imageHeight: surface.imageHeight, viewportWidth: width,
           viewportHeight: height),
-        zoom: parseDouble(sessionStorage.getItem(ViewerZoom.imageKey) ?? ""))
+        scale: parseDouble(sessionStorage.getItem(ViewerZoom.imageKey) ?? ""))
     }
 
     /// Whether the reader's overlay holds the scan still (user,
@@ -615,6 +629,20 @@
     func zoomInOverlay(by factor: Double, clientX: Double, clientY: Double) {
       guard imageW > 0, imageH > 0, factor > 0, let box = viewport?.getBoundingClientRect() else { return }
       surface.zoom(to: zoom * factor, aboutX: clientX - box.x, y: clientY - box.y)
+      // Kept as the image's own zoom is: the next image turned to in the
+      // overlay lays at it, never back at the zoom the overlay was entered
+      // at (user, 2026-10-30).
+      keepZoom()
+      updateTransform()
+    }
+
+    /// The overlay's fit, the image's (its 0 key): back to its fit, about
+    /// the viewport's middle, and the fit kept for the session (user,
+    /// 2026-10-30)—where `refit` lays it at the session's kept zoom again.
+    func fitInOverlay() {
+      guard imageW > 0, imageH > 0 else { return }
+      surface.zoom(to: minZoom, aboutX: viewportW / 2, y: viewportH / 2)
+      keepZoom()
       updateTransform()
     }
 
@@ -1454,7 +1482,7 @@
       // Held still by the overlay.
       guard !locked else { return }
       surface.zoom(to: value, aboutX: cx, y: cy)
-      sessionStorage.setItem(ViewerZoom.imageKey, atFit ? "fit" : doubleToString(zoom))
+      keepZoom()
       updateTransform()
       tellRegion()
     }
