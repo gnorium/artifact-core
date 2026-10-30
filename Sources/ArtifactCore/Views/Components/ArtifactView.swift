@@ -2667,6 +2667,15 @@
           )
           return overlayTarget.box
         }
+        // A figure's image, not yet loaded where it loads lazily, is
+        // measured again once it has (as a drawing once inlined).
+        for image in frame.querySelectorAll(".tei-figure-image:not([data-measured-on-load])") {
+          image.setAttribute(data("measured-on-load"), "true")
+          _ = image.addEventListener("load", { [self] _ in
+            self.overlayTarget = ("", [], false, 0, .center)
+            self.scheduleZoom()
+          }, capture: false, passive: true)
+        }
         var ink = InkExtent()
         // How each line is set (`StructureAlignment`, as the structure's
         // edition rows read it): the edge the scan is laid on across
@@ -3620,7 +3629,9 @@
         if region.scale <= Self.wholeScale { setZoom(nil, atFit: true) }
         return
       }
-      if region.scale <= Self.wholeScale {
+      if isBlank(layer) {
+        // Shown at its fit, the reader's zoom kept (`applyPageScale`).
+      } else if region.scale <= Self.wholeScale {
         // At its fit, the page's own fit, measured as it is laid out.
         setZoom(nil, atFit: true)
       } else {
@@ -3669,6 +3680,12 @@
         self.zoomQueued = false
         self.applyZoom(about: nil)
       }
+    }
+
+    /// Whether a page has nothing set on it (a blank, a gap): no line but
+    /// gaps.
+    private func isBlank(_ layer: DOM.Element) -> Bool {
+      layer.querySelector(".tei-line:not(.tei-line-gap)") == nil
     }
 
     /// The contain fit, never above the text's actual size: a page smaller
@@ -3843,7 +3860,12 @@
       // before opened it on a corner of its white (user, 2026-10-28).
       // Only as it opens: matched to the image (`matching`), it follows the
       // image's zoom as any page does.
-      if anchor == nil, !matching, layer.querySelector(".tei-line:not(.tei-line-gap)") == nil { resting = fit }
+      // Matched too (user, 2026-10-31): a blank has no text block to map
+      // the image's zoom through, and the zoom the reader chose by hand
+      // is kept, never stored over, for the next page that has one, which
+      // takes it from the image (as a ratio to the image's fit).
+      let blank = anchor == nil && isBlank(layer)
+      if blank { resting = fit }
       // Within a pixel of its fit the page is at its fit: a zoom a hair
       // over it (one read back from its attribute, a sync's ratio, the
       // overlay's kept as it went off) made the pane a scrollbar for a
@@ -3865,7 +3887,7 @@
       if settled { zoom = previous }
       // On the way back the zoom kept is the one it returns to, never a step
       // of the motion.
-      let chosen = !overlayLeaving && (stored.zoom != nil || stored.atFit)
+      let chosen = !overlayLeaving && !blank && (stored.zoom != nil || stored.atFit)
       let atFit = chosen && zoom <= fit
       frame.style.setProperty("width", doubleToString(natural.width * zoom) + "px")
       frame.style.setProperty("height", doubleToString(natural.height * zoom) + "px")
