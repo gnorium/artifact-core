@@ -1133,6 +1133,8 @@
       selector("&[data-fills-window]") {
         position(.fixed)
         CSS.Property("inset", "0")
+        // Its layer where the browser has no top layer to give (no Popover
+        // API); in the top layer the z-index counts for nothing.
         zIndex(zIndexOverlay)
         width(perc(100)).important()
         height(perc(100)).important()
@@ -1161,27 +1163,34 @@
         overflow(.hidden)
         CSS.Property("overscroll-behavior", "none")
       }
+      // While it fills the window the reader is in the top layer, a manual
+      // popover (`ArtifactReader.setFillsWindow`): over everything on the
+      // page whatever stacking context its host stands it in. Its z-index
+      // above counts only inside such a context—an accordion raised on
+      // focus-within held the reader under a ground drawn on the root
+      // (2026-10-30)—and only the top layer is above them all. The
+      // browser's own popover box is undone: its margin, its padding, its
+      // color (the border, the overflow and the ground are the reader's
+      // own rules).
+      selector("&[popover]") {
+        margin(px(0))
+        padding(px(0))
+        CSS.Property("color", "inherit")
+      }
       // The ground behind the growing reader: the theme's background over
-      // the whole window, under the reader (the overlay backdrop's layer),
-      // fading in as the reader grows and out as it shrinks (user,
-      // 2026-10-30). The root's own pseudo-element, since nothing inside
-      // the transformed reader could lie behind it; there always, unseen
-      // and untouchable, so that it has an opacity to transition from.
-      selector(":root:has(&)::after") {
-        CSS.Property("content", "\"\"")
-        position(.fixed)
-        CSS.Property("inset", "0")
-        zIndex(zIndexOverlayBackdrop)
+      // the whole window, fading in as the reader grows and out as it
+      // shrinks (user, 2026-10-30). The reader's own backdrop, in the top
+      // layer right under it, so that nothing on the page can come between;
+      // there from the popover's showing, unseen, so that it has an
+      // opacity to transition from.
+      selector("&[popover]::backdrop") {
         backgroundColor(backgroundColorBase)
         opacity(0)
-        visibility(.hidden)
-        pointerEvents(.none)
-        transition((.opacity, .visibility), transitionDurationMedium, transitionTimingFunctionUser)
+        transition(.opacity, transitionDurationMedium, transitionTimingFunctionUser)
         media(prefersReducedMotion(.reduce)) { transition(.none).important() }
       }
-      selector(":root:has(&[data-fills-window='true'])::after") {
+      selector("&[data-fills-window='true']::backdrop") {
         opacity(1)
-        visibility(.visible)
       }
       // On a phone (below 480px) the viewer is never narrower than its
       // footer's one row at its own size (user, 2026-10-12)—Raw, Reflow,
@@ -4455,6 +4464,7 @@
           return
         }
         guard let first = root.getBoundingClientRect(), let parent = root.parentElement else {
+          raiseToTopLayer()
           root.setAttribute(data("fills-window"), "true")
           shownCanvas?.refit()
           return
@@ -4466,6 +4476,10 @@
         placeholder.style.setProperty("flex-shrink", "0")
         parent.insertBefore(placeholder, root)
         fillsWindowPlaceholder = placeholder
+        // Into the top layer first, laid out there, so that its backdrop
+        // has the unseen ground to fade in from.
+        raiseToTopLayer()
+        _ = root.getBoundingClientRect()
         root.setAttribute(data("fills-window"), "true")
         guard !still, let last = root.getBoundingClientRect(), last.width > 0, last.height > 0 else {
           shownCanvas?.refit()
@@ -4523,14 +4537,35 @@
       }
     }
 
+    /// The viewer into the top layer, as a manual popover: over everything
+    /// on the page whatever stacking context its host stands it in (an
+    /// accordion raised on focus-within, 2026-10-30), its backdrop right
+    /// under it. Where the browser has no Popover API, or refuses, the
+    /// attribute goes again (it would hide the viewer once the API is
+    /// there) and the viewer stays in its own layer, fixed over the page.
+    private func raiseToTopLayer() {
+      root.setAttribute("popover", "manual")
+      if !root.showPopover() { root.removeAttribute("popover") }
+    }
+
+    /// The viewer out of the top layer, back to where it stands: hidden as
+    /// a popover, then no popover at all (the attribute alone would hide
+    /// it).
+    private func lowerFromTopLayer() {
+      root.hidePopover()
+      root.removeAttribute("popover")
+    }
+
     /// The viewer back in its place on the page, nothing of the
-    /// window-filling mode left: attributes, transform and placeholder.
+    /// window-filling mode left: attributes, transform, placeholder and
+    /// the top layer.
     private func clearFillsWindow() {
       root.removeAttribute(data("fills-window"))
       root.removeAttribute(data("fills-window-moving"))
       _ = root.style.removeProperty("transform")
       if let placeholder = fillsWindowPlaceholder { placeholder.parentElement?.removeChild(placeholder) }
       fillsWindowPlaceholder = nil
+      lowerFromTopLayer()
       shownCanvas?.refit()
     }
 

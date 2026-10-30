@@ -28,9 +28,11 @@ final class ArtifactFillsWindowTests: XCTestCase {
 
   /// Its move in and out (user, 2026-10-30) is a FLIP transform about the
   /// window's corner, transitioned on the system's medium clock and the
-  /// user-motion curve only while it moves; the theme's background fades
-  /// in behind it on the root's pseudo-element, under the reader; neither
-  /// moves for those who ask for reduced motion.
+  /// user-motion curve only while it moves; in the top layer (a popover,
+  /// the browser's box undone) the theme's background fades in behind it
+  /// on its own backdrop, right under the reader whatever stacking context
+  /// its host stands it in; neither moves for those who ask for reduced
+  /// motion.
   func testTheMoveIsATransitionedTransformWithAFadingGroundAndNoneUnderReducedMotion() throws {
     let css = HTMLGlobalStyle.collecting {
       _ = ArtifactView {
@@ -46,19 +48,19 @@ final class ArtifactFillsWindowTests: XCTestCase {
     XCTAssertTrue(
       move.contains("transition: transform var(--transition-duration-medium) var(--transition-timing-function-user)"))
     XCTAssertTrue(move.contains("will-change: transform"))
-    let ground = try XCTUnwrap(rules.first { $0.contains(":root:has(.artifact-view)::after {") })
-    XCTAssertTrue(ground.contains("position: fixed"))
-    XCTAssertTrue(ground.contains("z-index: var(--z-index-overlay-backdrop)"))
+    let popover = try XCTUnwrap(rules.first { $0.contains(".artifact-view[popover] {") })
+    XCTAssertTrue(popover.contains("margin: 0"))
+    XCTAssertTrue(popover.contains("padding: 0"))
+    XCTAssertTrue(popover.contains("color: inherit"))
+    let ground = try XCTUnwrap(rules.first { $0.contains(".artifact-view[popover]::backdrop {") })
     XCTAssertTrue(ground.contains("background-color: var(--background-color-base)"))
     XCTAssertTrue(ground.contains("opacity: 0"))
-    XCTAssertTrue(ground.contains("visibility: hidden"))
-    XCTAssertTrue(ground.contains("pointer-events: none"))
-    XCTAssertTrue(ground.contains("opacity var(--transition-duration-medium) var(--transition-timing-function-user)"))
-    let shown = try XCTUnwrap(rules.first { $0.contains(":root:has(.artifact-view[data-fills-window='true'])::after {") })
+    XCTAssertTrue(ground.contains("transition: opacity var(--transition-duration-medium) var(--transition-timing-function-user)"))
+    let shown = try XCTUnwrap(rules.first { $0.contains(".artifact-view[data-fills-window='true']::backdrop {") })
     XCTAssertTrue(shown.contains("opacity: 1"))
-    XCTAssertTrue(shown.contains("visibility: visible"))
+    XCTAssertFalse(css.contains(":root:has(.artifact-view)::after"), "the ground is the reader's own backdrop, not the root's pseudo-element")
     let still = rules.filter { $0.contains("prefers-reduced-motion: reduce") }
     XCTAssertTrue(still.contains { $0.contains("[data-fills-window-moving='true']") }, "the move stands still under reduced motion")
-    XCTAssertTrue(still.contains { $0.contains(":root:has(.artifact-view)::after") }, "the ground stands still under reduced motion")
+    XCTAssertTrue(still.contains { $0.contains(".artifact-view[popover]::backdrop") }, "the ground stands still under reduced motion")
   }
 }
