@@ -3475,11 +3475,19 @@
       let share = sizing.viewportWidth / (image.scale * sizing.fit) / (scan[2] - scan[0])
       let zoom = Double(pane.clientWidth) / (share * (block[2] - block[0]))
       let factor = zoom / lastFit / image.scale
+      // The image at its fit is the text at its fit (`scanFit` makes the
+      // two one scale): a mode, never a number. Mapped as a number, it was
+      // the fit of the page turned from (`lastFit`) over a layer not yet
+      // laid out, and the page turned to (Hamlet Q1's cover from p. 3,
+      // user 2026-10-31) opened at that zoom, its leaf cut off.
       return .init(
         centerX: (block[0] + u * (block[2] - block[0])) / layer.width,
         centerY: (block[1] + v * (block[3] - block[1])) / layer.height,
-        scale: image.scale * factor, maxScale: image.maxScale * factor)
+        scale: image.scale <= Self.wholeScale ? 1 : image.scale * factor, maxScale: image.maxScale * factor)
     }
+
+    /// A region's scale at which it is at its fit, its rounding allowed.
+    private static let wholeScale = 1.0001
 
     /// The most the text zooms in, its fit being `fit`.
     private func maxZoom(fit: Double) -> Double {
@@ -3571,11 +3579,16 @@
     private func applyMatchText(_ region: ViewerZoom.Region) {
       guard syncs else { return }
       guard let pane = markupPane, let layer = shownLayer() else {
-        if region.scale <= 1.0001 { setZoom(nil, atFit: true) }
+        if region.scale <= Self.wholeScale { setZoom(nil, atFit: true) }
         return
       }
-      let zoom = max(lastFit, min(maxZoom(fit: lastFit), lastFit * region.scale))
-      setZoom(zoom, atFit: zoom <= lastFit)
+      if region.scale <= Self.wholeScale {
+        // At its fit, the page's own fit, measured as it is laid out.
+        setZoom(nil, atFit: true)
+      } else {
+        let zoom = max(lastFit, min(maxZoom(fit: lastFit), lastFit * region.scale))
+        setZoom(zoom, atFit: zoom <= lastFit)
+      }
       applyZoom(about: nil, matching: true)
       guard let box = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect() else { return }
       // The layer's place in what the pane scrolls, and the point to center.
