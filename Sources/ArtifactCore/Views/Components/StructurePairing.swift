@@ -138,6 +138,18 @@ enum StructurePairing {
     abs(edition.seated - scan.seated) <= leading / 4 && aligned(edition, scan)
   }
 
+  /// Whether a figure's drawing stands on its zone (user, 2026-10-30:
+  /// Hamlet Q1's woodcut device drawn a third of an em to an em off its
+  /// print, which the lines' pairing never saw), by the lines' tolerance:
+  /// its top and its bottom within a quarter of the body's leading
+  /// (`leading`), as a baseline, and its start and its end within an em of
+  /// the body (`em`), as a justified line's two edges. gnorium-python
+  /// `structure_check.figure_faults`.
+  static func figureWithin(_ edition: StructureRow, _ scan: StructureRow, em: Double, leading: Double) -> Bool {
+    abs(edition.top - scan.top) <= leading / 4 && abs(edition.bottom - scan.bottom) <= leading / 4
+      && abs(edition.left - scan.left) <= em && abs(edition.right - scan.right) <= em
+  }
+
   /// Whether an edition's line stands across where its scan line does, by
   /// the edges the print aligns (user, 2026-10-14): a left-set line's left
   /// edge, a right-set line's right, a centered line's center, a justified

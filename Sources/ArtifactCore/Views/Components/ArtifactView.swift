@@ -4986,9 +4986,16 @@
       for drawn in root.querySelectorAll(".artifact-markup .artifact-structure") {
         if !shown { drawn.remove() }
       }
-      guard shown, let layer = shownLayer(), let structure = currentStructure() else { return }
+      guard shown, let layer = shownLayer(), let page = layer.closest(".tei-page") else { return }
+      // The lines first: their registration (`registrationShift`) lays the figures too.
+      let structure = currentStructure()
+      let figures = figurePairs(layer, page: page)
+      guard structure != nil || !figures.isEmpty else { return }
+      let key =
+        (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "") + " "
+        + intToString(figures.count)
       if let drawn = layer.querySelector(":scope > .artifact-structure"),
-        stringEquals(drawn.getAttribute(data("key")) ?? "", structure.key)
+        stringEquals(drawn.getAttribute(data("key")) ?? "", key)
       {
         return
       }
@@ -5014,30 +5021,101 @@
           ], separator: "")
       }
       var parts: [String] = []
-      for block in structure.editionBlocks { parts.append(rectangle(block, side: "edition", kind: "block", state: "within")) }
-      for block in structure.scanBlocks { parts.append(polygon(block, kind: "block", state: "within")) }
+      if let structure {
+        for block in structure.editionBlocks { parts.append(rectangle(block, side: "edition", kind: "block", state: "within")) }
+        for block in structure.scanBlocks { parts.append(polygon(block, kind: "block", state: "within")) }
+      }
       // The quiet first, the marked over them.
       for quiet in [true, false] {
-        for (index, row) in structure.editionRows.enumerated()
-        where stringEquals(structure.editionStates[index], "within") == quiet {
-          parts.append(rectangle(row, side: "edition", kind: "line", state: structure.editionStates[index], index: index))
-        }
-        for (index, row) in structure.scanRows.enumerated()
-        where stringEquals(structure.scanStates[index], "within") == quiet {
-          // Each of a row's lines, the row's state: lines side by side are
-          // one row (`StructurePairing.rows`).
-          for line in row.lines {
-            parts.append(polygon(line, kind: "line", state: structure.scanStates[index], index: index))
+        if let structure {
+          for (index, row) in structure.editionRows.enumerated()
+          where stringEquals(structure.editionStates[index], "within") == quiet {
+            parts.append(rectangle(row, side: "edition", kind: "line", state: structure.editionStates[index], index: index))
           }
+          for (index, row) in structure.scanRows.enumerated()
+          where stringEquals(structure.scanStates[index], "within") == quiet {
+            // Each of a row's lines, the row's state: lines side by side are
+            // one row (`StructurePairing.rows`).
+            for line in row.lines {
+              parts.append(polygon(line, kind: "line", state: structure.scanStates[index], index: index))
+            }
+          }
+        }
+        // Each figure's drawing and its zone, as a line and its scan line.
+        for (index, figure) in figures.enumerated() where stringEquals(figure.state, "within") == quiet {
+          parts.append(rectangle(figure.edition, side: "edition", kind: "figure", state: figure.state, index: index))
+          parts.append(polygon(figure.scan, kind: "figure", state: figure.state, index: index))
         }
       }
       let scene = document.createElement(.div)
       scene.setAttribute("class", "artifact-structure")
-      scene.setAttribute(data("key"), structure.key)
+      scene.setAttribute(data("key"), key)
       scene.setAttribute("aria-hidden", "true")
       scene.innerHTML = stringJoin(
         ["<svg xmlns=\"http://www.w3.org/2000/svg\">", stringJoin(parts, separator: ""), "</svg>"], separator: "")
       layer.appendChild(scene)
+    }
+
+    /// Each figure the page draws against its zone (user, 2026-10-30): its
+    /// drawing's box in the shown layer's own pixels (its inlined SVG, its
+    /// image, or the facsimile's crop), its zone (`data-zone`, TEIView's
+    /// `figureZoneData`) laid as the scan is (`scanToLayer`: the text
+    /// block's registration and the lines' `registrationShift`), and its
+    /// state: "within" or "off" by the lines' tolerance
+    /// (`StructurePairing.figureWithin`: a quarter of the body's leading
+    /// down, the body's leading its em where the page declares none, an em
+    /// across). gnorium-python `structure_check.figure_pairs`, which reads
+    /// where the drawing's ink lands on its render.
+    private func figurePairs(_ layer: DOM.Element, page: DOM.Element) -> [(
+      edition: StructureRow, scan: [Double], state: String
+    )] {
+      guard !rawVisible, !reflowOn, let scale = drawnScale(of: layer), let size = shownImageSize,
+        let map = scanToLayer(layer, drawnAt: scale), let box = layer.getBoundingClientRect()
+      else { return [] }
+      let frame = layer.querySelector(".tei-text-block")
+      let em = pixels(window.getComputedStyle(frame ?? layer).getPropertyValue("font-size"))
+      let leading = (parseDouble(page.getAttribute(data("body-leading")) ?? "") ?? 1) * em
+      var out: [(edition: StructureRow, scan: [Double], state: String)] = []
+      for figure in layer.querySelectorAll(".tei-figure[data-zone]") {
+        let corners = stringSplit(figure.getAttribute(data("zone")) ?? "", separator: " ").compactMap { parseDouble($0) }
+        let picture = figure.querySelector(".tei-figure-drawing > svg, .tei-figure-drawing-image, .tei-figure-image") ?? figure
+        guard corners.count == 4, let drawn = inkBox(of: picture), drawn[2] > drawn[0], drawn[3] > drawn[1] else { continue }
+        var points: [Double] = []
+        for (x, y) in [(corners[0], corners[1]), (corners[2], corners[1]), (corners[2], corners[3]), (corners[0], corners[3])] {
+          let point = map.apply(x: x / Self.zoneExtent * size.width, y: y / Self.zoneExtent * size.height)
+          points.append(point.x)
+          points.append(point.y)
+        }
+        let scan = StructureRow(
+          left: min(points[0], points[6]), top: min(points[1], points[3]), right: max(points[2], points[4]),
+          bottom: max(points[5], points[7]))
+        let edition = StructureRow(
+          left: (drawn[0] - box.x) / scale, top: (drawn[1] - box.y) / scale, right: (drawn[2] - box.x) / scale,
+          bottom: (drawn[3] - box.y) / scale)
+        out.append(
+          (edition, points, StructurePairing.figureWithin(edition, scan, em: em, leading: leading) ? "within" : "off"))
+      }
+      return out
+    }
+
+    /// Where a figure's picture draws its ink, in the window's pixels (left,
+    /// top, right, bottom): an inlined drawing's content box
+    /// (`getBBox`, in its viewBox's units) as its viewBox is fitted into its
+    /// box (the default `xMidYMid meet`: one scale, centered), so a drawing
+    /// whose viewBox holds more than its ink is judged where its ink
+    /// lands (gnorium-python `layout_preview._figure_ink`); an image's or a
+    /// crop's own box. Nil where it is not drawn.
+    private func inkBox(of picture: DOM.Element) -> [Double]? {
+      guard let rect = picture.getBoundingClientRect(), rect.width > 0, rect.height > 0 else { return nil }
+      let whole = [rect.left, rect.top, rect.right, rect.bottom]
+      // An image's or a crop's box (no SVG graphic: no content box).
+      guard let content = picture.getBBox(), content.width > 0, content.height > 0 else { return whole }
+      let view = stringSplit(picture.getAttribute("viewBox") ?? "", separator: " ").compactMap { parseDouble($0) }
+      guard view.count == 4, view[2] > 0, view[3] > 0 else { return whole }
+      let fit = min(rect.width / view[2], rect.height / view[3])
+      let left = rect.left + (rect.width - view[2] * fit) / 2 + (content.x - view[0]) * fit
+      let top = rect.top + (rect.height - view[3] * fit) / 2 + (content.y - view[1]) * fit
+      return [left, top, left + content.width * fit, top + content.height * fit]
     }
 
     // MARK: - Word correspondence

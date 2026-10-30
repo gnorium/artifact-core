@@ -171,3 +171,19 @@ final class StructureSizeTests: XCTestCase {
     XCTAssertTrue(StructurePairing.sized(small, print, ratio: 0))
   }
 }
+
+/// A figure's drawing against its zone (user, 2026-10-30: Hamlet Q1's
+/// woodcut device drawn 1.13 em right of its print and 0.40 em low, which
+/// no check saw): judged by the lines' tolerance, its top and bottom a
+/// quarter of the body's leading, its start and end an em.
+final class StructureFigureTests: XCTestCase {
+  func testAFigureIsWithinWhereItsEdgesStandWithinTheLinesTolerance() {
+    let zone = StructureRow(left: 100, top: 200, right: 400, bottom: 500)
+    XCTAssertTrue(StructurePairing.figureWithin(
+      StructureRow(left: 110, top: 202, right: 390, bottom: 497), zone, em: 16, leading: 20))
+    XCTAssertFalse(StructurePairing.figureWithin(
+      StructureRow(left: 118, top: 200, right: 400, bottom: 500), zone, em: 16, leading: 20), "its start past an em")
+    XCTAssertFalse(StructurePairing.figureWithin(
+      StructureRow(left: 100, top: 206, right: 400, bottom: 500), zone, em: 16, leading: 20), "its top past a quarter leading")
+  }
+}
