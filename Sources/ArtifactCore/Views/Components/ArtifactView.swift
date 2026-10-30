@@ -2635,7 +2635,14 @@
       // title page's 2.5 times, user 2026-10-28: the panes' sync zoomed
       // the image far past the text).
       let zoom = layer.offsetWidth > 0 ? box.width / layer.offsetWidth : stated
-      let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
+      // Measured again once a figure's drawing is inlined in place of its
+      // image (`TEIFigureHydration`): before, the block held the lettering
+      // alone where the drawing frames the page (Hamlet Q1's cover, its
+      // gilt fillets; the sync then zoomed the cover 2.6 times past the
+      // image, user 2026-10-31).
+      let inlined = layer.querySelectorAll(".tei-figure-drawing[data-graphic-inlined='true']").count
+      let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "") + " "
+        + intToString(inlined)
       if !stringEquals(overlayTarget.page, id) || overlayTarget.box.count != 4 {
         let frame = layer.querySelector(".tei-text-block") ?? layer
         // Its em in its own pixels (a transform scales the layer, never its
@@ -2675,7 +2682,7 @@
             for _ in inkLines(of: node, in: parent, context: context, range: range) { alignments.append(alignment) }
           }
         }
-        for drawn in frame.querySelectorAll(".tei-rule, .tei-figure-image, .tei-frame") {
+        for drawn in frame.querySelectorAll(".tei-rule, .tei-figure-image, .tei-figure-drawing > svg, .tei-frame") {
           // A frame draws ink only where it draws a border: one that sets
           // its lines' margins or measure alone draws nothing.
           if drawn.classList.contains("tei-frame") && !drawsBorder(drawn) { continue }
@@ -3057,6 +3064,34 @@
 
     private var lastPaneSize = (width: 0.0, height: 0.0)
 
+    /// The shown leaf watched for its size (`watchLeaf`), and the size it
+    /// was fitted at, in its own CSS pixels.
+    private var leafWatch: (leaf: DOM.Element, handle: Int32)?
+    private var fittedLeaf = (width: 0.0, height: 0.0)
+
+    /// A leaf at its fit is fitted again when its size changes after it was
+    /// fitted, with nothing added to the pane to say so: its fonts settling,
+    /// a figure's drawing decoded, its page drawn again (user, 2026-10-31).
+    /// One refit a frame (`scheduleZoom`); a zoom the reader chose by hand
+    /// is never moved by it. Its text block is measured again either way.
+    private func watchLeaf(_ layer: DOM.Element, natural: (width: Double, height: Double)) {
+      fittedLeaf = natural
+      if let watch = leafWatch, watch.leaf.id == layer.id { return }
+      if let watch = leafWatch { watch.leaf.unobserveResize(watch.handle) }
+      let handle = layer.observeResize { [self] _, _ in
+        // Its border box, as it was fitted (the observer's is its content
+        // box); a whole pixel's rounding allowed.
+        guard let leaf = self.leafWatch?.leaf,
+          abs(leaf.offsetWidth - self.fittedLeaf.width) > 1 || abs(leaf.offsetHeight - self.fittedLeaf.height) > 1
+        else { return }
+        // Its text block, measured once a page (`textBlock`), measured
+        // again: the one kept was the leaf's before.
+        self.overlayTarget = ("", [], false, 0, .center)
+        if self.storedZoom().atFit { self.scheduleZoom() }
+      }
+      leafWatch = (layer, handle)
+    }
+
     private func setupZoom() {
       guard let pane = markupPane else { return }
       // The fit follows the pane's size and the page's content: a page
@@ -3407,14 +3442,17 @@
     /// the page has no text block or none is drawn; then each pane is
     /// matched by its whole, as before.
     private func syncBlocks() -> (image: [Double], text: [Double], layer: (width: Double, height: Double))? {
+      // The layer's own size, its layout's: its box over the zoom its
+      // attribute states read a page turned to, not yet scaled, at the
+      // page before's zoom (Hamlet Q1's cover from p. 3, a zoom set by
+      // hand, opened 5.7 times its fit; user 2026-10-31).
       guard let sizing = shownCanvas?.sizing, let zone = overlayZone(), let layer = shownLayer(),
-        let layerBox = layer.getBoundingClientRect(), layerBox.width > 0
+        layer.offsetWidth > 0, layer.offsetHeight > 0
       else { return nil }
-      let zoom = parseDouble(layer.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
-      guard zoom > 0, let ink = textBlock(in: layer, drawnAt: zoom), ink.count == 4, ink[2] > ink[0], ink[3] > ink[1],
+      guard let ink = textBlock(in: layer, drawnAt: currentZoom()), ink.count == 4, ink[2] > ink[0], ink[3] > ink[1],
         let scan = scanBlock(zone: zone, sizing: (sizing.width, sizing.height))
       else { return nil }
-      return (scan, ink, (layerBox.width / zoom, layerBox.height / zoom))
+      return (scan, ink, (layer.offsetWidth, layer.offsetHeight))
     }
 
     /// The scan's text block (left, top, right, bottom) in the image's
@@ -3790,6 +3828,7 @@
       layer.style.setProperty("transform", "none")
       guard let shown = layer.getBoundingClientRect(), shown.width > 0, shown.height > 0 else { return }
       let natural = (width: shown.width / screen.x, height: shown.height / screen.y)
+      watchLeaf(layer, natural: natural)
       // Its fit: the whole leaf in the pane, and, the image beside it, no
       // closer than the image at its fit shows the scan (`scanFit`), so
       // fully zoomed out the two panes agree in scale. The overlay frames
