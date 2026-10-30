@@ -411,7 +411,8 @@
           )
 
           // Maximize to go full screen; in full screen the same button
-          // leaves it, and shows minimize.
+          // leaves it, and shows minimize. Where full screen is refused
+          // (a webview, an iPhone) the viewer fills the window instead.
           button {
             IconView(
               icon: { size in [MaximizeIconView(size: size)] }, size: lineHeightSmall22,
@@ -422,6 +423,7 @@
           }
           .id("artifact-fullscreen-btn")
           .class("artifact-fullscreen-button")
+          .ariaLabel("Enter full screen")
         }
         .class("artifact-footer")
       }
@@ -1108,11 +1110,28 @@
         cursor(.pointer)
         flexShrink(0)
       }
-      selector("& .artifact-fullscreen-exit", "&:fullscreen .artifact-fullscreen-enter") {
+      selector(
+        "& .artifact-fullscreen-exit", "&:fullscreen .artifact-fullscreen-enter",
+        "&[data-fills-window='true'] .artifact-fullscreen-enter"
+      ) {
         display(.none)
       }
-      selector("&:fullscreen .artifact-fullscreen-exit") {
+      selector("&:fullscreen .artifact-fullscreen-exit", "&[data-fills-window='true'] .artifact-fullscreen-exit") {
         display(.flex)
+      }
+      // Full screen refused (`ArtifactReader.toggleFullscreen`): the
+      // viewer over the whole window, above the page, as full screen
+      // would show it. Important over the size a host gives it (the
+      // testament reader's `max(64dvh, 480px)`, the phone's min-content).
+      selector("&[data-fills-window='true']") {
+        position(.fixed)
+        CSS.Property("inset", "0")
+        zIndex(zIndexOverlay)
+        width(perc(100)).important()
+        height(perc(100)).important()
+        CSS.Property("min-width", "0").important()
+        CSS.Property("max-width", "none").important()
+        borderRadius(borderRadiusSharp)
       }
       // On a phone (below 480px) the viewer is never narrower than its
       // footer's one row at its own size (user, 2026-10-12)—Raw, Reflow,
@@ -4257,15 +4276,13 @@
       prevBtn?.addEventListener(.click) { [self] _ in navigate(-1) }
       nextBtn?.addEventListener(.click) { [self] _ in navigate(1) }
 
-      root.querySelector("#artifact-fullscreen-btn")?.addEventListener(.click) { [self] _ in
-        if document.isFullscreen {
-          document.exitFullscreen()
-        } else {
-          root.requestFullscreen()
-        }
-      }
+      fullscreenButton?.addEventListener(.click) { [self] _ in toggleFullscreen() }
 
       fullscreenListener = document.addEventListener(.fullscreenchange) { [self] _ in
+        // A request taken as refused and granted after all: full screen
+        // replaces the window-filling mode.
+        if document.isFullscreen && fillsWindow { root.removeAttribute(data("fills-window")) }
+        labelFullscreenButton(entered: document.isFullscreen)
         self.shownCanvas?.refit()
       }
 
@@ -4292,6 +4309,12 @@
       }
 
       keyDownListener = window.addEventListener(.keydown) { [self] e in
+        // Escape leaves the window-filling mode, as it leaves full screen.
+        if fillsWindow && stringEquals(e.key, "Escape") {
+          e.preventDefault()
+          setFillsWindow(false)
+          return
+        }
         // An arrow typed in a field moves its caret, never the pages: a
         // form may hold a viewer among its fields.
         if let _ = e.target?.closest("input, textarea, select, [contenteditable='true']") { return }
@@ -4302,6 +4325,43 @@
         if stringEquals(e.key, "ArrowLeft") { navigate(-1) }
         if stringEquals(e.key, "ArrowRight") { navigate(1) }
       }
+    }
+
+    private var fullscreenButton: DOM.Element? { root.querySelector("#artifact-fullscreen-btn") }
+
+    /// Whether the viewer fills the window in place of full screen.
+    private var fillsWindow: Bool { stringEquals(root.dataset["fills-window"] ?? "", "true") }
+
+    /// Full screen, or out of it. Where the browser has no full screen to
+    /// give or refuses it (a webview, an iPhone, a permission check), the
+    /// viewer fills the window instead: fixed over the page, left by
+    /// Escape or the same button.
+    private func toggleFullscreen() {
+      if fillsWindow {
+        setFillsWindow(false)
+      } else if document.isFullscreen {
+        document.exitFullscreen()
+      } else if !document.fullscreenEnabled {
+        setFillsWindow(true)
+      } else {
+        root.requestFullscreen { [self] granted in
+          if !granted { setFillsWindow(true) }
+        }
+      }
+    }
+
+    private func setFillsWindow(_ fills: Bool) {
+      if fills {
+        root.setAttribute(data("fills-window"), "true")
+      } else {
+        root.removeAttribute(data("fills-window"))
+      }
+      labelFullscreenButton(entered: fills)
+      shownCanvas?.refit()
+    }
+
+    private func labelFullscreenButton(entered: Bool) {
+      fullscreenButton?.setAttribute("aria-label", entered ? "Exit full screen" : "Enter full screen")
     }
 
     /// Where an image service sits among the pages, if it is there at all.
