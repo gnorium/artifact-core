@@ -2895,12 +2895,12 @@
     /// pane's box and its size) frames the page where the image has no
     /// place yet.
     private func placeOverlay(
-      _ layer: DOM.Element, frame: DOM.Element, in pane: DOM.Element, natural: DOM.Rect,
+      _ layer: DOM.Element, frame: DOM.Element, in pane: DOM.Element, natural: (width: Double, height: Double),
       room: (x: Double, y: Double, width: Double, height: Double), fit: Double, resting: Double
     ) {
       guard let paneBox = pane.getBoundingClientRect() else { return }
       overlayRoom = room
-      let framing = overlayFraming(layer: layer, natural: (natural.width, natural.height), in: (room.width, room.height))
+      let framing = overlayFraming(layer: layer, natural: natural, in: (room.width, room.height))
       let origin = (x: paneBox.x + room.x, y: paneBox.y + room.y)
       let progress = overlayProgress
       _ = frame.style.removeProperty("transform")
@@ -3670,6 +3670,17 @@
       return fits
     }
 
+    /// The window's pixels per CSS pixel of `element` across and down (its
+    /// on-screen `box` over its layout size): 1 at rest, less while a
+    /// transform on an ancestor scales it. Within a pixel of its layout
+    /// size it is 1: the layout size is rounded to a whole pixel.
+    private func screenScale(of element: DOM.Element, box: DOM.Rect) -> (x: Double, y: Double) {
+      let width = element.offsetWidth, height = element.offsetHeight
+      let x = width > 0 && abs(box.width - width) > 1 ? box.width / width : 1
+      let y = height > 0 && abs(box.height - height) > 1 ? box.height / height : 1
+      return (x, y)
+    }
+
     /// Scale a stable printed layout. CSS zoom recalculates font metrics and
     /// intrinsic widths, changing the page height and paired fit mid-gesture.
     private func applyPageScale(
@@ -3692,13 +3703,20 @@
       let margin = existing ? pixels(parent.style.getPropertyValue("margin-inline-start"))
         : pixels(layer.style.getPropertyValue("margin-inline-start")) * previous
       let marginDown = existing ? pixels(parent.style.getPropertyValue("margin-block-start")) : 0
-      let insetX = max(0, oldBox.x - paneBox.x + oldScroll.x - margin)
-      let insetY = max(0, oldBox.y - paneBox.y + oldScroll.y - marginDown)
+      // The page is sized in CSS pixels (its frame, its scale), and a box
+      // read on screen is in the window's: under a transform on the reader
+      // (the window-filling reader's grow, user 2026-10-31) the two differ,
+      // and a leaf measured mid-motion was fitted to a page smaller than
+      // its own, the pane then cutting off its margins at its fit. Each
+      // screen measure here is put back into CSS pixels.
+      let screen = screenScale(of: pane, box: paneBox)
+      let insetX = max(0, (oldBox.x - paneBox.x) / screen.x + oldScroll.x - margin)
+      let insetY = max(0, (oldBox.y - paneBox.y) / screen.y + oldScroll.y - marginDown)
       let style = window.getComputedStyle(pane)
       let borderX = pixels(style.getPropertyValue("border-left-width")) + pixels(style.getPropertyValue("border-right-width"))
       let borderY = pixels(style.getPropertyValue("border-top-width")) + pixels(style.getPropertyValue("border-bottom-width"))
-      let innerWidth = pane.clientWidth > 0 ? min(paneBox.width - borderX, Double(pane.clientWidth)) : paneBox.width - borderX
-      let innerHeight = pane.clientHeight > 0 ? min(paneBox.height - borderY, Double(pane.clientHeight)) : paneBox.height - borderY
+      let innerWidth = pane.clientWidth > 0 ? min(paneBox.width / screen.x - borderX, pane.clientWidth) : paneBox.width / screen.x - borderX
+      let innerHeight = pane.clientHeight > 0 ? min(paneBox.height / screen.y - borderY, pane.clientHeight) : paneBox.height / screen.y - borderY
       let paneWidth = innerWidth - 2 * insetX
       let paneHeight = innerHeight - 2 * insetY
       guard paneWidth > 0, paneHeight > 0 else { return }
@@ -3733,7 +3751,8 @@
       }
       layer.style.setProperty("transform-origin", "top left")
       layer.style.setProperty("transform", "none")
-      guard let natural = layer.getBoundingClientRect(), natural.width > 0, natural.height > 0 else { return }
+      guard let shown = layer.getBoundingClientRect(), shown.width > 0, shown.height > 0 else { return }
+      let natural = (width: shown.width / screen.x, height: shown.height / screen.y)
       let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
       let stored = storedZoom()
       var resting = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
@@ -3890,16 +3909,18 @@
       // What stands around the layer in the pane (the view's 1px inset,
       // which keeps a ring clear), on both sides alike: where the layer
       // starts, less its centering margin.
-      let insetX = max(0, box.x - paneBox.x + pane.scrollLeft - margin)
-      let insetY = max(0, box.y - paneBox.y + pane.scrollTop)
+      // In CSS pixels, as the page is sized (`screenScale`).
+      let screen = screenScale(of: pane, box: paneBox)
+      let insetX = max(0, (box.x - paneBox.x) / screen.x + pane.scrollLeft - margin)
+      let insetY = max(0, (box.y - paneBox.y) / screen.y + pane.scrollTop)
       // The pane's size as if it had no scrollbars: the fit is the zoom at
       // which it needs none, and a size that changed as they came and went
       // would move the fit, the zoom with it, and the bars again.
       let style = window.getComputedStyle(pane)
       let borderX = pixels(style.getPropertyValue("border-left-width")) + pixels(style.getPropertyValue("border-right-width"))
       let borderY = pixels(style.getPropertyValue("border-top-width")) + pixels(style.getPropertyValue("border-bottom-width"))
-      let innerWidth = pane.clientWidth > 0 ? min(paneBox.width - borderX, Double(pane.clientWidth)) : paneBox.width - borderX
-      let innerHeight = pane.clientHeight > 0 ? min(paneBox.height - borderY, Double(pane.clientHeight)) : paneBox.height - borderY
+      let innerWidth = pane.clientWidth > 0 ? min(paneBox.width / screen.x - borderX, pane.clientWidth) : paneBox.width / screen.x - borderX
+      let innerHeight = pane.clientHeight > 0 ? min(paneBox.height / screen.y - borderY, pane.clientHeight) : paneBox.height / screen.y - borderY
       let paneWidth = innerWidth - 2 * insetX
       let paneHeight = innerHeight - 2 * insetY
       guard paneWidth > 0, paneHeight > 0 else {
@@ -3925,7 +3946,9 @@
         }
         fit = reflowed
       } else {
-        fit = containFit(width: box.width / previous, height: box.height / previous, paneWidth: paneWidth, paneHeight: paneHeight)
+        fit = containFit(
+          width: box.width / screen.x / previous, height: box.height / screen.y / previous, paneWidth: paneWidth,
+          paneHeight: paneHeight)
       }
       let stored = storedZoom()
       // The reader's zoom, or at the fit, or, until the reader zooms, the
