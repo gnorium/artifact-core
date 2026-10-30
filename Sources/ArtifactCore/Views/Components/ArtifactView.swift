@@ -2635,14 +2635,7 @@
       // title page's 2.5 times, user 2026-10-28: the panes' sync zoomed
       // the image far past the text).
       let zoom = layer.offsetWidth > 0 ? box.width / layer.offsetWidth : stated
-      // Measured again once a figure's drawing is inlined in place of its
-      // image (`TEIFigureHydration`): before, the block held the lettering
-      // alone where the drawing frames the page (Hamlet Q1's cover, its
-      // gilt fillets; the sync then zoomed the cover 2.6 times past the
-      // image, user 2026-10-31).
-      let inlined = layer.querySelectorAll(".tei-figure-drawing[data-graphic-inlined='true']").count
-      let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "") + " "
-        + intToString(inlined)
+      let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
       if !stringEquals(overlayTarget.page, id) || overlayTarget.box.count != 4 {
         let frame = layer.querySelector(".tei-text-block") ?? layer
         // Its em in its own pixels (a transform scales the layer, never its
@@ -3048,6 +3041,13 @@
       let kept = sessionStorage.getItem(Self.zoomKey + zoomKind) ?? ""
       if stringEquals(kept, "fit") { return (nil, true) }
       return (parseDouble(kept), false)
+    }
+
+    /// Whether no zoom was set for the shown layer, by the reader or the
+    /// session (`storedZoom` then its actual size).
+    private func zoomUnset() -> Bool {
+      if case .some = rawVisible ? markupAtFit : renderingAtFit { return false }
+      return (sessionStorage.getItem(Self.zoomKey + zoomKind) ?? "").isEmpty
     }
 
     /// The shown layer's zoom as drawn now.
@@ -3842,7 +3842,13 @@
       let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
       let overlaid = overlayRegistered && (overlayOn || overlayLeaving)
       let stored = storedZoom()
-      var resting = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
+      // A leaf no zoom was set for, by the reader or the session, opens at
+      // its fit, the image shown or not (user, 2026-10-31: Hamlet Q1's
+      // cover, the image off, opened at its actual size, its corners cut
+      // off, and read as the reader's widest); `0` still sets its actual
+      // size.
+      var resting = anchor == nil && (stored.atFit || zoomUnset())
+        ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
       // A page with nothing set on it (a blank, a gap) rests at its fit:
       // there is nothing to read closer, and the zoom kept from the page
       // before opened it on a corner of its white (user, 2026-10-28).
@@ -5193,7 +5199,7 @@
       var out: [(edition: StructureRow, scan: [Double], state: String)] = []
       for figure in layer.querySelectorAll(".tei-figure[data-zone]") {
         let corners = stringSplit(figure.getAttribute(data("zone")) ?? "", separator: " ").compactMap { parseDouble($0) }
-        let picture = figure.querySelector(".tei-figure-drawing > svg, .tei-figure-drawing-image, .tei-figure-image") ?? figure
+        let picture = figure.querySelector(".tei-figure-drawing > svg, .tei-figure-image") ?? figure
         guard corners.count == 4, let drawn = inkBox(of: picture), drawn[2] > drawn[0], drawn[3] > drawn[1] else { continue }
         var points: [Double] = []
         for (x, y) in [(corners[0], corners[1]), (corners[2], corners[1]), (corners[2], corners[3]), (corners[0], corners[3])] {
