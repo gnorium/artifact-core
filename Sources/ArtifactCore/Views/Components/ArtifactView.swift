@@ -1123,6 +1123,11 @@
       // viewer over the whole window, above the page, as full screen
       // would show it. Important over the size a host gives it (the
       // testament reader's `max(64dvh, 480px)`, the phone's min-content).
+      // On the theme's background, as in full screen (user, 2026-10-30),
+      // whatever ground a host gives it.
+      selector("&[data-fills-window='true']", "&:fullscreen") {
+        backgroundColor(backgroundColorBase).important()
+      }
       selector("&[data-fills-window='true']") {
         position(.fixed)
         CSS.Property("inset", "0")
@@ -1132,6 +1137,14 @@
         CSS.Property("min-width", "0").important()
         CSS.Property("max-width", "none").important()
         borderRadius(borderRadiusSharp)
+      }
+      // The page behind it holds still while it fills the window (user,
+      // 2026-10-30), as behind full screen: no scroll of the document, its
+      // wheel and its touch going nowhere; released as it leaves, with the
+      // attribute.
+      selector(":root:has(&[data-fills-window='true'])", ":root:has(&[data-fills-window='true']) body") {
+        overflow(.hidden)
+        CSS.Property("overscroll-behavior", "none")
       }
       // On a phone (below 480px) the viewer is never narrower than its
       // footer's one row at its own size (user, 2026-10-12)—Raw, Reflow,
