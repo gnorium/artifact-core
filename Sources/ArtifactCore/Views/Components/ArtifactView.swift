@@ -1124,11 +1124,13 @@
       // would show it. Important over the size a host gives it (the
       // testament reader's `max(64dvh, 480px)`, the phone's min-content).
       // On the theme's background, as in full screen (user, 2026-10-30),
-      // whatever ground a host gives it.
-      selector("&[data-fills-window='true']", "&:fullscreen") {
+      // whatever ground a host gives it. The attribute is "true" while it
+      // fills the window and "leaving" while it shrinks back to its place
+      // (`ArtifactReader.setFillsWindow`): fixed over the page in both.
+      selector("&[data-fills-window]", "&:fullscreen") {
         backgroundColor(backgroundColorBase).important()
       }
-      selector("&[data-fills-window='true']") {
+      selector("&[data-fills-window]") {
         position(.fixed)
         CSS.Property("inset", "0")
         zIndex(zIndexOverlay)
@@ -1137,14 +1139,49 @@
         CSS.Property("min-width", "0").important()
         CSS.Property("max-width", "none").important()
         borderRadius(borderRadiusSharp)
+        // Its growth and its shrinking are a transform from its place on
+        // the page (FLIP: the inverse transform set, then released), about
+        // the window's top-left corner, where its place is measured from.
+        CSS.Property("transform-origin", "0 0")
+      }
+      // The move itself (user, 2026-10-30): the transform transitions on
+      // the system's medium clock and the user-motion curve while the
+      // reader is on its way in or out; nothing moves for those who ask
+      // for reduced motion, the mode just switches.
+      selector("&[data-fills-window][data-fills-window-moving='true']") {
+        transition(.transform, transitionDurationMedium, transitionTimingFunctionUser)
+        CSS.Property("will-change", "transform")
+        media(prefersReducedMotion(.reduce)) { transition(.none).important() }
       }
       // The page behind it holds still while it fills the window (user,
       // 2026-10-30), as behind full screen: no scroll of the document, its
       // wheel and its touch going nowhere; released as it leaves, with the
       // attribute.
-      selector(":root:has(&[data-fills-window='true'])", ":root:has(&[data-fills-window='true']) body") {
+      selector(":root:has(&[data-fills-window])", ":root:has(&[data-fills-window]) body") {
         overflow(.hidden)
         CSS.Property("overscroll-behavior", "none")
+      }
+      // The ground behind the growing reader: the theme's background over
+      // the whole window, under the reader (the overlay backdrop's layer),
+      // fading in as the reader grows and out as it shrinks (user,
+      // 2026-10-30). The root's own pseudo-element, since nothing inside
+      // the transformed reader could lie behind it; there always, unseen
+      // and untouchable, so that it has an opacity to transition from.
+      selector(":root:has(&)::after") {
+        CSS.Property("content", "\"\"")
+        position(.fixed)
+        CSS.Property("inset", "0")
+        zIndex(zIndexOverlayBackdrop)
+        backgroundColor(backgroundColorBase)
+        opacity(0)
+        visibility(.hidden)
+        pointerEvents(.none)
+        transition((.opacity, .visibility), transitionDurationMedium, transitionTimingFunctionUser)
+        media(prefersReducedMotion(.reduce)) { transition(.none).important() }
+      }
+      selector(":root:has(&[data-fills-window='true'])::after") {
+        opacity(1)
+        visibility(.visible)
       }
       // On a phone (below 480px) the viewer is never narrower than its
       // footer's one row at its own size (user, 2026-10-12)—Raw, Reflow,
@@ -1348,6 +1385,8 @@
       window.removeEventListener(.keydown, keyDownListener)
       document.removeEventListener(.fullscreenchange, fullscreenListener)
       if selectionListener >= 0 { document.removeEventListener("selectionchange", selectionListener) }
+      if let placeholder = fillsWindowPlaceholder { placeholder.parentElement?.removeChild(placeholder) }
+      fillsWindowPlaceholder = nil
       for canvas in canvases { canvas.detach() }
     }
 
@@ -4294,10 +4333,22 @@
       fullscreenListener = document.addEventListener(.fullscreenchange) { [self] _ in
         // A request taken as refused and granted after all: full screen
         // replaces the window-filling mode.
-        if document.isFullscreen && fillsWindow { root.removeAttribute(data("fills-window")) }
+        if document.isFullscreen && (fillsWindow || leavesWindow) { clearFillsWindow() }
         labelFullscreenButton(entered: document.isFullscreen)
         self.shownCanvas?.refit()
       }
+
+      // The reader's move into or out of the window ends with its
+      // transform's transition (`setFillsWindow`); a cancelled one is a
+      // newer move's, whose own end settles it (as `SlidingPillView`).
+      let settle: @Sendable (Event) -> Void = { [self] event in
+        guard stringEquals(event.propertyName, "transform"), let target = event.target, target.id == root.id,
+          !isMovingInWindow
+        else { return }
+        settleFillsWindow()
+      }
+      _ = root.addEventListener(.transitionend, settle)
+      _ = root.addEventListener(.transitioncancel, settle)
 
       pageInput?.addEventListener(.keydown) { [self] e in
         let key = e.key
@@ -4345,13 +4396,35 @@
     /// Whether the viewer fills the window in place of full screen.
     private var fillsWindow: Bool { stringEquals(root.dataset["fills-window"] ?? "", "true") }
 
+    /// Whether the viewer is on its way out of the window: still fixed
+    /// over the page, shrinking back to its place.
+    private var leavesWindow: Bool { stringEquals(root.dataset["fills-window"] ?? "", "leaving") }
+
+    /// Whether a transform transition of the viewer's own is running: its
+    /// move into or out of the window.
+    private var isMovingInWindow: Bool {
+      for animation in root.getAnimations()
+      where stringEquals(animation.transitionProperty, "transform") && stringEquals(animation.playState, "running") {
+        return true
+      }
+      return false
+    }
+
+    /// The viewer's place on the page while it fills the window: a box of
+    /// its measured size, in its slot, so that the page behind it keeps
+    /// its layout and the viewer has a place to shrink back to.
+    private var fillsWindowPlaceholder: DOM.Element?
+
     /// Full screen, or out of it. Where the browser has no full screen to
     /// give or refuses it (a webview, an iPhone, a permission check), the
     /// viewer fills the window instead: fixed over the page, left by
-    /// Escape or the same button.
+    /// Escape or the same button; pressed on its way out, the button
+    /// turns it back.
     private func toggleFullscreen() {
       if fillsWindow {
         setFillsWindow(false)
+      } else if leavesWindow {
+        setFillsWindow(true)
       } else if document.isFullscreen {
         document.exitFullscreen()
       } else if !document.fullscreenEnabled {
@@ -4363,13 +4436,101 @@
       }
     }
 
+    /// Into the window, or back to its place, by a FLIP move (user,
+    /// 2026-10-30): the viewer's place and the window are measured, the
+    /// end state applied, and the transform from the start set at once,
+    /// then released on the stylesheet's transition
+    /// (`data-fills-window-moving`), which `settleFillsWindow` ends. A
+    /// move called back mid-way is the same transition, retargeted. With
+    /// reduced motion asked for, the mode just switches.
     private func setFillsWindow(_ fills: Bool) {
-      if fills {
-        root.setAttribute(data("fills-window"), "true")
-      } else {
-        root.removeAttribute(data("fills-window"))
-      }
       labelFullscreenButton(entered: fills)
+      let still = window.matchMedia("(prefers-reduced-motion: reduce)")
+      if fills {
+        if leavesWindow {
+          // Back in from part-way out: to the window from wherever it is.
+          root.setAttribute(data("fills-window"), "true")
+          _ = root.style.removeProperty("transform")
+          if still || !isMovingInWindow { settleFillsWindow() }
+          return
+        }
+        guard let first = root.getBoundingClientRect(), let parent = root.parentElement else {
+          root.setAttribute(data("fills-window"), "true")
+          shownCanvas?.refit()
+          return
+        }
+        let placeholder = document.createElement("div")
+        placeholder.setAttribute("class", "artifact-fills-window-placeholder")
+        placeholder.style.setProperty("width", "\(doubleToString(first.width))px")
+        placeholder.style.setProperty("height", "\(doubleToString(first.height))px")
+        placeholder.style.setProperty("flex-shrink", "0")
+        parent.insertBefore(placeholder, root)
+        fillsWindowPlaceholder = placeholder
+        root.setAttribute(data("fills-window"), "true")
+        guard !still, let last = root.getBoundingClientRect(), last.width > 0, last.height > 0 else {
+          shownCanvas?.refit()
+          return
+        }
+        // The inverse first, laid out, so that the release transitions from it.
+        root.style.transform(flipTransform(from: first, to: last))
+        _ = root.getBoundingClientRect()
+        root.setAttribute(data("fills-window-moving"), "true")
+        _ = root.style.removeProperty("transform")
+        if !isMovingInWindow { settleFillsWindow() }
+      } else {
+        guard !still, let placeholder = fillsWindowPlaceholder, let place = placeholder.getBoundingClientRect(),
+          place.width > 0, place.height > 0
+        else {
+          clearFillsWindow()
+          return
+        }
+        // Still fixed over the page while it shrinks: the whole window is
+        // the viewport, whatever transform it is mid-way through.
+        let viewport = document.documentElement
+        let whole = DOM.Rect(
+          x: 0, y: 0, width: viewport.clientWidth, height: viewport.clientHeight,
+          top: 0, right: viewport.clientWidth, bottom: viewport.clientHeight, left: 0)
+        guard whole.width > 0, whole.height > 0 else {
+          clearFillsWindow()
+          return
+        }
+        root.setAttribute(data("fills-window"), "leaving")
+        root.setAttribute(data("fills-window-moving"), "true")
+        root.style.transform(flipTransform(from: place, to: whole))
+        if !isMovingInWindow { settleFillsWindow() }
+      }
+    }
+
+    /// The transform that shows a box laid out at `last` where `first`
+    /// is, about its top-left corner (`transform-origin: 0 0`).
+    private func flipTransform(from first: DOM.Rect, to last: DOM.Rect) -> String {
+      let dx = doubleToString(first.left - last.left)
+      let dy = doubleToString(first.top - last.top)
+      let sx = doubleToString(first.width / last.width)
+      let sy = doubleToString(first.height / last.height)
+      return "translate(\(dx)px, \(dy)px) scale(\(sx), \(sy))"
+    }
+
+    /// The move's end: in the window, the canvas refits to it (once, here,
+    /// not through the move); on the way out, the viewer is back in its
+    /// place.
+    private func settleFillsWindow() {
+      root.removeAttribute(data("fills-window-moving"))
+      if leavesWindow {
+        clearFillsWindow()
+      } else {
+        shownCanvas?.refit()
+      }
+    }
+
+    /// The viewer back in its place on the page, nothing of the
+    /// window-filling mode left: attributes, transform and placeholder.
+    private func clearFillsWindow() {
+      root.removeAttribute(data("fills-window"))
+      root.removeAttribute(data("fills-window-moving"))
+      _ = root.style.removeProperty("transform")
+      if let placeholder = fillsWindowPlaceholder { placeholder.parentElement?.removeChild(placeholder) }
+      fillsWindowPlaceholder = nil
       shownCanvas?.refit()
     }
 
