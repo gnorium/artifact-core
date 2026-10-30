@@ -3043,6 +3043,13 @@
       return (parseDouble(kept), false)
     }
 
+    /// Whether no zoom was set for the shown layer, by the reader or the
+    /// session (`storedZoom` then its actual size).
+    private func zoomUnset() -> Bool {
+      if case .some = rawVisible ? markupAtFit : renderingAtFit { return false }
+      return (sessionStorage.getItem(Self.zoomKey + zoomKind) ?? "").isEmpty
+    }
+
     /// The shown layer's zoom as drawn now.
     private func currentZoom() -> Double {
       parseDouble(shownLayer()?.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
@@ -3835,7 +3842,13 @@
       let fit = containFit(width: natural.width, height: natural.height, paneWidth: paneWidth, paneHeight: paneHeight)
       let overlaid = overlayRegistered && (overlayOn || overlayLeaving)
       let stored = storedZoom()
-      var resting = anchor == nil && stored.atFit ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
+      // A leaf no zoom was set for, by the reader or the session, opens at
+      // its fit, the image shown or not (user, 2026-10-31: Hamlet Q1's
+      // cover, the image off, opened at its actual size, its corners cut
+      // off, and read as the reader's widest); `0` still sets its actual
+      // size.
+      var resting = anchor == nil && (stored.atFit || zoomUnset())
+        ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
       // A page with nothing set on it (a blank, a gap) rests at its fit:
       // there is nothing to read closer, and the zoom kept from the page
       // before opened it on a corner of its white (user, 2026-10-28).
