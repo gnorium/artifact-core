@@ -36,6 +36,17 @@ final class StructurePairingTests: XCTestCase {
     XCTAssertEqual(StructurePairing.rows([line, comma, next]).count, 2)
   }
 
+  func testALineAStainStretchedTallNeverTakesTheLineUnderIt() {
+    // Hamlet Q1's title page (2026-10-30): a blot above the imprint made its
+    // box 54 tall; the date a leading (20) below, 12 tall, fell within half
+    // of that. Within the shorter's own height too, or two rows, never one.
+    var imprint = Self.row(0, 54)
+    imprint.baseline = 50
+    var date = Self.row(60, 72)
+    date.baseline = 70
+    XCTAssertEqual(StructurePairing.rows([imprint, date]).count, 2)
+  }
+
   func testRowsInPlaceArePairedWithinTheTolerance() {
     let edition = [Self.row(0, 12), Self.row(20, 32), Self.row(40, 52)]
     let scan = [Self.row(1, 13), Self.row(21, 31), Self.row(39, 52)]

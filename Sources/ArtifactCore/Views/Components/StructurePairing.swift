@@ -109,7 +109,10 @@ enum StructurePairing {
   /// one—within half the taller's height, so a comma or an italic tail
   /// measured as ink of its own (a text node of its own) is its line's row,
   /// whatever its height (Hamlet Q1, user 2026-10-27: such fragments stood
-  /// as rows of their own, the line beside them unpaired); else, where a
+  /// as rows of their own, the line beside them unpaired)—and within the
+  /// shorter's own height, so a line whose box a stain stretched tall never
+  /// takes the line under it for its own (Hamlet Q1's title page,
+  /// 2026-10-30: a blot above the imprint joined it to the date); else, where a
   /// box has no baseline (a scan's line zone kept as a box), overlapping
   /// down the page by more than half the shorter's height. Lines one above
   /// the other overlap only by their ascenders and descenders where the
@@ -118,7 +121,9 @@ enum StructurePairing {
   /// Q1's p. 4 chained 37 lines into 2 rows).
   static func beside(_ row: StructureRow, _ line: StructureRow) -> Bool {
     if let a = row.baseline, let b = line.baseline {
-      return abs(a - b) < max(row.bottom - row.top, line.bottom - line.top) / 2
+      let apart = abs(a - b)
+      return apart < max(row.bottom - row.top, line.bottom - line.top) / 2
+        && apart < min(row.bottom - row.top, line.bottom - line.top)
     }
     return min(row.bottom, line.bottom) - max(row.top, line.top) > min(row.bottom - row.top, line.bottom - line.top) / 2
   }
