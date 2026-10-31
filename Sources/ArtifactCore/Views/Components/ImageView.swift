@@ -168,8 +168,9 @@
         // 2026-10-14): a translucent band, the scan seen through it in
         // either scheme. Blue (user, 2026-10-29): yellow is Find's alone,
         // and a pointed word in yellow read as a match; the edition's word
-        // wears the same blue at the same opacity.
-        descendant(".image-word") {
+        // wears the same blue at the same opacity. The quote a reader is
+        // opened on wears it too (user, 2026-10-31).
+        selector("& .image-word", "& .image-quote") {
           position(.absolute)
           zIndex(1)
           backgroundColor(colorBlue)
@@ -253,7 +254,7 @@
           cursor(.neswResize)
         }
         selector(
-          "& .image-crop[hidden]", "& .image-element[hidden]", "& .image-word[hidden]",
+          "& .image-crop[hidden]", "& .image-element[hidden]", "& .image-word[hidden]", "& .image-quote[hidden]",
           "& .image-region[hidden]", "& .image-region-dim[hidden]", "& .image-grid[hidden]",
           "& .image-readout[hidden]", "& .image-vertex[hidden]"
         ) {
@@ -593,6 +594,7 @@
       drawElement()
       drawVertices()
       drawWord()
+      drawQuote()
     }
 
     // MARK: - A spot, a word
@@ -782,6 +784,37 @@
         }
         let box = wordBoxes[index]
         place(band, x: box[0], y: box[1], width: box[2] - box[0], height: box[3] - box[1])
+      }
+    }
+
+    /// The quote the reader is opened on, on the scan (user, 2026-10-31):
+    /// each of its words' zones (`left`, `top`, `right`, `bottom` in the
+    /// 0–1000 space) a band as a pointed word's (`showWord`), kept as the
+    /// image is panned and zoomed, the image never moved for it. None
+    /// clears them.
+    func showQuote(_ boxes: [[Double]]) {
+      quoteBoxes = boxes.filter { $0.count == 4 }
+      drawQuote()
+    }
+
+    /// The quote's zones in the 0–1000 space; empty for none.
+    private var quoteBoxes: [[Double]] = []
+    /// One band a zone, made as they are first needed.
+    private var quoteBands: [DOM.Element] = []
+
+    private func drawQuote() {
+      while quoteBands.count < quoteBoxes.count, let band = overlay("image-quote") { quoteBands.append(band) }
+      for (index, band) in quoteBands.enumerated() {
+        guard index < quoteBoxes.count, imageW > 0, imageH > 0 else {
+          band.setAttribute(.hidden, "")
+          continue
+        }
+        let box = quoteBoxes[index]
+        let scaleX = Double(imageW) / Self.zoneExtent
+        let scaleY = Double(imageH) / Self.zoneExtent
+        place(
+          band, x: box[0] * scaleX, y: box[1] * scaleY, width: (box[2] - box[0]) * scaleX,
+          height: (box[3] - box[1]) * scaleY)
       }
     }
 

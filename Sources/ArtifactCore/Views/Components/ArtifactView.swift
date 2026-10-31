@@ -120,6 +120,10 @@
     /// drawn, it says so in `artifact-canvas-change` with no pane active;
     /// the host adds the pane and tells it with `artifact-markup-added`.
     let windowed: Bool
+    /// Whether the reader pages a run of the book alone—the pages its
+    /// markup holds (a quote's)—and not the manifest's every page: the
+    /// manifest still names their images, and the pager counts the run.
+    let range: Bool
 
     public init(
       manifestURL: String = "",
@@ -133,6 +137,7 @@
       canvasSwitch: Bool = false,
       pageCount: Int? = nil,
       windowed: Bool = false,
+      range: Bool = false,
       @HTMLBuilder markup: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
       @HTMLBuilder footerSwitches: () -> [DOM.Node] = { [] },
@@ -152,6 +157,7 @@
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.windowed = windowed
+      self.range = range
       self.markup = markup()
       self.canvas = canvas()
       self.footerSwitches = footerSwitches()
@@ -444,6 +450,7 @@
       // counted the pages.
       .data("pages-known", pageCount != nil)
       .data("windowed", windowed)
+      .data("range", range)
       .data("page-count", pageCount ?? 0)
       // The Header switch's state, off at first (`header`).
       .data("header", false)
@@ -1347,6 +1354,8 @@
     private var manifestURL: String = ""
     /// Whether the markup holds only some of its pages (`ArtifactView.windowed`).
     private var windowed = false
+    /// Whether it pages a run of the book alone (`ArtifactView.range`).
+    private var range = false
     /// The canvas the page asked for, which outranks the one this reader was
     /// last on: a link to a page of the object means that page.
     private var startCanvas: Int?
@@ -1410,6 +1419,7 @@
       self.startCanvas = startCanvas
       self.startService = startService
       windowed = stringEquals(root.dataset["windowed"] ?? "false", "true")
+      range = stringEquals(root.dataset["range"] ?? "false", "true")
       object = root.querySelector(".artifact-object")
       pageInput = root.querySelector("#artifact-page-input")
       pageTotal = root.querySelector("#artifact-page-total")
@@ -1517,6 +1527,7 @@
         self.rawVisible = stringEquals(event.detail, "true")
         self.overlayAside()
         self.showLayers()
+        self.showQuote()
         // The XML and the header share the column (user, 2026-10-21): the
         // XML on turns the header off, by its own switch's press, so every
         // listener hears it.
@@ -4183,6 +4194,7 @@
           imageHeights.append(page.height)
           canvasLabels.append(page.label)
         }
+        if range { keepMarkupPages() }
         if manifest.pages.isEmpty, let reason = manifest.error {
           root.dispatchEvent(CustomEvent(type: "artifact-manifest-error", detail: reason))
         }
@@ -4193,6 +4205,26 @@
           open()
         }
       }
+    }
+
+    /// A run of the book (`range`): the manifest's pages narrowed to those
+    /// the markup holds, in the manifest's order. Left whole where the
+    /// markup names none of them.
+    private func keepMarkupPages() {
+      var services: [String] = []
+      for pane in markupPanes { services.append(pane.dataset["service-id"] ?? "") }
+      var kept: [Int] = []
+      for (index, service) in serviceIDs.enumerated() where services.contains(where: { stringEquals($0, service) }) {
+        kept.append(index)
+      }
+      guard !kept.isEmpty else { return }
+      serviceIDs = kept.map { serviceIDs[$0] }
+      plainImages = kept.map { plainImages[$0] }
+      liveImages = kept.map { liveImages[$0] }
+      blankPages = kept.map { blankPages[$0] }
+      imageWidths = kept.map { imageWidths[$0] }
+      imageHeights = kept.map { imageHeights[$0] }
+      canvasLabels = kept.map { canvasLabels[$0] }
     }
 
     /// A temporary failure never settles "no images": keep retrying with
@@ -4293,6 +4325,7 @@
       // size, rather than at 100%.
       if syncs, let region = canvas.region { matchText(to: region) }
       drawRegion()
+      showQuote()
       // The four either side, nearest first: images are what a turn waits
       // for (user, 2026-10-11). Once this page has what it shows, so they
       // never queue before it; in one batch, since a batch stops the last
@@ -5401,6 +5434,29 @@
             type: "artifact-image-element",
             detail: stringJoin([canvas.serviceID, intToString(element.index)], separator: " "), bubbles: true))
       }
+    }
+
+    /// The quote the reader is opened on, on the scan (user, 2026-10-31):
+    /// the zones of the words its markup highlights as the quote's own
+    /// (`isQuoted`, `TEIView`), banded as a pointed word is,
+    /// for as long as its page is shown; none where Raw is shown, no word
+    /// is the quote's, or the tools linked none of its words.
+    private func showQuote() {
+      guard let canvas = shownCanvas else { return }
+      var boxes: [[Double]] = []
+      if let links = currentWordLinks() {
+        for word in links.words where word.parts.contains(where: { Self.isQuoted($0) }) {
+          boxes.append(contentsOf: word.boxes)
+        }
+      }
+      canvas.showQuote(boxes)
+    }
+
+    /// Whether a word of the edition is the quote's own: in (or itself) its
+    /// mark (`.tei-highlight[data-highlight="title"]`).
+    private static func isQuoted(_ word: DOM.Element) -> Bool {
+      if case .some = word.closest(".tei-highlight[data-highlight='title']") { return true }
+      return false
     }
 
     /// The scan's zones of an edition word, banded, and its other parts
