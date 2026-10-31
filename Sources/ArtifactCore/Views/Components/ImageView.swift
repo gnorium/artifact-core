@@ -177,23 +177,20 @@
           pointerEvents(.none)
         }
         // The quote a reader is opened on (user, 2026-10-31), as its text
-        // pane marks it: its words in a translucent magenta tint, its
-        // lemma's in violet, the print reading whole through them; no line
-        // around them (blue is the pointed word's, yellow Find's).
+        // pane marks it: its words in a translucent violet tint, the print
+        // reading whole through it, and its lemma's in the same tint in a
+        // solid 1px violet line (blue is the pointed word's, yellow Find's).
         selector("& .image-quote", "& .image-lemma") {
           position(.absolute)
           zIndex(1)
-          pointerEvents(.none)
-        }
-        descendant(".image-quote") {
-          CSS.Property(
-            "background-color",
-            "color-mix(in srgb, " + colorMagenta.value + " calc(" + opacityLow.value + " * 100%), transparent)")
-        }
-        descendant(".image-lemma") {
+          boxSizing(.borderBox)
           CSS.Property(
             "background-color",
             "color-mix(in srgb, " + colorViolet.value + " calc(" + opacityLow.value + " * 100%), transparent)")
+          pointerEvents(.none)
+        }
+        descendant(".image-lemma") {
+          border(borderWidthBase, .solid, borderColorViolet)
         }
         descendant(".image-region") { zIndex(4) }
         // The 0–1000 space drawn over the image while a region is: lines
@@ -807,7 +804,7 @@
 
     /// The quote the reader is opened on, on the scan (user, 2026-10-31):
     /// each zone (`left`, `top`, `right`, `bottom` in the 0–1000 space) of
-    /// its words tinted magenta and of its lemma's violet, as its text pane
+    /// its words tinted violet and of its lemma's lined too, as its text pane
     /// marks them (a pointed word's is blue, `showWord`), kept as the image
     /// is panned and zoomed, the image never moved for them. None clears
     /// them.
