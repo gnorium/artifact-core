@@ -3890,12 +3890,20 @@
       // of the motion.
       let chosen = !overlayLeaving && !blank && (stored.zoom != nil || stored.atFit)
       let atFit = chosen && zoom <= fit
-      frame.style.setProperty("width", doubleToString(natural.width * zoom) + "px")
-      frame.style.setProperty("height", doubleToString(natural.height * zoom) + "px")
-      frame.style.setProperty("margin-inline-start", doubleToString(max(0, (pane.clientWidth - 2 * insetX - natural.width * zoom) / 2)) + "px")
+      // The frame's size in layout's own units, never rounded up past the
+      // room, and centered in the room as measured (`paneWidth`, not the
+      // whole pixels `clientHeight` rounds to): at its fit Hamlet Q1's
+      // title page, its pane 472.7 high and rounded to 473, stood a
+      // fraction of a pixel past its pane, and the pane showed a
+      // scrollbar for it (user, 2026-10-31).
+      let frameWidth = ViewerZoom.layoutFloor(natural.width * zoom)
+      let frameHeight = ViewerZoom.layoutFloor(natural.height * zoom)
+      frame.style.setProperty("width", doubleToString(frameWidth) + "px")
+      frame.style.setProperty("height", doubleToString(frameHeight) + "px")
+      frame.style.setProperty("margin-inline-start", doubleToString(ViewerZoom.layoutFloor(max(0, (paneWidth - frameWidth) / 2))) + "px")
       // Down too, as the image is in its pane (user, 2026-10-28): a page
       // shorter than its pane stands in its middle.
-      frame.style.setProperty("margin-block-start", doubleToString(max(0, (pane.clientHeight - 2 * insetY - natural.height * zoom) / 2)) + "px")
+      frame.style.setProperty("margin-block-start", doubleToString(ViewerZoom.layoutFloor(max(0, (paneHeight - frameHeight) / 2))) + "px")
       layer.style.setProperty("transform", "scale(" + doubleToString(zoom) + ")")
       layer.setAttribute(data("zoom"), doubleToString(zoom))
       lastFit = fit
@@ -4085,8 +4093,10 @@
       // it to center.
       // The pane's room as it is, its scrollbars taken out, so the page
       // never makes one of its own.
-      let roomWidth = pane.clientWidth - 2 * insetX
-      let roomHeight = pane.clientHeight - 2 * insetY
+      // Its measured room where that is less than the whole pixels
+      // `clientWidth` rounds to (`applyPageScale`'s fractional pane).
+      let roomWidth = min(pane.clientWidth - 2 * insetX, ViewerZoom.layoutFloor(paneWidth))
+      let roomHeight = min(pane.clientHeight - 2 * insetY, ViewerZoom.layoutFloor(paneHeight))
       if let page = layer.closest(".tei-page") {
         page.style.setProperty("min-width", doubleToString(roomWidth) + "px")
         page.style.setProperty("min-height", doubleToString(roomHeight) + "px")

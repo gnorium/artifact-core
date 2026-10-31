@@ -230,4 +230,59 @@ final class ViewerZoomTests: XCTestCase {
     XCTAssertTrue(small.atFit)
     XCTAssertEqual(small.scale, 1, accuracy: 1e-12)
   }
+
+  func testASurfaceWithAnOutReachZoomsOutPastItsFitAndStopsAtTheFitOnTheWay() {
+    // The scan (user, 2026-10-31): out past its fit to half of it, the
+    // whole photograph in margins; it opens at its fit.
+    var scan = ViewerZoom.Surface()
+    scan.outReach = 0.5
+    scan.imageWidth = 1000
+    scan.imageHeight = 800
+    scan.lay(
+      viewportWidth: 500, viewportHeight: 400,
+      fit: ViewerZoom.Surface.fit(imageWidth: 1000, imageHeight: 800, viewportWidth: 500, viewportHeight: 400))
+    XCTAssertEqual(scan.zoom, 0.5, accuracy: 1e-12, "it opens at its fit")
+    XCTAssertTrue(scan.atFit)
+    scan.zoom(to: 0.8, aboutX: 250, y: 200)
+    // Zoomed out from above the fit, it stops at the fit first.
+    scan.zoom(to: 0.3, aboutX: 250, y: 200)
+    XCTAssertEqual(scan.zoom, 0.5, accuracy: 1e-12)
+    XCTAssertTrue(scan.atFit)
+    scan.zoom(to: 0.01, aboutX: 250, y: 200)
+    XCTAssertEqual(scan.zoom, 0.25, accuracy: 1e-12, "half its fit, no further")
+    XCTAssertFalse(scan.atFit)
+    XCTAssertEqual(scan.scale, 0.5, accuracy: 1e-12)
+    // Smaller than its surface, it stands centered in margins.
+    XCTAssertEqual(scan.panX, (500 - 250) / 2, accuracy: 1e-9)
+    XCTAssertEqual(scan.panY, (400 - 200) / 2, accuracy: 1e-9)
+    // Zoomed in from below, it stops at the fit again.
+    scan.zoom(to: 2, aboutX: 250, y: 200)
+    XCTAssertEqual(scan.zoom, 0.5, accuracy: 1e-12)
+    XCTAssertTrue(scan.atFit)
+    // A kept scale under 1 lays the next image under its own fit, and a
+    // resize keeps it.
+    scan.lay(viewportWidth: 500, viewportHeight: 400, fit: 0.5, scale: 0.6)
+    XCTAssertEqual(scan.zoom, 0.3, accuracy: 1e-12)
+    XCTAssertFalse(scan.atFit)
+    scan.resize(viewportWidth: 1000, viewportHeight: 800, fit: 1)
+    XCTAssertEqual(scan.scale, 0.6, accuracy: 1e-9)
+  }
+
+  func testASurfaceWithNoOutReachNeverGoesUnderItsFit() {
+    var surface = surface()
+    XCTAssertEqual(surface.leastZoom, surface.minZoom, accuracy: 1e-12)
+    surface.zoom(to: 0.1, aboutX: 250, y: 200)
+    XCTAssertEqual(surface.zoom, 0.5, accuracy: 1e-12)
+    XCTAssertTrue(surface.atFit)
+  }
+
+  func testALayoutFloorIsNeverPastItsValueAndWithinA64th() {
+    // Hamlet Q1's title page at its fit, its pane 470.719 high inside.
+    let room = 470.719
+    let laid = ViewerZoom.layoutFloor(room)
+    XCTAssertLessThanOrEqual(laid, room)
+    XCTAssertLessThan(room - laid, 1.0 / 64)
+    XCTAssertEqual(laid * 64, (laid * 64).rounded(), accuracy: 1e-9, "a whole number of 64ths")
+    XCTAssertEqual(ViewerZoom.layoutFloor(456), 456, accuracy: 1e-12)
+  }
 }

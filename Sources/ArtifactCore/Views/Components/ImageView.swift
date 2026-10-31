@@ -303,8 +303,16 @@
 
     /// The image's zoom and pan: the model every image zoomed where it
     /// stands shares (`ViewerZoom.Surface`), read and set here by the names
-    /// this reader has always used.
-    private var surface = ViewerZoom.Surface()
+    /// this reader has always used. The scan zooms out past its fit, to
+    /// `outReach` of it, the whole photograph standing in margins (user,
+    /// 2026-10-31); it opens at its fit.
+    private var surface: ViewerZoom.Surface = {
+      var surface = ViewerZoom.Surface()
+      surface.outReach = ImageView.outReach
+      return surface
+    }()
+    /// How far past its fit the scan zooms out: half of it.
+    static let outReach = 0.5
     private var imageW: Int {
       get { Int(surface.imageWidth) }
       set { surface.imageWidth = Double(newValue) }
@@ -648,7 +656,9 @@
     /// gestures (`locked`); this is the overlay's.
     func zoomInOverlay(by factor: Double, clientX: Double, clientY: Double) {
       guard imageW > 0, imageH > 0, factor > 0, let box = viewport?.getBoundingClientRect() else { return }
-      surface.zoom(to: zoom * factor, aboutX: clientX - box.x, y: clientY - box.y)
+      // The edition rides on it, and the edition goes no smaller than its
+      // fit: the overlay's image stops at its own.
+      surface.zoom(to: max(minZoom, zoom * factor), aboutX: clientX - box.x, y: clientY - box.y)
       // Kept as the image's own zoom is: the next image turned to in the
       // overlay lays at it, never back at the zoom the overlay was entered
       // at (user, 2026-10-30).
@@ -706,7 +716,7 @@
       // its pan held to its viewport. Unheld, the blend aimed past where the
       // image then stops, and it jumped there once the overlay was off
       // (user, 2026-10-26).
-      let ownZoom = max(minZoom, min(max(maxZoom, own.zoom), own.zoom))
+      let ownZoom = max(surface.leastZoom, min(max(maxZoom, own.zoom), own.zoom))
       let width = Double(imageW) * ownZoom, height = Double(imageH) * ownZoom
       var ownX = viewportW / 2 - own.centerX * width
       var ownY = viewportH / 2 - own.centerY * height
@@ -731,8 +741,8 @@
     /// text's spot, matched.
     func showSpot(centerX: Double, centerY: Double, zoom value: Double) {
       guard imageW > 0, imageH > 0, minZoom > 0 else { return }
-      zoom = max(minZoom, min(max(maxZoom, value), value))
-      atFit = zoom <= minZoom
+      zoom = max(surface.leastZoom, min(max(maxZoom, value), value))
+      atFit = surface.isFit(zoom)
       panX = viewportW / 2 - centerX * Double(imageW) * zoom
       panY = viewportH / 2 - centerY * Double(imageH) * zoom
       clampPan()
