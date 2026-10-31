@@ -3143,7 +3143,7 @@
           }
         }, capture: true, passive: false)
       // Focused, the keys move it as the image's do: the arrows pan, + and
-      // − zoom, 0 fits it again.
+      // − zoom, 0 sets its actual size.
       pane.setAttribute("tabindex", "0")
       _ = pane.addEventListener("keydown", { [self] e in self.zoomKey(e) }, capture: false, passive: false)
       _ = pane.addEventListener("scroll", { [self] _ in self.scrolled() }, capture: false, passive: true)
@@ -3346,7 +3346,7 @@
 
     /// The keys of the focused pane: the arrows pan by a wheel's travel
     /// (`ViewerZoom.wheelTravel`), + and − zoom by a wheel's step about the
-    /// pane's middle, 0 fits it again.
+    /// pane's middle, 0 sets its actual size.
     private func zoomKey(_ event: Event) {
       // The pane's own keys, when it has the focus: a word's arrows move
       // between words, a field's its caret.
@@ -3392,11 +3392,9 @@
       } else if stringEquals(key, "-") {
         zoom(to: currentZoom() * ViewerZoom.wheelFactor(ViewerZoom.wheelTravel), about: middle)
       } else if stringEquals(key, "0") {
-        // Its fit, as the image's 0 fits it (user, 2026-10-31: fully
-        // zoomed out is the whole leaf in the pane; 0 opened Hamlet Q1's
-        // cover at its actual size, its fillets past the pane).
-        setZoom(nil, atFit: true)
-        sessionStorage.setItem(Self.zoomKey + zoomKind, "fit")
+        // Its actual size (100%), as the image's 0 sets its own.
+        setZoom(nil, atFit: false)
+        sessionStorage.removeItem(Self.zoomKey + zoomKind)
         applyZoom(about: nil)
         matchImage()
       } else if stringEquals(key, "ArrowLeft") {
@@ -3438,7 +3436,7 @@
     private var matchedScroll: (x: Double, y: Double)?
     /// The text zooms as far over its fit as its page's image can over its
     /// own (`ViewerZoom.Region.maxScale`), synced or not, so the two sizes
-    /// match and stay matched; with no image, to 100%.
+    /// match and stay matched; with no image, to `maxOverFit` times its fit.
     private var matchedMaxScale: Double? {
       guard canvasShown && !rawVisible && !reflowOn else { return nil }
       return shownCanvas?.region.map(textTerms)?.maxScale
@@ -3525,12 +3523,18 @@
         scale: image.scale <= Self.wholeScale ? 1 : image.scale * factor, maxScale: image.maxScale * factor)
     }
 
+    /// How far over its fit the text zooms with no image beside it.
+    private static let maxOverFit = 8.0
+
     /// A region's scale at which it is at its fit, its rounding allowed.
     private static let wholeScale = 1.0001
 
     /// The most the text zooms in, its fit being `fit`.
     private func maxZoom(fit: Double) -> Double {
-      guard let scale = matchedMaxScale else { return max(fit, ViewerZoom.actualSize) }
+      // With no image, as far as `maxOverFit` times its fit (user,
+      // 2026-10-31: Hamlet Q1's cover, the image off, stopped at 100%,
+      // 1.6 times its fit; the scan beside it zooms to its pixels).
+      guard let scale = matchedMaxScale else { return max(fit * Self.maxOverFit, ViewerZoom.actualSize) }
       return max(fit, fit * scale)
     }
 

@@ -35,7 +35,7 @@ final class ViewerZoomTests: XCTestCase {
     XCTAssertEqual(ViewerZoom.command(forKey: "+")?.factor ?? 0, 1.2, accuracy: 1e-12)
     XCTAssertEqual(ViewerZoom.command(forKey: "=")?.factor ?? 0, 1.2, accuracy: 1e-12)
     XCTAssertEqual(ViewerZoom.command(forKey: "-")?.factor ?? 0, 0.8, accuracy: 1e-12)
-    guard case .fit? = ViewerZoom.command(forKey: "0") else { return XCTFail("0 fits the image") }
+    guard case .actualSize? = ViewerZoom.command(forKey: "0") else { return XCTFail("0 sets the actual size") }
     guard case .pan(let x, let y)? = ViewerZoom.command(forKey: "ArrowLeft") else {
       return XCTFail("the arrows pan")
     }

@@ -1464,8 +1464,8 @@
         switch command {
         case .zoomIn, .zoomOut:
           zoom(to: zoom * command.factor, aboutX: viewportW / 2, y: viewportH / 2)
-        case .fit:
-          zoom(to: minZoom, aboutX: viewportW / 2, y: viewportH / 2)
+        case .actualSize:
+          zoom(to: ViewerZoom.actualSize, aboutX: viewportW / 2, y: viewportH / 2)
         case .pan(let x, let y):
           surface.pan(by: x, y)
           updateTransform()

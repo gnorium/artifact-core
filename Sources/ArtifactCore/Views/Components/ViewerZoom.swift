@@ -46,11 +46,12 @@ public enum ViewerZoom {
   }
 
   /// What a key does to a focused view: + and − zoom by a wheel's step about
-  /// the middle, 0 fits it again, the arrows pan by a wheel's travel.
+  /// the middle, 0 sets its actual size (100%), the arrows pan by a wheel's
+  /// travel.
   public enum Command: Sendable {
     case zoomIn
     case zoomOut
-    case fit
+    case actualSize
     /// The image moved by this much in the view (the arrow's opposite, as
     /// the image follows the view's scrolling).
     case pan(x: Double, y: Double)
@@ -60,7 +61,7 @@ public enum ViewerZoom {
       switch self {
       case .zoomIn: return ViewerZoom.wheelFactor(-ViewerZoom.wheelTravel)
       case .zoomOut: return ViewerZoom.wheelFactor(ViewerZoom.wheelTravel)
-      case .fit, .pan: return 1
+      case .actualSize, .pan: return 1
       }
     }
   }
@@ -69,7 +70,7 @@ public enum ViewerZoom {
   public static func command(forKey key: String) -> Command? {
     if stringEquals(key, "+") || stringEquals(key, "=") { return .zoomIn }
     if stringEquals(key, "-") { return .zoomOut }
-    if stringEquals(key, "0") { return .fit }
+    if stringEquals(key, "0") { return .actualSize }
     if stringEquals(key, "ArrowLeft") { return .pan(x: wheelTravel, y: 0) }
     if stringEquals(key, "ArrowRight") { return .pan(x: -wheelTravel, y: 0) }
     if stringEquals(key, "ArrowUp") { return .pan(x: 0, y: wheelTravel) }
