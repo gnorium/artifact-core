@@ -168,13 +168,23 @@
         // 2026-10-14): a translucent band, the scan seen through it in
         // either scheme. Blue (user, 2026-10-29): yellow is Find's alone,
         // and a pointed word in yellow read as a match; the edition's word
-        // wears the same blue at the same opacity. The quote a reader is
-        // opened on wears it too (user, 2026-10-31).
-        selector("& .image-word", "& .image-quote") {
+        // wears the same blue at the same opacity.
+        descendant(".image-word") {
           position(.absolute)
           zIndex(1)
           backgroundColor(colorBlue)
           opacity(opacityLow)
+          pointerEvents(.none)
+        }
+        // The quote a reader is opened on (user, 2026-10-31): violet, the
+        // quote's own color (blue is the pointed word's, yellow Find's), a
+        // translucent wash its letters read through.
+        descendant(".image-quote") {
+          position(.absolute)
+          zIndex(1)
+          CSS.Property(
+            "background-color",
+            "color-mix(in srgb, " + colorViolet.value + " calc(" + opacityLow.value + " * 100%), transparent)")
           pointerEvents(.none)
         }
         descendant(".image-region") { zIndex(4) }
@@ -789,7 +799,7 @@
 
     /// The quote the reader is opened on, on the scan (user, 2026-10-31):
     /// each of its words' zones (`left`, `top`, `right`, `bottom` in the
-    /// 0–1000 space) a band as a pointed word's (`showWord`), kept as the
+    /// 0–1000 space) a violet band, as a pointed word's is blue (`showWord`), kept as the
     /// image is panned and zoomed, the image never moved for it. None
     /// clears them.
     func showQuote(_ boxes: [[Double]]) {
