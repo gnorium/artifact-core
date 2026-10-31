@@ -143,13 +143,15 @@
         // Drawing a crop box: a crosshair, not a hand.
         descendant(".image-viewport[data-cropping='true']") { cursor(.crosshair) }
         // A crop box over the image, and the region the markup names where
-        // the caret or the pointer is: the house ring (1px border and 1px
-        // outline, one color), the image seen through it.
+        // the caret or the pointer is: the house ring (two border widths, one
+        // color), the image seen through it. The ring stands wholly outside
+        // the box (user, 2026-10-31: Hamlet Q1's title page, the box of "for"
+        // drawn on the f's foot): a zone tight to its ink keeps its ink clear,
+        // the ring's inner edge on the zone's edge.
         selector("& .image-crop", "& .image-region") {
           position(.absolute)
           boxSizing(.borderBox)
-          border(borderWidthBase, .solid, colorBlue)
-          outline(borderWidthBase, .solid, colorBlue)
+          CSS.Property("outline", "calc(2 * \(borderWidthBase.value)) solid \(colorBlue.value)")
           pointerEvents(.none)
         }
         descendant(".image-crop") { zIndex(5) }
@@ -160,8 +162,7 @@
           position(.absolute)
           zIndex(4)
           boxSizing(.borderBox)
-          border(borderWidthBase, .solid, borderColorBase)
-          outline(borderWidthBase, .solid, borderColorBase)
+          CSS.Property("outline", "calc(2 * \(borderWidthBase.value)) solid \(borderColorBase.value)")
           pointerEvents(.none)
         }
         // The edition's word the reader points at, on the scan (user,
@@ -994,14 +995,14 @@
       let w = regionW * scaleX
       let h = regionH * scaleY
       place(box, x: x, y: y, width: w, height: h)
-      // The backdrop with the region cut out, its ring (1px border inside,
-      // 1px outline outside) clear too.
+      // The backdrop with the region cut out, its ring (2px, wholly outside
+      // the box) clear too.
       guard let dim = regionDim else { return }
       dim.removeAttribute(.hidden)
-      let left = pixels(panX + x * zoom - 1)
-      let top = pixels(panY + y * zoom - 1)
-      let right = pixels(panX + (x + w) * zoom + 1)
-      let bottom = pixels(panY + (y + h) * zoom + 1)
+      let left = pixels(panX + x * zoom - 2)
+      let top = pixels(panY + y * zoom - 2)
+      let right = pixels(panX + (x + w) * zoom + 2)
+      let bottom = pixels(panY + (y + h) * zoom + 2)
       dim.style.setProperty(
         "clip-path",
         stringJoin(
