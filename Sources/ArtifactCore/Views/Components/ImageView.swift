@@ -176,16 +176,24 @@
           opacity(opacityLow)
           pointerEvents(.none)
         }
-        // The quote a reader is opened on (user, 2026-10-31): violet, the
-        // quote's own color (blue is the pointed word's, yellow Find's), a
-        // translucent wash its letters read through.
-        descendant(".image-quote") {
+        // The quote a reader is opened on (user, 2026-10-31), as its text
+        // pane marks it: its words in a translucent magenta tint, its
+        // lemma's in violet, the print reading whole through them; no line
+        // around them (blue is the pointed word's, yellow Find's).
+        selector("& .image-quote", "& .image-lemma") {
           position(.absolute)
           zIndex(1)
+          pointerEvents(.none)
+        }
+        descendant(".image-quote") {
+          CSS.Property(
+            "background-color",
+            "color-mix(in srgb, " + colorMagenta.value + " calc(" + opacityLow.value + " * 100%), transparent)")
+        }
+        descendant(".image-lemma") {
           CSS.Property(
             "background-color",
             "color-mix(in srgb, " + colorViolet.value + " calc(" + opacityLow.value + " * 100%), transparent)")
-          pointerEvents(.none)
         }
         descendant(".image-region") { zIndex(4) }
         // The 0–1000 space drawn over the image while a region is: lines
@@ -264,7 +272,7 @@
           cursor(.neswResize)
         }
         selector(
-          "& .image-crop[hidden]", "& .image-element[hidden]", "& .image-word[hidden]", "& .image-quote[hidden]",
+          "& .image-crop[hidden]", "& .image-element[hidden]", "& .image-word[hidden]", "& .image-quote[hidden]", "& .image-lemma[hidden]",
           "& .image-region[hidden]", "& .image-region-dim[hidden]", "& .image-grid[hidden]",
           "& .image-readout[hidden]", "& .image-vertex[hidden]"
         ) {
@@ -798,28 +806,39 @@
     }
 
     /// The quote the reader is opened on, on the scan (user, 2026-10-31):
-    /// each of its words' zones (`left`, `top`, `right`, `bottom` in the
-    /// 0–1000 space) a violet band, as a pointed word's is blue (`showWord`), kept as the
-    /// image is panned and zoomed, the image never moved for it. None
-    /// clears them.
-    func showQuote(_ boxes: [[Double]]) {
-      quoteBoxes = boxes.filter { $0.count == 4 }
+    /// each zone (`left`, `top`, `right`, `bottom` in the 0–1000 space) of
+    /// its words tinted magenta and of its lemma's violet, as its text pane
+    /// marks them (a pointed word's is blue, `showWord`), kept as the image
+    /// is panned and zoomed, the image never moved for them. None clears
+    /// them.
+    func showQuote(_ quote: [[Double]], lemma: [[Double]]) {
+      quoteBoxes = quote.filter { $0.count == 4 }
+      lemmaBoxes = lemma.filter { $0.count == 4 }
       drawQuote()
     }
 
-    /// The quote's zones in the 0–1000 space; empty for none.
+    /// The quote's and its lemma's zones in the 0–1000 space; empty for none.
     private var quoteBoxes: [[Double]] = []
-    /// One band a zone, made as they are first needed.
+    private var lemmaBoxes: [[Double]] = []
+    /// One tint a zone, made as they are first needed.
     private var quoteBands: [DOM.Element] = []
+    private var lemmaBands: [DOM.Element] = []
 
     private func drawQuote() {
       while quoteBands.count < quoteBoxes.count, let band = overlay("image-quote") { quoteBands.append(band) }
-      for (index, band) in quoteBands.enumerated() {
-        guard index < quoteBoxes.count, imageW > 0, imageH > 0 else {
+      while lemmaBands.count < lemmaBoxes.count, let band = overlay("image-lemma") { lemmaBands.append(band) }
+      placeTints(quoteBands, at: quoteBoxes)
+      placeTints(lemmaBands, at: lemmaBoxes)
+    }
+
+    /// Tints laid over their zones, the ones past them hidden.
+    private func placeTints(_ bands: [DOM.Element], at boxes: [[Double]]) {
+      for (index, band) in bands.enumerated() {
+        guard index < boxes.count, imageW > 0, imageH > 0 else {
           band.setAttribute(.hidden, "")
           continue
         }
-        let box = quoteBoxes[index]
+        let box = boxes[index]
         let scaleX = Double(imageW) / Self.zoneExtent
         let scaleY = Double(imageH) / Self.zoneExtent
         place(

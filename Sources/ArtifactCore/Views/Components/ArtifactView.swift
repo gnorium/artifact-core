@@ -5406,24 +5406,37 @@
     }
 
     /// The quote the reader is opened on, on the scan (user, 2026-10-31):
-    /// the zones of the words its markup highlights as the quote's own
-    /// (`isQuoted`, `TEIView`), banded in violet (`ImageView.showQuote`),
-    /// for as long as its page is shown; none where Raw is shown, no word
-    /// is the quote's, or the tools linked none of its words.
+    /// the zones of the words its markup marks as the quote's
+    /// (`.tei-highlight`, `TEIView`), and of those it marks as its lemma
+    /// (`data-highlight="title"`), tinted as the text pane tints them
+    /// (`ImageView.showQuote`) for as long as its page is shown; none where
+    /// Raw is shown or the tools linked none of its words.
     private func showQuote() {
       guard let canvas = shownCanvas else { return }
-      var boxes: [[Double]] = []
+      var quote: [[Double]] = []
+      var lemma: [[Double]] = []
       if let links = currentWordLinks() {
-        for word in links.words where word.parts.contains(where: { Self.isQuoted($0) }) {
-          boxes.append(contentsOf: word.boxes)
+        for word in links.words {
+          if word.parts.contains(where: { Self.isLemma($0) }) {
+            lemma.append(contentsOf: word.boxes)
+          } else if word.parts.contains(where: { Self.isQuoted($0) }) {
+            quote.append(contentsOf: word.boxes)
+          }
         }
       }
-      canvas.showQuote(boxes)
+      canvas.showQuote(quote, lemma: lemma)
     }
 
-    /// Whether a word of the edition is the quote's own: in (or itself) its
-    /// mark (`.tei-highlight[data-highlight="title"]`).
+    /// Whether a word of the edition is in the quote: in (or itself) its
+    /// mark (`.tei-highlight`).
     private static func isQuoted(_ word: DOM.Element) -> Bool {
+      if case .some = word.closest(".tei-highlight") { return true }
+      return false
+    }
+
+    /// Whether a word of the edition is the quote's lemma, the word quoted
+    /// (`.tei-highlight[data-highlight="title"]`).
+    private static func isLemma(_ word: DOM.Element) -> Bool {
       if case .some = word.closest(".tei-highlight[data-highlight='title']") { return true }
       return false
     }
