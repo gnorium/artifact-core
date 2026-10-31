@@ -5408,7 +5408,7 @@
     /// The quote the reader is opened on, on the scan (user, 2026-10-31):
     /// the zones of the words its markup marks as the quote's
     /// (`.tei-highlight`, `TEIView`), and of those it marks as its lemma
-    /// (`data-highlight="title"`), tinted as the text pane tints them
+    /// (`data-highlight="title"`), a band a line, tinted as the text pane tints them
     /// (`ImageView.showQuote`) for as long as its page is shown; none where
     /// Raw is shown or the tools linked none of its words.
     private func showQuote() {
@@ -5417,14 +5417,31 @@
       var lemma: [[Double]] = []
       if let links = currentWordLinks() {
         for word in links.words {
-          if word.parts.contains(where: { Self.isLemma($0) }) {
-            lemma.append(contentsOf: word.boxes)
-          } else if word.parts.contains(where: { Self.isQuoted($0) }) {
-            quote.append(contentsOf: word.boxes)
-          }
+          if word.parts.contains(where: { Self.isQuoted($0) }) { quote.append(contentsOf: word.boxes) }
+          if word.parts.contains(where: { Self.isLemma($0) }) { lemma.append(contentsOf: word.boxes) }
         }
       }
-      canvas.showQuote(quote, lemma: lemma)
+      // One band a line (user, 2026-10-31): its words and the gaps between
+      // them, as the text pane marks the spaces too.
+      canvas.showQuote(Self.lineBands(quote), lemma: Self.lineBands(lemma))
+    }
+
+    /// Word boxes (left, top, right, bottom) joined a line into one: boxes
+    /// that overlap down by half the shorter one's height stand on a line.
+    private static func lineBands(_ boxes: [[Double]]) -> [[Double]] {
+      var bands: [[Double]] = []
+      for box in boxes.sorted(by: { $0[0] < $1[0] }) {
+        let found = bands.firstIndex(where: { band in
+          min(band[3], box[3]) - max(band[1], box[1]) > min(band[3] - band[1], box[3] - box[1]) / 2
+        })
+        if let index = found {
+          let band = bands[index]
+          bands[index] = [min(band[0], box[0]), min(band[1], box[1]), max(band[2], box[2]), max(band[3], box[3])]
+        } else {
+          bands.append(box)
+        }
+      }
+      return bands
     }
 
     /// Whether a word of the edition is in the quote: in (or itself) its

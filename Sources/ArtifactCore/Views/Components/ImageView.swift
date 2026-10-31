@@ -177,23 +177,23 @@
           pointerEvents(.none)
         }
         // The quote a reader is opened on (user, 2026-10-31), as its text
-        // pane marks it: its words in a translucent violet tint, its
-        // lemma's in a translucent magenta one, the print reading whole
-        // through them; no line (blue is the pointed word's, yellow Find's).
+        // pane marks it: a band a line, its words and the gaps between
+        // them, on the subtle violet ground, and its lemma's on the subtle
+        // magenta one over it, multiplied into the scan so the print reads
+        // whole through them; no line (blue is the pointed word's, yellow
+        // Find's).
         selector("& .image-quote", "& .image-lemma") {
           position(.absolute)
           zIndex(1)
+          mixBlendMode(CSS.BlendMode.multiply)
           pointerEvents(.none)
         }
         descendant(".image-quote") {
-          CSS.Property(
-            "background-color",
-            "color-mix(in srgb, " + colorViolet.value + " calc(" + opacityLow.value + " * 100%), transparent)")
+          backgroundColor(backgroundColorVioletSubtle)
         }
         descendant(".image-lemma") {
-          CSS.Property(
-            "background-color",
-            "color-mix(in srgb, " + colorMagenta.value + " calc(" + opacityLow.value + " * 100%), transparent)")
+          zIndex(2)
+          backgroundColor(backgroundColorMagentaSubtle)
         }
         descendant(".image-region") { zIndex(4) }
         // The 0–1000 space drawn over the image while a region is: lines
