@@ -3143,7 +3143,7 @@
           }
         }, capture: true, passive: false)
       // Focused, the keys move it as the image's do: the arrows pan, + and
-      // − zoom, 0 opens it again at its actual size or its fit.
+      // − zoom, 0 fits it again.
       pane.setAttribute("tabindex", "0")
       _ = pane.addEventListener("keydown", { [self] e in self.zoomKey(e) }, capture: false, passive: false)
       _ = pane.addEventListener("scroll", { [self] _ in self.scrolled() }, capture: false, passive: true)
@@ -3346,7 +3346,7 @@
 
     /// The keys of the focused pane: the arrows pan by a wheel's travel
     /// (`ViewerZoom.wheelTravel`), + and − zoom by a wheel's step about the
-    /// pane's middle, 0 opens it again (its actual size, or its fit).
+    /// pane's middle, 0 fits it again.
     private func zoomKey(_ event: Event) {
       // The pane's own keys, when it has the focus: a word's arrows move
       // between words, a field's its caret.
@@ -3392,8 +3392,11 @@
       } else if stringEquals(key, "-") {
         zoom(to: currentZoom() * ViewerZoom.wheelFactor(ViewerZoom.wheelTravel), about: middle)
       } else if stringEquals(key, "0") {
-        setZoom(nil, atFit: false)
-        sessionStorage.removeItem(Self.zoomKey + zoomKind)
+        // Its fit, as the image's 0 fits it (user, 2026-10-31: fully
+        // zoomed out is the whole leaf in the pane; 0 opened Hamlet Q1's
+        // cover at its actual size, its fillets past the pane).
+        setZoom(nil, atFit: true)
+        sessionStorage.setItem(Self.zoomKey + zoomKind, "fit")
         applyZoom(about: nil)
         matchImage()
       } else if stringEquals(key, "ArrowLeft") {
@@ -3845,8 +3848,7 @@
       // A leaf no zoom was set for, by the reader or the session, opens at
       // its fit, the image shown or not (user, 2026-10-31: Hamlet Q1's
       // cover, the image off, opened at its actual size, its corners cut
-      // off, and read as the reader's widest); `0` still sets its actual
-      // size.
+      // off, and read as the reader's widest).
       var resting = anchor == nil && (stored.atFit || zoomUnset())
         ? fit : max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
       // A page with nothing set on it (a blank, a gap) rests at its fit:
