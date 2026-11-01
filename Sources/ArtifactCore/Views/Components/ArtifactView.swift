@@ -120,6 +120,11 @@
     /// drawn, it says so in `artifact-canvas-change` with no pane active;
     /// the host adds the pane and tells it with `artifact-markup-added`.
     let windowed: Bool
+    /// The page number printed on the source, where the host knows one (a
+    /// quote's Source box's Page, `<biblScope unit="page">`): what the
+    /// header names a page that has no image, its name and ordinal being
+    /// none (`data-printed-page`). Nil: none.
+    let printedPage: String?
 
     public init(
       manifestURL: String = "",
@@ -133,6 +138,7 @@
       canvasSwitch: Bool = false,
       pageCount: Int? = nil,
       windowed: Bool = false,
+      printedPage: String? = nil,
       @HTMLBuilder markup: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
       @HTMLBuilder footerSwitches: () -> [DOM.Node] = { [] },
@@ -152,6 +158,7 @@
       self.canvasSwitch = canvasSwitch
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.windowed = windowed
+      self.printedPage = printedPage
       self.markup = markup()
       self.canvas = canvas()
       self.footerSwitches = footerSwitches()
@@ -165,6 +172,13 @@
     /// page images to show. Drawn hidden: the reader shows it once the
     /// manifest confirms an image (`data-canvas-confirmed`).
     private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty && !markup.isEmpty }
+
+    /// Whether the viewer holds text alone (user, 2026-11-01: a quote with
+    /// no source images): no images to read, none to show. Its chrome is
+    /// what text alone needs—Reflow, the host's Find, fullscreen—with no
+    /// code to check against an image (XML), and a pager only where there
+    /// is more than one page to turn.
+    private var textOnly: Bool { manifestURL.isEmpty && canvas.isEmpty && !markup.isEmpty }
 
     /// Whether the viewer offers the Header switch and draws the header
     /// pane: when the document has a header now, or had one before that an
@@ -318,7 +332,7 @@
           // at the footer's start: the bottom left of the box, as Raw sits
           // on every box (user, 2026-10-10).
           div {
-            if rawSwitch, !markup.isEmpty {
+            if rawSwitch, !markup.isEmpty, !textOnly {
               // Icons, subtle and bordered as the reactions button is (user,
               // 2026-10-12): the code (`</>`), its lines' flow, and the panes
               // unlinked.
@@ -395,7 +409,8 @@
 
           // The page nav, beside fullscreen at the footer's end (user,
           // 2026-10-08): in the header it pushed the row past a phone's
-          // width.
+          // width. Text alone on one page has none to turn.
+          if !textOnly || (pageCount ?? 1) > 1 {
           PaginationView(
             currentPage: min((startCanvas ?? 0) + 1, pageCount ?? 1),
             totalPages: pageCount ?? 1,
@@ -409,6 +424,7 @@
             inputAriaLabel: "Page number",
             class: "artifact-page-nav"
           )
+          }
 
           // Maximize to go full screen; in full screen the same button
           // leaves it, and shows minimize. Where full screen is refused
@@ -445,6 +461,7 @@
       .data("pages-known", pageCount != nil)
       .data("windowed", windowed)
       .data("page-count", pageCount ?? 0)
+      .data("printed-page", printedPage ?? "")
       // The Header switch's state, off at first (`header`).
       .data("header", false)
       // The English switch's state, which a host's rules within the viewer
@@ -1431,6 +1448,9 @@
       setupOverlay()
       setupCorrespondence()
       setupRegions()
+      // A host that marks a quote's words itself (a Source box's sentence,
+      // gnorium-web `QuoteSentenceSelection`) says so: the scan shows them.
+      _ = root.addEventListener("artifact-quote-change") { [self] _ in self.showQuote() }
       // A host turns the reader to a page by its image service (a find
       // bar's match): an `artifact-show-service` event on the viewer.
       _ = root.addEventListener("artifact-show-service") { [self] (event: Event) in
@@ -4416,14 +4436,19 @@
       setPageTurn(nextBtn, disabled: canvasIndex >= total - 1)
     }
 
-    /// What the footer names a page: the manifest's label for its canvas,
-    /// else its place in the sequence (1, 2, 3)—never the markup's own
-    /// `pb n`, which the explication writes from the image and the
-    /// manifest outranks (user, 2026-10-09).
+    /// What the header names a page: the manifest's label for its canvas,
+    /// else its image's place in the sequence (1, 2, 3)—never the markup's
+    /// own `pb n`, which the explication writes from the image and the
+    /// manifest outranks (user, 2026-10-09); a page with no image, the page
+    /// number printed on its source where the host gives one
+    /// (`data-printed-page`, user 2026-11-01).
     private func label(of index: Int) -> String {
       guard index < serviceIDs.count else { return "" }
       let given = index < canvasLabels.count ? stringTrim(canvasLabels[index]) : ""
-      return stringIsEmpty(given) ? intToString(index + 1) : given
+      if !stringIsEmpty(given) { return given }
+      let printed = stringTrim(root.dataset["printed-page"] ?? "")
+      if stringIsEmpty(serviceIDs[index]), !stringIsEmpty(printed) { return printed }
+      return intToString(index + 1)
     }
 
     /// A page turn's enabled state, on the property and in the class.
@@ -5336,7 +5361,18 @@
 
     /// Whether the word correspondence applies: the scan shown beside the
     /// rendered page, the overlay off.
-    private var corresponds: Bool { canvasShown && !overlayOn && !overlayLeaving && !rawVisible && shownCanvas != nil }
+    private var corresponds: Bool {
+      canvasShown && !overlayOn && !overlayLeaving && !rawVisible && shownCanvas != nil && !selectsSentences
+    }
+
+    /// Whether a form's Source box selects a sentence in this reader (user,
+    /// 2026-11-01; `data-selects-sentences` on an ancestor, gnorium-web
+    /// `QuoteSentenceSelection`): its words and the scan's band nothing
+    /// blue, and open no gloss; the sentence selected is the quote shown.
+    private var selectsSentences: Bool {
+      if case .some = root.closest("[data-selects-sentences='true']") { return true }
+      return false
+    }
 
     /// Hovering or tapping a word of the edition bands its zones on the
     /// scan in the image pane, and a word of the scan marks the edition's

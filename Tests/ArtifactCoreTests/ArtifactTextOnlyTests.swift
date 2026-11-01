@@ -1,0 +1,65 @@
+import DOMBuilder
+import HTMLBuilder
+import WebTypes
+import XCTest
+
+@testable import ArtifactCore
+
+/// A viewer that holds text alone (user, 2026-11-01: a quote with no source
+/// images) shows only what text alone needs, driven by what it has: Reflow
+/// at the footer's start, fullscreen at its end, no XML switch and no pager
+/// for its one page; a printed page number names a page with no image.
+final class ArtifactTextOnlyTests: XCTestCase {
+  private func elements(in node: DOM.Node) -> [DOM.Element] {
+    guard let element = node as? DOM.Element else { return [] }
+    return [element] + element.children.flatMap { elements(in: $0) }
+  }
+
+  private func classes(_ element: DOM.Element) -> [Substring] {
+    element.attributes.first { $0.0 == "class" }.map { $0.1.split(separator: " ") } ?? []
+  }
+
+  private func count(_ name: String, in node: DOM.Node) -> Int {
+    elements(in: node).filter { classes($0).contains(Substring(name)) }.count
+  }
+
+  private func attribute(_ element: DOM.Element, _ name: String) -> String? {
+    element.attributes.first { $0.0 == name }?.1
+  }
+
+  func testTextAloneShowsReflowAndFullscreenOnly() throws {
+    let node = ArtifactView(rawSwitch: true, canvasSwitch: true, pageCount: 1, printedPage: "37") {
+      div { "A sentence." }.data("service-id", "")
+    }.build()
+    XCTAssertEqual(count("artifact-reflow-toggle", in: node), 1)
+    XCTAssertEqual(count("artifact-fullscreen-button", in: node), 1)
+    XCTAssertEqual(count("artifact-xml-toggle", in: node), 0)
+    XCTAssertEqual(count("artifact-page-nav", in: node), 0)
+    XCTAssertEqual(count("artifact-detach-toggle", in: node), 0)
+    XCTAssertEqual(count("artifact-overlay-toggle", in: node), 0)
+    XCTAssertEqual(count("artifact-canvas-toggle", in: node), 0)
+    XCTAssertEqual(count("artifact-header-toggle", in: node), 0)
+    let root = try XCTUnwrap(node as? DOM.Element)
+    XCTAssertEqual(attribute(root, "data-printed-page"), "37")
+  }
+
+  func testTextOnSeveralPagesKeepsItsPager() {
+    let node = ArtifactView(rawSwitch: true, pageCount: 2) {
+      div { "One." }.data("service-id", "")
+      div { "Two." }.data("service-id", "")
+    }.build()
+    XCTAssertEqual(count("artifact-page-nav", in: node), 1)
+    XCTAssertEqual(count("artifact-xml-toggle", in: node), 0)
+  }
+
+  func testTextBesideImagesKeepsItsChrome() {
+    let node = ArtifactView(manifestURL: "/testaments/manifest?url=x", rawSwitch: true, pageCount: 1) {
+      div { "Page" }.data("service-id", "https://h/i1")
+    } canvas: {
+      div {}.data("service-id", "https://h/i1")
+    }.build()
+    XCTAssertEqual(count("artifact-xml-toggle", in: node), 1)
+    XCTAssertEqual(count("artifact-page-nav", in: node), 1)
+    XCTAssertEqual(count("artifact-reflow-toggle", in: node), 1)
+  }
+}
