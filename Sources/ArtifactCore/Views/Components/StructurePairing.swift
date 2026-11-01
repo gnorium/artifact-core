@@ -246,6 +246,10 @@ enum StructurePairing {
         if j > 0, cost[i][j - 1] + leading < best {
           best = cost[i][j - 1] + leading
           move = 2
+        } else if i > 0, j > 0, move == 1, cost[i][j - 1] + leading == best {
+          // Of two equally good, the lower row last, so the pairing reads
+          // top to bottom (gnorium-python `layout_measure.pair_lines`).
+          move = edition[i - 1].top >= scan[j - 1].top ? 1 : 2
         }
         cost[i][j] = best
         step[i][j] = move
