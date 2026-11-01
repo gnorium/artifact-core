@@ -8,7 +8,8 @@ import XCTest
 /// A viewer that holds text alone (user, 2026-11-01: a quote with no source
 /// images) shows only what text alone needs, driven by what it has: Reflow
 /// at the footer's start, fullscreen at its end, no XML switch and no pager
-/// for its one page; a printed page number names a page with no image.
+/// for its one page, no Header switch (its header is the host's, written
+/// for it); a printed page number names a page with no image.
 final class ArtifactTextOnlyTests: XCTestCase {
   private func elements(in node: DOM.Node) -> [DOM.Element] {
     guard let element = node as? DOM.Element else { return [] }
@@ -28,7 +29,7 @@ final class ArtifactTextOnlyTests: XCTestCase {
   }
 
   func testTextAloneShowsReflowAndFullscreenOnly() throws {
-    let node = ArtifactView(rawSwitch: true, canvasSwitch: true, pageCount: 1, printedPage: "37") {
+    let node = ArtifactView(rawSwitch: true, header: "<teiHeader/>", canvasSwitch: true, pageCount: 1, printedPage: "37") {
       div { "A sentence." }.data("service-id", "")
     }.build()
     XCTAssertEqual(count("artifact-reflow-toggle", in: node), 1)

@@ -184,7 +184,9 @@
     /// pane: when the document has a header now, or had one before that an
     /// object or edit removed (`headerRing`, `underHeader`; user, 2026-10-26).
     private var hasHeader: Bool {
-      documentHeader != nil || !(headerRing ?? "").isEmpty || !underHeader.isEmpty
+      // Text alone has no source document to show the header of: its
+      // header is the host's, written for it (a quote's page).
+      !textOnly && (documentHeader != nil || !(headerRing ?? "").isEmpty || !underHeader.isEmpty)
     }
 
     /// The header carries no title (user, 2026-10-09): on a biblio page
@@ -4447,7 +4449,7 @@
       let given = index < canvasLabels.count ? stringTrim(canvasLabels[index]) : ""
       if !stringIsEmpty(given) { return given }
       let printed = stringTrim(root.dataset["printed-page"] ?? "")
-      if stringIsEmpty(serviceIDs[index]), !stringIsEmpty(printed) { return printed }
+      if stringIsEmpty(manifestURL) || stringIsEmpty(serviceIDs[index]), !stringIsEmpty(printed) { return printed }
       return intToString(index + 1)
     }
 
