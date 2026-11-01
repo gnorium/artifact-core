@@ -1211,20 +1211,21 @@
       selector("&[data-fills-window='true']::backdrop") {
         opacity(1)
       }
-      // On a phone (below 480px) the viewer is never narrower than its
-      // footer's one row at its own size (user, 2026-10-12)—Raw, Reflow,
+      // The viewer is never narrower than its footer's one row at its own
+      // size (user, 2026-10-12; at every width, 2026-11-02)—its switches,
       // the pager and fullscreen, their gaps, the footer's inset and the
-      // viewer's border—whatever the pager's total holds: the footer is
-      // as wide as its contents (`max-content`) and the viewer as wide as
-      // that (`min-content`), measured from the footer alone. A page that
-      // nests the viewer deeper scrolls
-      // sideways, as the outliner's does; nothing in it is resized.
+      // viewer's border—whatever the pager's total holds: the footer is as
+      // wide as its contents (`max-content`) and the viewer as wide as that
+      // (`min-content`), measured from the footer alone. The footer never
+      // scrolls on its own: where the viewer stands narrower (a deep tree),
+      // the scrollport around it scrolls sideways, as the outliner's does;
+      // nothing in it is resized.
+      selector("&") { CSS.Property("min-width", "min-content").important() }
+      selector("& .artifact-footer") { CSS.Property("min-width", "max-content").important() }
+      // Only the footer sets it: the rest (the header row, the pane and its
+      // unwrapped lines) is as wide as the viewer, whatever it holds.
+      selector("& > :not(.artifact-footer)") { CSS.Property("contain", "inline-size") }
       media(maxWidth(maxWidthBreakpointPhoneNarrow)) {
-        selector("&") { CSS.Property("min-width", "min-content").important() }
-        selector("& .artifact-footer") { CSS.Property("min-width", "max-content").important() }
-        // Only the footer sets it: the rest (the header row, the pane and
-        // its unwrapped lines) is as wide as the viewer, whatever it holds.
-        selector("& > :not(.artifact-footer)") { CSS.Property("contain", "inline-size") }
         // Option B (`ButtonView.phoneStep`): fullscreen small with every
         // medium button; its icon stays on the 22px line, as theirs does.
         selector("\(ButtonView.phoneStep) & .artifact-fullscreen-button") {
@@ -4443,7 +4444,7 @@
     /// where every image has one; else the labels printed on the pages
     /// (each page's `pb n`, or for text alone the host's printed page,
     /// `data-printed-page`) where every page has one; else each image's
-    /// place in the sequence (1, 2, 3).
+    /// place in the provider's sequence (1, 2, 3); text alone, nothing.
     private func label(of index: Int) -> String {
       guard index < serviceIDs.count else { return "" }
       let count = serviceIDs.count
@@ -4451,6 +4452,9 @@
         return stringTrim(canvasLabels[index])
       }
       if let printed = printedLabels(count: count) { return printed[index] }
+      // Text alone has no images, so no ordinals (user, 2026-11-02): its
+      // printed pages or nothing, never a count from the cover.
+      if stringIsEmpty(manifestURL), serviceIDs.allSatisfy({ stringIsEmpty($0) }) { return "" }
       return intToString(index + 1)
     }
 
