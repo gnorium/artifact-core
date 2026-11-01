@@ -4436,19 +4436,37 @@
       setPageTurn(nextBtn, disabled: canvasIndex >= total - 1)
     }
 
-    /// What the header names a page: the manifest's label for its canvas,
-    /// else its image's place in the sequence (1, 2, 3)—never the markup's
-    /// own `pb n`, which the explication writes from the image and the
-    /// manifest outranks (user, 2026-10-09); a page with no image, the page
-    /// number printed on its source where the host gives one
-    /// (`data-printed-page`, user 2026-11-01).
+    /// What the header names a page (user, 2026-11-02), one kind for every
+    /// page so the kinds never interleave: the manifest's canvas labels
+    /// where every image has one; else the labels printed on the pages
+    /// (each page's `pb n`, or for text alone the host's printed page,
+    /// `data-printed-page`) where every page has one; else each image's
+    /// place in the sequence (1, 2, 3).
     private func label(of index: Int) -> String {
       guard index < serviceIDs.count else { return "" }
-      let given = index < canvasLabels.count ? stringTrim(canvasLabels[index]) : ""
-      if !stringIsEmpty(given) { return given }
-      let printed = stringTrim(root.dataset["printed-page"] ?? "")
-      if stringIsEmpty(manifestURL) || stringIsEmpty(serviceIDs[index]), !stringIsEmpty(printed) { return printed }
+      let count = serviceIDs.count
+      if canvasLabels.count >= count, canvasLabels.prefix(count).allSatisfy({ !stringIsEmpty(stringTrim($0)) }) {
+        return stringTrim(canvasLabels[index])
+      }
+      if let printed = printedLabels(count: count) { return printed[index] }
       return intToString(index + 1)
+    }
+
+    /// The labels printed on the pages, by place, when every page has one;
+    /// nil otherwise (a page not drawn yet says none).
+    private func printedLabels(count: Int) -> [String]? {
+      var labels: [String] = []
+      for _ in 0..<count { labels.append("") }
+      let host = stringTrim(root.dataset["printed-page"] ?? "")
+      if count == 1, !stringIsEmpty(host) { return [host] }
+      for (position, pane) in markupPanes.enumerated() {
+        let service = pane.dataset["service-id"] ?? ""
+        var place = windowed ? (parseInt(pane.dataset["page-index"] ?? "") ?? -1) : position
+        if !stringIsEmpty(service), let found = canvasIndex(ofService: service) { place = found }
+        guard place >= 0, place < count else { continue }
+        labels[place] = stringTrim(pane.dataset["label"] ?? "")
+      }
+      return labels.allSatisfy({ !stringIsEmpty($0) }) ? labels : nil
     }
 
     /// A page turn's enabled state, on the property and in the class.
