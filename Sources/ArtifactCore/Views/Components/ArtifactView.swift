@@ -175,9 +175,10 @@
 
     /// Whether the viewer holds text alone (user, 2026-11-01: a quote with
     /// no source images): no images to read, none to show. Its chrome is
-    /// what text alone needs—Reflow, the host's Find, fullscreen—with no
-    /// code to check against an image (XML), and a pager only where there
-    /// is more than one page to turn.
+    /// what text alone needs—XML (its page's code, the body the host built
+    /// in memory, never a header: user, 2026-11-02), Reflow, the host's
+    /// Find, fullscreen—and a pager only where there is more than one page
+    /// to turn.
     private var textOnly: Bool { manifestURL.isEmpty && canvas.isEmpty && !markup.isEmpty }
 
     /// Whether the viewer offers the Header switch and draws the header
@@ -334,7 +335,7 @@
           // at the footer's start: the bottom left of the box, as Raw sits
           // on every box (user, 2026-10-10).
           div {
-            if rawSwitch, !markup.isEmpty, !textOnly {
+            if rawSwitch, !markup.isEmpty {
               // Icons, subtle and bordered as the reactions button is (user,
               // 2026-10-12): the code (`</>`), its lines' flow, and the panes
               // unlinked.
