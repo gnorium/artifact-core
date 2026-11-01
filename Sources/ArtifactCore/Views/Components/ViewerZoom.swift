@@ -103,10 +103,6 @@ public enum ViewerZoom {
     public var zoom = 1.0
     /// The fit: the zoom that shows the whole image in the surface.
     public var minZoom = 0.01
-    /// The least its zoom over its fit may be: 1, the fit, for most
-    /// images; less where a surface may zoom out past its fit, the whole
-    /// image standing in margins (the scan, user 2026-10-31).
-    public var outReach = 1.0
     /// Whether the image is at its fit, which it follows as the surface
     /// changes size; any other zoom is clamped.
     public var atFit = true
@@ -120,11 +116,9 @@ public enum ViewerZoom {
     /// larger.
     public var maxZoom: Double { max(minZoom, ViewerZoom.actualSize) }
 
-    /// The most it zooms out: its fit, or `outReach` times it.
-    public var leastZoom: Double { minZoom * min(1, outReach) }
-
-    /// `value` held between the least and the most it zooms to.
-    func clamped(_ value: Double) -> Double { max(leastZoom, min(maxZoom, value)) }
+    /// `value` held between the fit and the actual size: no image, the
+    /// scan included, zooms out past its fit (user, 2026-11-01).
+    func clamped(_ value: Double) -> Double { max(minZoom, min(maxZoom, value)) }
 
     /// Whether `value` is the fit, its rounding allowed (a scale of 1 over
     /// the fit, multiplied back, can miss it by a hair).
@@ -139,7 +133,7 @@ public enum ViewerZoom {
     /// Whether the image has a size and any zoom to give: one shown at its
     /// actual size (or larger) has none to zoom in to.
     public var canZoom: Bool {
-      imageWidth > 0 && imageHeight > 0 && maxZoom - leastZoom > Self.room
+      imageWidth > 0 && imageHeight > 0 && maxZoom - minZoom > Self.room
     }
 
     /// The least zoom a fit may fall short of the actual size by and still
@@ -216,13 +210,10 @@ public enum ViewerZoom {
       clampPan()
     }
 
-    /// `value`, clamped to its least zoom and the actual size, about a
-    /// point of the viewport (which stays where it is under the pointer). A
-    /// zoom across the fit stops at it first, both ways, so the fit is
-    /// found again where the surface zooms out past it (`outReach`).
+    /// `value`, clamped to the fit and the actual size, about a point of
+    /// the viewport (which stays where it is under the pointer).
     public mutating func zoom(to value: Double, aboutX cx: Double, y cy: Double) {
-      var newZoom = clamped(value)
-      if (zoom > minZoom && newZoom < minZoom) || (zoom < minZoom && newZoom > minZoom) { newZoom = minZoom }
+      let newZoom = clamped(value)
       panX = cx - (cx - panX) * (newZoom / zoom)
       panY = cy - (cy - panY) * (newZoom / zoom)
       zoom = newZoom
