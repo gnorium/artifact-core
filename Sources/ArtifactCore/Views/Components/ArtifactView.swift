@@ -4934,6 +4934,10 @@
           let walker = document.createTreeWalker(root, DOM.NodeFilter.SHOW_TEXT)
           while let next = walker.nextNode() {
             guard let node = next as? DOM.Text, let parent = node.parentElement else { continue }
+            // A dropped initial (web-components `TEIView`, `.tei-drop-initial`)
+            // stands beside the rows it drops through and is none of them: its
+            // line on the scan is its row's type alone, as the measuring reads it.
+            if case .some = parent.closest(".tei-drop-initial") { continue }
             let block: Int32 = parent.closest(".tei-block").map { $0.id } ?? -1
             // How its line is set: the edges the print aligns, and its
             // type's em (CSS pixels, the layer's own).
