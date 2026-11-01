@@ -134,6 +134,10 @@ enum OverlayRegistration {
     return count
   }
 
+  /// How many times a place is settled at its own pairs' median
+  /// (`registrationDown`; gnorium-python `layout_measure.SETTLINGS`).
+  static let settlings = 8
+
   /// How far down the scan's rows are laid on the edition's and the main
   /// text's matches there (user, 2026-10-28). The median of one pairing on
   /// the text block's registration (`baselineShift`) is not enough: where
@@ -141,7 +145,7 @@ enum OverlayRegistration {
   /// with their neighbors, and that median locks every row one off (Hamlet
   /// Q1 p. 4: 31 rows each paired with the next). So each place one leading
   /// either side of that median is paired too, each settled at its own
-  /// pairs' median, and the scan is laid where the most of its rows agree
+  /// pairs' median (again until it moves them no more), and the scan is laid where the most of its rows agree
   /// with their partners (`agreeing`: baselines and widths), the least cost
   /// (`pairingCost`) of those; not moved under three pairs. Baselines alone
   /// cannot tell a row off from the right one: on a page whose lines all
@@ -168,10 +172,19 @@ enum OverlayRegistration {
     let first = baselineShift(matches, edition: edition, scan: scan)
     var best: (agree: Int, cost: Double, down: Double, matches: [StructurePairing.Match])?
     for start in [first, first - leading, first + leading] {
-      let tried = lowered(start)
-      let down = start + baselineShift(StructurePairing.pair(edition: edition, scan: tried, leading: leading), edition: edition, scan: tried)
-      let laid = lowered(down)
-      let found = StructurePairing.pair(edition: edition, scan: laid, leading: leading)
+      // Settled at its own pairs' median until it moves them no more
+      // (gnorium-python `layout_measure._settled`): one pairing reached from
+      // two starts is one place.
+      var down = start
+      var laid = lowered(down)
+      var found = StructurePairing.pair(edition: edition, scan: laid, leading: leading)
+      for _ in 0..<settlings {
+        let shift = baselineShift(found, edition: edition, scan: laid)
+        if abs(shift) < 1e-9 { break }
+        down += shift
+        laid = lowered(down)
+        found = StructurePairing.pair(edition: edition, scan: laid, leading: leading)
+      }
       let agree = agreeing(found, edition: edition, scan: laid, leading: leading)
       let cost = pairingCost(found, edition: edition, scan: laid, leading: leading)
       if best.map({ agree > $0.agree || (agree == $0.agree && cost < $0.cost - 1e-9) }) ?? true {
