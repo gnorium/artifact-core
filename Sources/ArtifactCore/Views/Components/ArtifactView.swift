@@ -361,6 +361,9 @@
               // and the code's as stored, never wrapped, scrolling
               // sideways. On: the page's lines run on as paragraphs, the
               // code wrapped as plain text.
+              // Text alone is always reflowed (user, 2026-11-03): it has no
+              // page to set its lines on, so no switch.
+              if !textOnly {
               ToggleButtonView(
                 label: "Reflow",
                 icon: IconView(icon: { s in TextWrapIconView(size: s) }, size: ButtonView.ButtonSize.medium.iconSize),
@@ -372,6 +375,7 @@
                 size: .medium,
                 class: "artifact-reflow-toggle"
               )
+              }
               // The image and the rendered text kept on the same part of the
               // page (user, 2026-10-12); pressed, each scrolls alone, for a
               // page whose text is not yet the scan's. Disabled where it
@@ -453,7 +457,9 @@
       .data("style", style.rawValue)
       // Hidden until the reader knows the session's choice, so that a reader
       // left off never shows an empty column first.
-      .data("canvas-shown", !switchesCanvas)
+      // Text alone has no image pane at all (user, 2026-11-03): its text
+      // pane the whole width.
+      .data("canvas-shown", !switchesCanvas && !textOnly)
       // The images switch is drawn where the page names an image service,
       // but offered only once the manifest confirms an image (user,
       // 2026-10-10): hidden until the reader says so, and for good where
@@ -467,6 +473,9 @@
       .data("printed-page", printedPage ?? "")
       // The Header switch's state, off at first (`header`).
       .data("header", false)
+      // Text alone runs on as paragraphs at the reader's size, zoomed as
+      // reflowed text is, in the viewer's own height (user, 2026-11-03).
+      .data("reflow", textOnly)
       // The English switch's state, which a host's rules within the viewer
       // follow; a viewer with no switch leaves the page's to its ancestors.
       .style {
@@ -1427,6 +1436,8 @@
       startService: String = ""
     ) {
       self.root = root
+      // As drawn: text alone shows no image pane (user, 2026-11-03).
+      if stringEquals(root.dataset["canvas-shown"] ?? "", "false") { canvasShown = false }
       self.manifestURL = manifestURL
       self.startCanvas = startCanvas
       self.startService = startService
