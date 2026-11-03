@@ -196,6 +196,17 @@
           zIndex(2)
           backgroundColor(backgroundColorMagentaSubtle)
         }
+        // A selected form's bands ringed (user, 2026-11-03): a 2px line
+        // round each, drawn on it, no tint of its own.
+        descendant(".image-lemma-selected") {
+          position(.absolute)
+          zIndex(3)
+          pointerEvents(.none)
+          border(borderWidthThick, .solid, borderColorMagenta)
+          borderRadius(borderRadiusMinimal)
+          boxSizing(.borderBox)
+        }
+        descendant(".image-lemma-selected[hidden]") { display(.none) }
         descendant(".image-region") { zIndex(4) }
         // The 0–1000 space drawn over the image while a region is: lines
         // every 100, 50, 10, 5 and 1, each finer level fainter and drawn
@@ -815,24 +826,33 @@
     /// marks them (a pointed word's is blue, `showWord`), kept as the image
     /// is panned and zoomed, the image never moved for them. None clears
     /// them.
-    func showQuote(_ quote: [[Double]], lemma: [[Double]]) {
+    /// `selected`: the bands of a form selected in a card's text pane,
+    /// ringed over their tint (user, 2026-11-03).
+    func showQuote(_ quote: [[Double]], lemma: [[Double]], selected: [[Double]] = []) {
       quoteBoxes = quote.filter { $0.count == 4 }
       lemmaBoxes = lemma.filter { $0.count == 4 }
+      selectedBoxes = selected.filter { $0.count == 4 }
       drawQuote()
     }
 
     /// The quote's and its lemma's zones in the 0–1000 space; empty for none.
     private var quoteBoxes: [[Double]] = []
     private var lemmaBoxes: [[Double]] = []
+    private var selectedBoxes: [[Double]] = []
     /// One tint a zone, made as they are first needed.
     private var quoteBands: [DOM.Element] = []
     private var lemmaBands: [DOM.Element] = []
+    private var selectedBands: [DOM.Element] = []
 
     private func drawQuote() {
       while quoteBands.count < quoteBoxes.count, let band = overlay("image-quote") { quoteBands.append(band) }
       while lemmaBands.count < lemmaBoxes.count, let band = overlay("image-lemma") { lemmaBands.append(band) }
+      while selectedBands.count < selectedBoxes.count, let band = overlay("image-lemma-selected") {
+        selectedBands.append(band)
+      }
       placeTints(quoteBands, at: quoteBoxes)
       placeTints(lemmaBands, at: lemmaBoxes)
+      placeTints(selectedBands, at: selectedBoxes)
     }
 
     /// Tints laid over their zones, the ones past them hidden.

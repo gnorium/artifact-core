@@ -360,10 +360,9 @@
               // page's lines as the scan breaks them (each `<lb/>` a line)
               // and the code's as stored, never wrapped, scrolling
               // sideways. On: the page's lines run on as paragraphs, the
-              // code wrapped as plain text.
-              // Text alone is always reflowed (user, 2026-11-03): it has no
-              // page to set its lines on, so no switch.
-              if !textOnly {
+              // code wrapped as plain text. Text alone has it too (user,
+              // 2026-11-03): off, each typed line one line as typed, the
+              // pane a page's; on, its text runs on.
               ToggleButtonView(
                 label: "Reflow",
                 icon: IconView(icon: { s in TextWrapIconView(size: s) }, size: ButtonView.ButtonSize.medium.iconSize),
@@ -375,7 +374,6 @@
                 size: .medium,
                 class: "artifact-reflow-toggle"
               )
-              }
               // The image and the rendered text kept on the same part of the
               // page (user, 2026-10-12); pressed, each scrolls alone, for a
               // page whose text is not yet the scan's. Disabled where it
@@ -473,9 +471,6 @@
       .data("printed-page", printedPage ?? "")
       // The Header switch's state, off at first (`header`).
       .data("header", false)
-      // Text alone runs on as paragraphs at the reader's size, zoomed as
-      // reflowed text is, in the viewer's own height (user, 2026-11-03).
-      .data("reflow", textOnly)
       // The English switch's state, which a host's rules within the viewer
       // follow; a viewer with no switch leaves the page's to its ancestors.
       .style {
@@ -4466,7 +4461,10 @@
       if let printed = printedLabels(count: count) { return printed[index] }
       // Text alone has no images, so no ordinals (user, 2026-11-02): its
       // printed pages or nothing, never a count from the cover.
-      if stringIsEmpty(manifestURL), serviceIDs.allSatisfy({ stringIsEmpty($0) }) { return "" }
+      // A page of no image names none, or only itself (`#page`).
+      if stringIsEmpty(manifestURL), serviceIDs.allSatisfy({ stringIsEmpty($0) || stringStartsWith($0, "#") }) {
+        return ""
+      }
       return intToString(index + 1)
     }
 
@@ -5500,16 +5498,41 @@
     private func showQuote() {
       guard let canvas = shownCanvas else { return }
       var quote: [[Double]] = []
-      var lemma: [[Double]] = []
+      // The lemma's runs (user, 2026-11-03): its words side by side, of one
+      // form where a form names them (`data-quote-form`), each run its own
+      // bands, so a form apart ("look … up") is a band a part, never one
+      // over the words between; whether the run's form is selected.
+      var runs: [(form: String, selected: Bool, boxes: [[Double]])] = []
+      var open = false
       if let links = currentWordLinks() {
         for word in links.words {
           if word.parts.contains(where: { Self.isQuoted($0) }) { quote.append(contentsOf: word.boxes) }
-          if word.parts.contains(where: { Self.isLemma($0) }) { lemma.append(contentsOf: word.boxes) }
+          guard let part = word.parts.first(where: { Self.isLemma($0) }) else {
+            open = false
+            continue
+          }
+          let form = part.closest("[data-quote-form]")?.getAttribute("data-quote-form") ?? ""
+          let selected = stringEquals(
+            part.closest("[data-quote-form]")?.getAttribute("data-quote-form-selected") ?? "", "true")
+          if open, let last = runs.last, stringEquals(last.form, form) {
+            runs[runs.count - 1].boxes.append(contentsOf: word.boxes)
+          } else {
+            runs.append((form, selected, word.boxes))
+          }
+          open = true
         }
       }
       // One band a line (user, 2026-10-31): its words and the gaps between
-      // them, as the text pane marks the spaces too.
-      canvas.showQuote(Self.lineBands(quote), lemma: Self.lineBands(lemma))
+      // them, as the text pane marks the spaces too; a selected form's
+      // bands ringed, as its strips are in the text pane.
+      var lemma: [[Double]] = []
+      var selected: [[Double]] = []
+      for run in runs {
+        let bands = Self.lineBands(run.boxes)
+        lemma += bands
+        if run.selected { selected += bands }
+      }
+      canvas.showQuote(Self.lineBands(quote), lemma: lemma, selected: selected)
     }
 
     /// Word boxes (left, top, right, bottom) joined a line into one: boxes
