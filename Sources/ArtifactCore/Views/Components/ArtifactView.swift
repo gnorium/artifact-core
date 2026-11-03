@@ -853,6 +853,15 @@
       selector("&[data-reflow='true'] .artifact-markup", "&[data-raw='true'] .artifact-markup") {
         cursor(.auto)
       }
+      // Reflowed, its text keeps the text pane's inset at every zoom (user,
+      // 2026-11-03: the title page's "THE" stood against the pane's top at
+      // its fit, its last line against its foot): the page around the
+      // zoomed text carries it, never the text, whose zoom shrank it.
+      // Reflow drops the scan's own margins; the zoom's fit keeps it
+      // (`applyZoom`: what stands around the layer in the pane).
+      selector("&[data-reflow='true']:not([data-raw='true']) .artifact-markup .tei-page") {
+        padding(spacing16)
+      }
       // The same two positioned frames interpolate into an overlay,
       // rather than switching layout models halfway through the reveal.
       selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-markup-frame", "&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
