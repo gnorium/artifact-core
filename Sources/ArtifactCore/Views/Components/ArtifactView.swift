@@ -4538,11 +4538,13 @@
     private func setPageTurn(_ button: DOM.Element?, disabled: Bool) {
       guard let button else { return }
       button.setDisabled(disabled)
-      // Which turn it is, read off the button rather than passed in: a caller
-      // that passes the wrong one produces a button styled as its opposite.
-      let base = stringContains(button.getAttribute(.class) ?? "", "pagination-next")
-        ? "pagination-next" : "pagination-prev"
-      button.setAttribute(.class, disabled ? "\(base) pagination-disabled" : base)
+      // The class alone, never the attribute whole: a pager's chevron is a
+      // button (`ButtonView`), whose own classes draw it.
+      if disabled {
+        _ = button.classList.add("pagination-disabled")
+      } else {
+        _ = button.classList.remove("pagination-disabled")
+      }
     }
 
     private func commitPageInput() {
