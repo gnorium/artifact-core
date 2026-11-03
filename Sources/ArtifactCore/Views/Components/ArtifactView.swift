@@ -1154,6 +1154,13 @@
         cursor(.pointer)
         flexShrink(0)
       }
+      // In a part drawn disabled (a frozen tree node's reader,
+      // `DisabledRegion`), as a disabled quiet button: its icon the
+      // disabled color.
+      selector(":where([data-disabled-region='true']) & .artifact-fullscreen-button") {
+        color(colorDisabled)
+        cursor(cursorNotAllowed)
+      }
       selector(
         "& .artifact-fullscreen-exit", "&:fullscreen .artifact-fullscreen-enter",
         "&[data-fills-window='true'] .artifact-fullscreen-enter"
