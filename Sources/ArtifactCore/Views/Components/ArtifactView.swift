@@ -3789,6 +3789,30 @@
       return fits
     }
 
+    /// The largest zoom, `zoom` at most, at which reflowed `layer`'s widest
+    /// content that cannot wrap fits its width (`applyZoom`), and fits its
+    /// frame's box where it has one (`.tei-text-block`, TEIView: a leaf
+    /// wider than it stood off its middle, user 2026-11-03): the widths
+    /// and that content's read at a zoom, its content's narrowed in step
+    /// until it fits. Its width is its pane's in its own units, wider as it
+    /// zooms out, and what cannot wrap keeps its own.
+    private func reflowedWidthFit(_ layer: DOM.Element, at zoom: Double) -> Double {
+      let frame = layer.querySelector(":scope > .tei-text-block")
+      var fitted = zoom
+      for _ in 0..<6 {
+        layer.style.setProperty("zoom", doubleToString(fitted))
+        var width = layer.clientWidth
+        var content = layer.scrollWidth
+        if let frame, frame.clientWidth > 0, frame.scrollWidth * width > content * frame.clientWidth {
+          width = frame.clientWidth
+          content = frame.scrollWidth
+        }
+        guard width > 0, content > width else { break }
+        fitted *= width / content
+      }
+      return fitted
+    }
+
     /// The window's pixels per CSS pixel of `element` across and down (its
     /// on-screen `box` over its layout size): 1 at rest, less while a
     /// transform on an ancestor scales it. Within a pixel of its layout
@@ -4072,7 +4096,7 @@
       }
       // The whole page's fit, never above its actual size: its lines as
       // drawn, or, reflowed, its height as it wraps.
-      let fit: Double
+      var fit: Double
       if codeView != nil {
         // The code zooms out no further than its page's rendered text can
         // (user, 2026-10-12), for the two to keep one scale: past that its
@@ -4102,6 +4126,16 @@
       } else {
         zoom = max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
       }
+      // Reflowed, never wider than its pane (user, 2026-11-03): what cannot
+      // wrap (a figure, a line placed by its zone on its leaf: Hamlet Q1's
+      // front cover, 38 em, on a phone) is zoomed down to the pane's width,
+      // its fit with it, so the pane never scrolls sideways.
+      var across = Double.infinity
+      if reflowOn && codeView == nil {
+        across = reflowedWidthFit(layer, at: zoom)
+        zoom = min(zoom, across)
+        fit = min(fit, across)
+      }
       // Settled: a change that would move the page by less than a pixel is
       // a measure's rounding (its fit, so its maximum, read again at a new
       // zoom), not a zoom; left as it is, so nothing redraws, frame after
@@ -4109,7 +4143,7 @@
       // Zooming on against a limit is the same: the zoom does not move, and
       // neither does the text under the pointer.
       let settled = abs(zoom - previous) * max(box.width, box.height) / previous < 1
-      if settled { zoom = previous }
+      if settled { zoom = min(previous, across) }
       let held = settled ? nil : anchor
       // At the fit by the reader's choice alone (a zoom, a sync): a page
       // that opened enlarged to its fit leaves the next page to open at its
