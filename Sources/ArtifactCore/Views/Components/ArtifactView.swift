@@ -587,13 +587,17 @@
         display(.inlineFlex)
         alignItems(.center)
       }
-      // Raw at the footer's start, the pager and fullscreen at its end.
+      // Raw at the footer's start, the pager and fullscreen at its end:
+      // the start takes the room the row has spare, and nothing in the row
+      // is ever squeezed (it scrolls instead).
       descendant(".artifact-footer-start") {
         display(.flex)
-        flex(1)
+        flex("1 0 auto")
         alignItems(.center)
         gap(spacing8)
-        minWidth(0)
+      }
+      selector("& .artifact-footer > *") {
+        flexShrink(0)
       }
       descendant(".artifact-viewer-container") {
         flex(1)
@@ -1107,11 +1111,18 @@
       // pager and fullscreen at the row's end, the start in RTL.
       // Never squeezed by the viewer's column: a header grown tall (its
       // find bar open) takes the markup's room, never the pager's.
+      // One row, never wrapped and never wider than the viewer (user,
+      // 2026-11-03): where its controls do not fit, it scrolls sideways
+      // under its own plain scrollbar, and the page never widens for it.
+      // Packed from its start, so the start is never cut off out of reach.
       descendant(".artifact-footer") {
         flexShrink(0)
-        justifyContent(.flexEnd)
+        flexWrap(.nowrap)
         gap(spacing8)
         padding(spacing8)
+        minWidth(0)
+        overflowX(.auto)
+        overflowY(.hidden)
         minHeight(minSizeInteractiveTouch)
         boxSizing(.borderBox)
         borderBlockStart(borderWidthBase, .solid, borderColorSubtle)
@@ -1225,20 +1236,11 @@
       selector("&[data-fills-window='true']::backdrop") {
         opacity(1)
       }
-      // The viewer is never narrower than its footer's one row at its own
-      // size (user, 2026-10-12; at every width, 2026-11-02)—its switches,
-      // the pager and fullscreen, their gaps, the footer's inset and the
-      // viewer's border—whatever the pager's total holds: the footer is as
-      // wide as its contents (`max-content`) and the viewer as wide as that
-      // (`min-content`), measured from the footer alone. The footer never
-      // scrolls on its own: where the viewer stands narrower (a deep tree),
-      // the scrollport around it scrolls sideways, as the outliner's does;
-      // nothing in it is resized.
-      selector("&") { CSS.Property("min-width", "min-content").important() }
-      selector("& .artifact-footer") { CSS.Property("min-width", "max-content").important() }
-      // Only the footer sets it: the rest (the header row, the pane and its
-      // unwrapped lines) is as wide as the viewer, whatever it holds.
-      selector("& > :not(.artifact-footer)") { CSS.Property("contain", "inline-size") }
+      // The viewer is as wide as its place gives it, never wider (user,
+      // 2026-11-03): nothing in it (the header's row, the footer's, the
+      // pane and its unwrapped lines) widens it, or the page, whatever it
+      // holds; each scrolls inside it instead.
+      selector("& > *") { CSS.Property("contain", "inline-size") }
       media(maxWidth(maxWidthBreakpointPhoneNarrow)) {
         // Option B (`ButtonView.phoneStep`): fullscreen small with every
         // medium button; its icon stays on the 22px line, as theirs does.
