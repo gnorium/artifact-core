@@ -1175,7 +1175,7 @@
       cropping = on
       viewport?.setAttribute(data("cropping"), on ? "true" : "false")
       if on {
-        viewport?.setAttribute("aria-label", "Crop box: drag on the image, or Enter, then the arrow keys")
+        viewport?.setAttribute("aria-label", "Crop box: drag on the frame, or Enter, then the arrow keys")
       } else {
         viewport?.removeAttribute("aria-label")
       }

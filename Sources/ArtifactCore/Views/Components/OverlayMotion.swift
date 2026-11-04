@@ -61,14 +61,14 @@ enum OverlayMotion {
 }
 
 /// Where the overlay holds the edition's page (user, 2026-10-14): its
-/// page, its text frame onto which the scan's main text block is laid, and
+/// page, its type area onto which the scan's main text block is laid, and
 /// as far as the registered scan reaches beyond it (`content`, in the
 /// layer's own pixels: left, top, right, bottom), so the full image shows.
 /// It opens at its fit, centered; the reader zooms and pans it from there,
 /// the text and the scan as one, never below the fit and never so far that
 /// the content leaves the view where it could fill it (`held`).
-struct OverlayFraming {
-  /// What the view frames, in the layer's own pixels, unzoomed.
+struct OverlayViewport {
+  /// What the view shows, in the layer's own pixels, unzoomed.
   let content: (left: Double, top: Double, right: Double, bottom: Double)
   /// The view: its width and height.
   let width: Double
@@ -91,7 +91,7 @@ struct OverlayFraming {
     held((fit, 0, 0))
   }
 
-  /// A view held to the framing: its zoom between the fit and the actual
+  /// A view held to the viewport: its zoom between the fit and the actual
   /// size; the content centered on an axis where it is smaller than the
   /// view, else filling it, no edge pulled in past the view's.
   func held(_ view: (zoom: Double, x: Double, y: Double)) -> (zoom: Double, x: Double, y: Double) {

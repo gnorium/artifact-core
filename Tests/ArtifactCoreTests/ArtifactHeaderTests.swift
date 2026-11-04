@@ -68,9 +68,9 @@ final class ArtifactHeaderTests: XCTestCase {
 
   func testTheHeaderIsAPaneOfItsOwnOverTheMarkup() throws {
     let node = withMarkup(header: Self.header)
-    let frame = try XCTUnwrap(first("artifact-markup-frame", in: node))
-    XCTAssertEqual(attribute(frame, "data-header-only"), "false")
-    let parts = frame.children.compactMap { $0 as? DOM.Element }
+    let viewport = try XCTUnwrap(first("artifact-markup-viewport", in: node))
+    XCTAssertEqual(attribute(viewport, "data-header-only"), "false")
+    let parts = viewport.children.compactMap { $0 as? DOM.Element }
     let top = try XCTUnwrap(parts.first)
     XCTAssertTrue(classes(top).contains("artifact-document-header"), "the header is not at the column's top")
     XCTAssertTrue(parts.dropFirst().contains { classes($0).contains("artifact-markup-box") })
@@ -99,9 +99,9 @@ final class ArtifactHeaderTests: XCTestCase {
     let node = imagesAlone(header: Self.header)
     XCTAssertNil(first("artifact-xml-toggle", in: node), "an XML switch with no markup")
     XCTAssertNotNil(first("artifact-header-toggle", in: node))
-    let frame = try XCTUnwrap(first("artifact-markup-frame", in: node))
-    XCTAssertEqual(attribute(frame, "data-header-only"), "true")
-    XCTAssertNotNil(first("artifact-document-header", in: frame))
+    let viewport = try XCTUnwrap(first("artifact-markup-viewport", in: node))
+    XCTAssertEqual(attribute(viewport, "data-header-only"), "true")
+    XCTAssertNotNil(first("artifact-document-header", in: viewport))
     XCTAssertNil(first("artifact-markup", in: node), "a markup pane with no markup")
     XCTAssertNotNil(first("artifact-object", in: node))
   }
@@ -111,6 +111,6 @@ final class ArtifactHeaderTests: XCTestCase {
       XCTAssertNil(first("artifact-header-toggle", in: node))
       XCTAssertNil(first("artifact-document-header", in: node))
     }
-    XCTAssertNil(first("artifact-markup-frame", in: imagesAlone(header: nil)), "a column with nothing in it")
+    XCTAssertNil(first("artifact-markup-viewport", in: imagesAlone(header: nil)), "a column with nothing in it")
   }
 }

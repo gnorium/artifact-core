@@ -17,8 +17,8 @@ final class OverlayRegistrationTests: XCTestCase {
   /// The rendered title's ink box in the layer's pixels (left, top, right,
   /// bottom), the pane's 780px fitting the page's 92.28em: 8.45px an em.
   static let title = [400.0, 445.0, 1400.0, 512.0]
-  /// The rendered em over the work's em on the scan (the frame declared) (40.40px: 2820 over the
-  /// frame's 61.07em measure and two 4.37em margins).
+  /// The rendered em over the work's em on the scan (the type area declared) (40.40px: 2820 over the
+  /// type area's 61.07em measure and two 4.37em margins).
   static let typeScale = 8.45 / 40.40
   /// The bookplate's block on the scan (`marginalia`), 0–1000.
   static let bookplate = [282.16, 60.9, 663.73, 61.71, 663.34, 162.74, 281.78, 161.93]
@@ -103,7 +103,7 @@ final class OverlayRegistrationTests: XCTestCase {
     XCTAssertEqual(laid[2] - laid[0], 2132.01 * Self.typeScale, accuracy: 0.01)
   }
 
-  /// A block spanning the frame's measure, its frame declared: at the
+  /// A block spanning the type area's measure, its type area declared: at the
   /// type's scale too, from its top, centered—its width no more a measure
   /// of the scale than its height.
   func testASpanningBlockIsLaidAtTheTypesScale() {
@@ -135,10 +135,10 @@ final class OverlayRegistrationTests: XCTestCase {
     XCTAssertEqual(OverlayRegistration.anchor([.left, .center, .center, .justified]), .center)
   }
 
-  /// With no frame declared, a spanning block is laid by its width, from
+  /// With no type area declared, a spanning block is laid by its width, from
   /// its left, at one scale both ways: the image never stretched (user,
   /// 2026-10-28).
-  func testWithNoFrameASpanningBlockIsLaidByItsWidth() {
+  func testWithNoTypeAreaASpanningBlockIsLaidByItsWidth() {
     let box = [100.0, 50.0, 526.4, 163.2]
     let laid = OverlayRegistration.laid(box, zone: Self.textBlock, size: Self.size, spans: true, typeScale: 0)
     XCTAssertEqual(Array(laid[0..<3]), Array(box[0..<3]))

@@ -26,7 +26,7 @@ struct ArtifactManifest {
     /// Whether the canvas is shown with no image (`"blank":true`): a page
     /// changed at its source with no copy of what a run was sent kept, whose
     /// image now is not what was sent (user, 2026-10-17). Its size stays, for
-    /// the text's page frame.
+    /// the text's page box.
     var blank = false
   }
 

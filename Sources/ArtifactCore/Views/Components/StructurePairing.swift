@@ -4,8 +4,8 @@
 /// review image's, step for step (gnorium-python `layout_measure`'s
 /// structure image): a change here is made there too.
 ///
-/// A row is a line's ink box, left, top, right and bottom, in one frame (the
-/// rendered page's, the scan's laid in it by the overlay's registration),
+/// A row is a line's ink box, left, top, right and bottom, in one coordinate
+/// space (the rendered page's, the scan's laid in it by the overlay's registration),
 /// and its baseline: where its letters sit, what its place down the page
 /// is judged by (user, 2026-10-17: typeface is not parity—the edition is
 /// set in Noto on purpose, so how far the print's face and Noto reach above
@@ -16,7 +16,7 @@ struct StructureRow: Equatable {
   var right: Double
   var bottom: Double
   /// The edges an edition's line is set by (its block's alignment), and
-  /// its type's em (its font-size, in the frame's pixels): what its edges
+  /// its type's em (its font-size, in that space's pixels): what its edges
   /// across are judged by. A scan's line has none.
   var alignment: StructureAlignment = .none
   var em: Double = 0

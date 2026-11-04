@@ -219,19 +219,19 @@
           if !actions.isEmpty || switchesCanvas {
             div {
               actions
-              // An image switch is distinct from the adjacent page-navigation arrows.
+              // The Frame switch is distinct from the adjacent page-navigation arrows.
               if switchesCanvas {
                 // Drawn as the footer's switches are (user, 2026-10-20):
                 // subtle, bordered, gray.
                 ToggleButtonView(
-                  label: "Image",
+                  label: "Frame",
                   icon: IconView(
                     icon: { s in ImageIconView(size: s) }, size: ButtonView.ButtonSize.medium.iconSize),
                   modelValue: false,
                   weight: .subtle,
                   buttonColor: .gray,
                   iconOnly: true,
-                  ariaLabel: "Image",
+                  ariaLabel: "Frame",
                   size: .medium,
                   class: "artifact-canvas-toggle"
                 )
@@ -303,12 +303,12 @@
                   .class("artifact-under-markup")
               }
             }
-            .class("artifact-markup-frame")
+            .class("artifact-markup-viewport")
             // The header alone, no markup yet: the column is the header's,
             // drawn only while it shows.
             .data("header-only", markup.isEmpty)
             // A sheet opened from the text (a gloss) covers the pane's box
-            // from its frame, which neither scrolls nor zooms: in the pane
+            // from its viewport, which neither scrolls nor zooms: in the pane
             // it sat at the pane's scroll, so a pane scrolled sideways (a
             // zoomed page) cut it off at its left (user, 2026-10-14).
             .data("sheet-host", true)
@@ -474,7 +474,7 @@
       // The English switch's state, which a host's rules within the viewer
       // follow; a viewer with no switch leaves the page's to its ancestors.
       .style {
-        artifactFrameCSS()
+        artifactLayoutCSS()
         artifactPanesCSS()
         artifactOverlayCSS()
         artifactControlsCSS()
@@ -495,7 +495,7 @@
     // The view's style sheet in four parts, out of the builder: whole, it
     // grew past what the type-checker resolves in time (user, 2026-10-28).
     @CSSBuilder
-    private func artifactFrameCSS() -> [CSSOM.CSSRule] {
+    private func artifactLayoutCSS() -> [CSSOM.CSSRule] {
       selector("&") {
         display(.flex)
         flexDirection(.column)
@@ -622,7 +622,7 @@
         minHeight(0)
         overflow(.hidden)
       }
-      descendant(".artifact-markup-frame") {
+      descendant(".artifact-markup-viewport") {
         flex(1, 1, perc(50))
         position(.relative)
         minWidth(0)
@@ -744,10 +744,10 @@
       }
       // Switched off with no markup, the column goes and the images take
       // the whole viewer, as an object's with no markup do.
-      selector("&[data-header='false'] .artifact-markup-frame[data-header-only='true']") {
+      selector("&[data-header='false'] .artifact-markup-viewport[data-header-only='true']") {
         display(.none).important()
       }
-      selector("&[data-header='false']:has(.artifact-markup-frame[data-header-only='true']) .artifact-object") {
+      selector("&[data-header='false']:has(.artifact-markup-viewport[data-header-only='true']) .artifact-object") {
         CSS.Property("inset-inline-start", "0").important()
         CSS.Property("inset-block-start", "0").important()
         width(perc(100)).important()
@@ -866,9 +866,9 @@
       selector("&[data-reflow='true']:not([data-raw='true']) .artifact-markup .tei-page") {
         padding(spacing16)
       }
-      // The same two positioned frames interpolate into an overlay,
+      // The same two positioned panes interpolate into an overlay,
       // rather than switching layout models halfway through the reveal.
-      selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-markup-frame", "&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
+      selector("&[data-canvas-shown='true']:has(.artifact-markup-viewport) .artifact-markup-viewport", "&[data-canvas-shown='true']:has(.artifact-markup-viewport) .artifact-object") {
         position(.absolute)
         CSS.Property("inset-block-start", "0")
         CSS.Property("inset-inline-start", "0")
@@ -887,14 +887,14 @@
 
     @CSSBuilder
     private func artifactOverlayCSS() -> [CSSOM.CSSRule] {
-      selector("&[data-canvas-shown='true']:has(.artifact-markup-frame) .artifact-object") {
+      selector("&[data-canvas-shown='true']:has(.artifact-markup-viewport) .artifact-object") {
         CSS.Property("inset-inline-start", "50%")
         media(maxWidth(maxWidthBreakpointMobile)) {
           CSS.Property("inset-inline-start", "0")
           CSS.Property("inset-block-start", "50%")
         }
       }
-      selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-frame") {
+      selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-viewport") {
         CSS.Property("inset-inline-start", "0").important()
         CSS.Property("inset-block-start", "0").important()
         width(perc(100)).important()
@@ -903,12 +903,12 @@
       selector("&[data-overlay-active='true'] .artifact-viewer-container") {
         display(.block)
       }
-      selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-frame") {
+      selector("&[data-overlay-active='true'] .artifact-object", "&[data-overlay-active='true'] .artifact-markup-viewport") {
         position(.absolute)
         width(perc(100)).important()
         height(perc(100)).important()
       }
-      selector("&[data-overlay-active='true'] .artifact-markup-frame") {
+      selector("&[data-overlay-active='true'] .artifact-markup-viewport") {
         zIndex(1)
       }
       selector("&[data-overlay-active='true'] .artifact-markup") {
@@ -1019,7 +1019,7 @@
       // edition's page on top, never scrolled (its zoom and pan the
       // overlay's own), the scan's structure drawn over it
       // (`.artifact-structure`).
-      selector("&[data-overlay-registered='true'] .artifact-markup-frame") {
+      selector("&[data-overlay-registered='true'] .artifact-markup-viewport") {
         zIndex(1)
       }
       selector("&[data-overlay-registered='true'] .artifact-markup") {
@@ -1670,7 +1670,7 @@
     /// column shows the page's own.
     private func xmlHandoff(_ on: Bool) {
       for old in root.querySelectorAll(".artifact-xml-handoff") { old.remove() }
-      guard on, let frame = root.querySelector(".artifact-markup-frame"),
+      guard on, let viewport = root.querySelector(".artifact-markup-viewport"),
         let page = root.querySelector(".artifact-markup .tei-page[data-active='true']"),
         let code = page.querySelector("[data-layer='" + (translatable && translationVisible ? "translated-markup" : "markup") + "']")
       else { return }
@@ -1681,10 +1681,10 @@
       copy.style.display(.block)
       box.appendChild(copy)
       // In the column where the code will stand: before the page's diff.
-      if let under = frame.querySelector(":scope > .artifact-under-markup") {
-        frame.insertBefore(box, under)
+      if let under = viewport.querySelector(":scope > .artifact-under-markup") {
+        viewport.insertBefore(box, under)
       } else {
-        frame.appendChild(box)
+        viewport.appendChild(box)
       }
     }
 
@@ -2199,7 +2199,7 @@
       toggle.setAttribute("aria-pressed", on ? "true" : "false")
       toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
       overlayAside()
-      // A framed page's grid is Reflow off's alone.
+      // The grid of a page set in its type area is Reflow off's alone.
       showLayers()
     }
 
@@ -2258,12 +2258,12 @@
       scheduleZoom()
     }
 
-    /// A layer shown as its own rules lay it out: a framed page as its grid
-    /// (`TEIView`: the frame, its marginalia around it, user 2026-10-14),
-    /// unless reflowed; any other as a flex column. An inline flex on a
-    /// framed page dropped its grid, and set a head note at its foot.
+    /// A layer shown as its own rules lay it out: a page set in its type area
+    /// as its grid (`TEIView`: the type area, its marginalia around it, user
+    /// 2026-10-14), unless reflowed; any other as a flex column. An inline
+    /// flex on such a page dropped its grid, and set a head note at its foot.
     private func showLayer(_ element: DOM.Element) {
-      if !reflowOn, stringEquals(element.getAttribute(data("framed")) ?? "", "true") {
+      if !reflowOn, stringEquals(element.getAttribute(data("type-area")) ?? "", "true") {
         element.style.display(.grid)
       } else {
         element.style.display(.flex)
@@ -2280,7 +2280,7 @@
     /// scrolled with no gap where it is larger. Its fit: the whole page's
     /// where it is larger than the pane, else its actual size. Unlike the image, which opens at
     /// its fit, the text opens at its actual size: text is read at its
-    /// size. A sized frame reserves the rendered page's scaled extent while
+    /// size. A sized box (`data-page-scale`) reserves the rendered page's scaled extent while
     /// a transform preserves its typography. Reflow and code use CSS zoom. Each layer keeps its own
     /// zoom (the rendered page's, the code's) for the session, Reflow on or
     /// off: reflowed, zooming out wraps the text wider and shorter, and its
@@ -2317,7 +2317,7 @@
     private var overlayLeaving = false
     /// Whether the reader has the overlay's image zoomed past its fit.
     private var overlayZoomed = false
-    /// The room the overlay frames the page in: the text pane's own room
+    /// The room the overlay fits the page in: the text pane's own room
     /// for its fit (`applyPageScale`), its inset from the pane's box and its
     /// size, so a page fitted in the overlay is fitted as its pane fits it,
     /// and the zoom overlay off keeps fits there exactly, never a scrollbar
@@ -2326,7 +2326,7 @@
     /// Whether the overlay lays the scan's structure over the text by the page's
     /// main text block (`overlayZone`), from overlay on until overlay off
     /// has run (user, 2026-10-14): the edition's page
-    /// and the structure's reach framed (`OverlayFraming`), its zoom and place
+    /// and the structure's reach in view (`OverlayViewport`), its zoom and place
     /// the overlay's own rather than the pane's zoom and scroll.
     private var overlayRegistered = false
     /// Where the layer was in the window, and its zoom, when the overlay's
@@ -2540,7 +2540,7 @@
     /// Where registration lays the zone on the rendered main text block's
     /// box (`box`: left, top, right, bottom, in the layer's own pixels
     /// times `unit`), `OverlayRegistration.laid`'s rule: where the work's
-    /// frame is declared, always at the type's scale—the rendered em
+    /// type area is declared, always at the type's scale—the rendered em
     /// (`overlayTarget.em`) over the work's em on the scan
     /// (`data-scan-em`)—never by the block's height, which is the edition's
     /// typesetting; with none declared, by the block.
@@ -2574,7 +2574,7 @@
     /// lines' places to one another are the typesetting.
     private var registrationShift: (key: String, dx: Double, dy: Double) = ("", 0, 0)
 
-    /// The shown layer's size unzoomed, its scale's frame's.
+    /// The shown layer's size unzoomed, its scale box's.
     private func naturalSize(of layer: DOM.Element) -> (width: Double, height: Double)? {
       let zoom = currentZoom()
       guard zoom > 0, let box = layer.getBoundingClientRect() else { return nil }
@@ -2646,13 +2646,13 @@
     }
 
     /// The page's rendered text block in the window: the ink box of all
-    /// its frame sets—its text (`InkExtent`: its glyphs' ink, not their
+    /// its type area sets—its text (`InkExtent`: its glyphs' ink, not their
     /// font boxes nor a line's trailing letter-spacing), its rules, its
-    /// figures and its printed frames (those that draw a border)—as its four
+    /// figures and its printed boxes (those that draw a border)—as its four
     /// corners clockwise from the top-left, x and y in turn, within the
-    /// frame's measure. The scan's
+    /// type area's measure. The scan's
     /// zone is the box around all the page prints and holds in writing, as
-    /// the edition sets it all in its frame (user, 2026-10-14). Measured
+    /// the edition sets it all in its type area (user, 2026-10-14). Measured
     /// once a page in the layer's own pixels (`overlayTarget`) and placed
     /// where the layer now is, so the overlay's motion reads no text a
     /// frame. gnorium-python's `layout_preview` measures the same box, rule
@@ -2686,16 +2686,16 @@
       let zoom = layer.offsetWidth > 0 ? box.width / layer.offsetWidth : stated
       let id = (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "")
       if !stringEquals(overlayTarget.page, id) || overlayTarget.box.count != 4 {
-        let frame = layer.querySelector(".tei-text-block") ?? layer
+        let textBlockElement = layer.querySelector(".tei-text-block") ?? layer
         // Its em in its own pixels (a transform scales the layer, never its
         // type): the registration's type scale (`laid`).
-        let em = pixels(window.getComputedStyle(frame).getPropertyValue("font-size"))
-        // A derived text block (a page with no main text: the work frame
+        let em = pixels(window.getComputedStyle(textBlockElement).getPropertyValue("font-size"))
+        // A derived text block (a page with no main text: the work's type area
         // placed on its scan, gnorium-python `layout_measure.derived_corners`)
-        // is the frame itself, laid on it whole; its marginalia keep their
+        // is the type area itself, laid on it whole; its marginalia keep their
         // measured offsets from it.
-        if let derived = page.getAttribute(data("text-block-derived")), stringEquals(derived, "true"), frame !== layer,
-          let edges = frame.getBoundingClientRect(), zoom > 0
+        if let derived = page.getAttribute(data("text-block-derived")), stringEquals(derived, "true"),
+          textBlockElement !== layer, let edges = textBlockElement.getBoundingClientRect(), zoom > 0
         {
           overlayTarget = (
             id,
@@ -2711,7 +2711,7 @@
         }
         // A figure's image, not yet loaded where it loads lazily, is
         // measured again once it has (as a drawing once inlined).
-        for image in frame.querySelectorAll(".tei-figure-image:not([data-measured-on-load])") {
+        for image in textBlockElement.querySelectorAll(".tei-figure-image:not([data-measured-on-load])") {
           image.setAttribute(data("measured-on-load"), "true")
           _ = image.addEventListener("load", { [self] _ in
             self.overlayTarget = ("", [], false, 0, .center)
@@ -2724,7 +2724,7 @@
         // (`OverlayRegistration.anchor`).
         var alignments: [StructureAlignment] = []
         if let context = document.createElement("canvas").getContext("2d") {
-          let walker = document.createTreeWalker(frame, DOM.NodeFilter.SHOW_TEXT)
+          let walker = document.createTreeWalker(textBlockElement, DOM.NodeFilter.SHOW_TEXT)
           let range = document.createRange()
           while let next = walker.nextNode() {
             guard let node = next as? DOM.Text, let parent = node.parentElement else { continue }
@@ -2733,25 +2733,25 @@
             for _ in inkLines(of: node, in: parent, context: context, range: range) { alignments.append(alignment) }
           }
         }
-        for drawn in frame.querySelectorAll(".tei-rule, .tei-figure-image, .tei-figure-drawing > svg, .tei-frame") {
-          // A frame draws ink only where it draws a border: one that sets
+        for drawn in textBlockElement.querySelectorAll(".tei-rule, .tei-figure-image, .tei-figure-drawing > svg, .tei-box") {
+          // A box draws ink only where it draws a border: one that sets
           // its lines' margins or measure alone draws nothing.
-          if drawn.classList.contains("tei-frame") && !drawsBorder(drawn) { continue }
+          if drawn.classList.contains("tei-box") && !drawsBorder(drawn) { continue }
           if let rect = drawn.getBoundingClientRect() {
             ink.take(left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom)
           }
         }
-        // Never wider than the frame: a line set wider than its measure
+        // Never wider than the type area: a line set wider than its measure
         // (a face wider than the print's) runs past it, and the scan's text
         // block is the measure's. A block whose ink reaches both of the
-        // frame's sides within a word space of its face (its lines
+        // type area's sides within a word space of its face (its lines
         // justified to the measure) spans it (`laid`).
         var spans = false
-        if frame !== layer, let edges = frame.getBoundingClientRect() {
+        if textBlockElement !== layer, let edges = textBlockElement.getBoundingClientRect() {
           ink.left = max(ink.left, edges.left)
           ink.right = min(ink.right, edges.right)
           if let context = document.createElement("canvas").getContext("2d") {
-            let style = window.getComputedStyle(frame)
+            let style = window.getComputedStyle(textBlockElement)
             context.font =
               style.getPropertyValue("font-style") + " " + style.getPropertyValue("font-weight") + " "
               + style.getPropertyValue("font-size") + " " + style.getPropertyValue("font-family")
@@ -2907,22 +2907,22 @@
 
     /// The shown page's rendered text block in its layer's own pixels
     /// (left, top, right, bottom), by its page's image and its layer.
-    /// Its em there too (its frame's type, the work's body): the
+    /// Its em there too (its type area's type, the work's body): the
     /// registration's type scale (`laid`).
     private var overlayTarget: (page: String, box: [Double], spans: Bool, em: Double, anchor: OverlayAnchor) = (
       "", [], false, 0, .center
     )
 
-    /// The overlay's framing of the shown layer (`OverlayFraming`) in the
+    /// The overlay's viewport onto the shown layer (`OverlayViewport`) in the
     /// pane's room as it is now (`overlayRoom`): the whole scan image, the
     /// edition's text block tilted and shifted onto the scan's (user,
     /// 2026-10-26), its corners taken through the registration into the
-    /// layer's own pixels (`natural` the layer's size unzoomed, framed where
+    /// layer's own pixels (`natural` the layer's size unzoomed, the whole of it where
     /// no registration stands); the reader's zoom held between its fit and
     /// the larger of the text's and the scan's actual sizes.
-    private func overlayFraming(
+    private func overlayViewport(
       layer: DOM.Element, natural: (width: Double, height: Double), in room: (width: Double, height: Double)
-    ) -> OverlayFraming {
+    ) -> OverlayViewport {
       var content = (left: 0.0, top: 0.0, right: natural.width, bottom: natural.height)
       var actual = ViewerZoom.actualSize
       if let zone = overlayZone(), let size = shownImageSize, let measured = textBlock(in: layer, drawnAt: 1) {
@@ -2930,17 +2930,17 @@
         let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
         let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
         if let laid = Homography(from: corners, to: target) {
-          var frame = (left: Double.infinity, top: Double.infinity, right: -Double.infinity, bottom: -Double.infinity)
+          var bounds = (left: Double.infinity, top: Double.infinity, right: -Double.infinity, bottom: -Double.infinity)
           for (x, y) in [(0.0, 0.0), (size.width, 0.0), (size.width, size.height), (0.0, size.height)] {
             let point = laid.apply(x: x, y: y)
-            frame = (min(frame.left, point.x), min(frame.top, point.y), max(frame.right, point.x), max(frame.bottom, point.y))
+            bounds = (min(bounds.left, point.x), min(bounds.top, point.y), max(bounds.right, point.x), max(bounds.bottom, point.y))
           }
-          content = frame
+          content = bounds
         }
         let zoneSpan = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
         if box[2] > box[0] { actual = max(actual, zoneSpan / (box[2] - box[0])) }
       }
-      return OverlayFraming(content: content, width: room.width, height: room.height, actual: actual)
+      return OverlayViewport(content: content, width: room.width, height: room.height, actual: actual)
     }
 
     /// The layer where the overlay lays it (user, 2026-10-28): the image
@@ -2948,27 +2948,27 @@
     /// the image's text block (`editionOnImage`), from where the reader had
     /// it; at rest there, following the image as the reader zooms and pans
     /// it (`zoomOverlay`, `panOverlay`); going off, back to where it was
-    /// (`editionBefore`). Set by the layer's scale and its frame's
+    /// (`editionBefore`). Set by the layer's scale and its scale box's
     /// translation, the pane never scrolled. `room` (its inset from the
-    /// pane's box and its size) frames the page where the image has no
+    /// pane's box and its size) fits the page where the image has no
     /// place yet.
     private func placeOverlay(
-      _ layer: DOM.Element, frame: DOM.Element, in pane: DOM.Element, natural: (width: Double, height: Double),
+      _ layer: DOM.Element, scaleBox: DOM.Element, in pane: DOM.Element, natural: (width: Double, height: Double),
       room: (x: Double, y: Double, width: Double, height: Double), fit: Double, resting: Double
     ) {
       guard let paneBox = pane.getBoundingClientRect() else { return }
       overlayRoom = room
-      let framing = overlayFraming(layer: layer, natural: natural, in: (room.width, room.height))
+      let viewport = overlayViewport(layer: layer, natural: natural, in: (room.width, room.height))
       let origin = (x: paneBox.x + room.x, y: paneBox.y + room.y)
       let progress = overlayProgress
-      _ = frame.style.removeProperty("transform")
+      _ = scaleBox.style.removeProperty("transform")
       var view: (zoom: Double, x: Double, y: Double)
-      let from = overlayFrom.map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? framing.fitted
+      let from = overlayFrom.map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? viewport.fitted
       func between(_ a: Double, _ b: Double) -> Double { a + (b - a) * progress }
       // On the image: where its text block is as the image's pane shows it
-      // (`editionOnImage`), the overlay's room framing it where the image
+      // (`editionOnImage`), the overlay's room fitting it where the image
       // has no place yet.
-      let onImage = editionOnImage(layer).map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? framing.fitted
+      let onImage = editionOnImage(layer).map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? viewport.fitted
       if overlayOn && progress >= 1 {
         view = onImage
       } else if overlayOn {
@@ -2980,19 +2980,19 @@
         let back = editionBefore.map { (zoom: $0.zoom, x: paneBox.x + $0.x - origin.x, y: paneBox.y + $0.y - origin.y) } ?? from
         view = (between(from.zoom, back.zoom), between(from.x, back.x), between(from.y, back.y))
       }
-      frame.style.setProperty("width", doubleToString(natural.width * view.zoom) + "px")
-      frame.style.setProperty("height", doubleToString(natural.height * view.zoom) + "px")
-      frame.style.setProperty("margin-inline-start", "0")
-      frame.style.setProperty("margin-block-start", "0")
+      scaleBox.style.setProperty("width", doubleToString(natural.width * view.zoom) + "px")
+      scaleBox.style.setProperty("height", doubleToString(natural.height * view.zoom) + "px")
+      scaleBox.style.setProperty("margin-inline-start", "0")
+      scaleBox.style.setProperty("margin-block-start", "0")
       layer.style.setProperty("transform", "scale(" + doubleToString(view.zoom) + ")")
       layer.setAttribute(data("zoom"), doubleToString(view.zoom))
       pane.scrollLeft = 0
       pane.scrollTop = 0
       overlayWarp = nil
-      if let base = layer.getBoundingClientRect(), let unmoved = frame.getBoundingClientRect() {
+      if let base = layer.getBoundingClientRect(), let unmoved = scaleBox.getBoundingClientRect() {
         let shift = (x: origin.x + view.x - base.x, y: origin.y + view.y - base.y)
         let plain = "translate(" + doubleToString(shift.x) + "px, " + doubleToString(shift.y) + "px)"
-        frame.style.setProperty("transform", plain)
+        scaleBox.style.setProperty("transform", plain)
         // Turned as the scan is photographed (user, 2026-10-28: the image
         // stays as it is, the edition laid on it): the leveled block the
         // registration lays on the image's text block taken to that
@@ -3013,9 +3013,9 @@
             var entries: [String] = []
             for value in turned.cssMatrix3D { entries.append(doubleToString(value)) }
             let matrix = "matrix3d(" + stringJoin(entries, separator: ", ") + ")"
-            frame.style.setProperty("transform-origin", "0 0")
-            frame.style.setProperty("transform", matrix)
-            overlayWarp = (frame, plain)
+            scaleBox.style.setProperty("transform-origin", "0 0")
+            scaleBox.style.setProperty("transform", matrix)
+            overlayWarp = (scaleBox, plain)
           }
         }
       }
@@ -3024,11 +3024,11 @@
       drawStructure()
     }
 
-    /// The edition's frame while the overlay turns it onto the image
+    /// The edition's scale box while the overlay turns it onto the image
     /// (`placeOverlay`), and its transform unturned: what the structure is
     /// measured under, its rows the layout's own, never a turned box's
     /// bounds.
-    private var overlayWarp: (frame: DOM.Element, plain: String)?
+    private var overlayWarp: (scaleBox: DOM.Element, plain: String)?
 
     /// The image's text block on screen as the image's pane shows it: its
     /// four corners as photographed, and the leveled block registration
@@ -3809,21 +3809,23 @@
 
     /// The largest zoom, `zoom` at most, at which reflowed `layer`'s widest
     /// content that cannot wrap fits its width (`applyZoom`), and fits its
-    /// frame's box where it has one (`.tei-text-block`, TEIView: a leaf
+    /// type area's box where it has one (`.tei-text-block`, TEIView: a leaf
     /// wider than it stood off its middle, user 2026-11-03): the widths
     /// and that content's read at a zoom, its content's narrowed in step
     /// until it fits. Its width is its pane's in its own units, wider as it
     /// zooms out, and what cannot wrap keeps its own.
     private func reflowedWidthFit(_ layer: DOM.Element, at zoom: Double) -> Double {
-      let frame = layer.querySelector(":scope > .tei-text-block")
+      let textBlockElement = layer.querySelector(":scope > .tei-text-block")
       var fitted = zoom
       for _ in 0..<6 {
         layer.style.setProperty("zoom", doubleToString(fitted))
         var width = layer.clientWidth
         var content = layer.scrollWidth
-        if let frame, frame.clientWidth > 0, frame.scrollWidth * width > content * frame.clientWidth {
-          width = frame.clientWidth
-          content = frame.scrollWidth
+        if let textBlockElement, textBlockElement.clientWidth > 0,
+          textBlockElement.scrollWidth * width > content * textBlockElement.clientWidth
+        {
+          width = textBlockElement.clientWidth
+          content = textBlockElement.scrollWidth
         }
         guard width > 0, content > width else { break }
         fitted *= width / content
@@ -3864,7 +3866,7 @@
       let margin = existing ? pixels(parent.style.getPropertyValue("margin-inline-start"))
         : pixels(layer.style.getPropertyValue("margin-inline-start")) * previous
       let marginDown = existing ? pixels(parent.style.getPropertyValue("margin-block-start")) : 0
-      // The page is sized in CSS pixels (its frame, its scale), and a box
+      // The page is sized in CSS pixels (its type area, its scale), and a box
       // read on screen is in the window's: under a transform on the reader
       // (the window-filling reader's grow, user 2026-10-31) the two differ,
       // and a leaf measured mid-motion was fitted to a page smaller than
@@ -3881,17 +3883,17 @@
       let paneWidth = innerWidth - 2 * insetX
       let paneHeight = innerHeight - 2 * insetY
       guard paneWidth > 0, paneHeight > 0 else { return }
-      let frame: DOM.Element
+      let scaleBox: DOM.Element
       if existing {
-        frame = parent
+        scaleBox = parent
       } else {
-        frame = document.createElement(.div)
-        frame.setAttribute(data("page-scale"), "true")
-        frame.style.setProperty("position", "relative")
-        frame.style.setProperty("flex-shrink", "0")
-        frame.style.setProperty("overflow", "hidden")
-        parent.insertBefore(frame, layer)
-        frame.appendChild(layer)
+        scaleBox = document.createElement(.div)
+        scaleBox.setAttribute(data("page-scale"), "true")
+        scaleBox.style.setProperty("position", "relative")
+        scaleBox.style.setProperty("flex-shrink", "0")
+        scaleBox.style.setProperty("overflow", "hidden")
+        parent.insertBefore(scaleBox, layer)
+        scaleBox.appendChild(layer)
       }
       let ratio = canvasIndex < imageWidths.count && canvasIndex < imageHeights.count
         && imageWidths[canvasIndex] > 0 && imageHeights[canvasIndex] > 0
@@ -3900,10 +3902,10 @@
       layer.style.setProperty("position", "absolute")
       layer.style.setProperty("inset", "0 auto auto 0")
       layer.style.setProperty("margin-inline-start", "0")
-      // A page set in its work's frame is its own size (TEIView: its frame,
+      // A page set in its work's type area is its own size (TEIView: its type area,
       // its marginalia, its margins), and the zoom fits that page (user,
-      // 2026-10-14); one with no frame takes its canvas's proportions.
-      if stringEquals(layer.getAttribute(data("framed")) ?? "", "true") {
+      // 2026-10-14); one with no type area takes its canvas's proportions.
+      if stringEquals(layer.getAttribute(data("type-area")) ?? "", "true") {
         _ = layer.style.removeProperty("min-width")
         _ = layer.style.removeProperty("min-height")
       } else {
@@ -3948,7 +3950,7 @@
       fadeOverlay()
       if overlaid {
         placeOverlay(
-          layer, frame: frame, in: pane, natural: natural, room: (insetX, insetY, paneWidth, paneHeight), fit: fit,
+          layer, scaleBox: scaleBox, in: pane, natural: natural, room: (insetX, insetY, paneWidth, paneHeight), fit: fit,
           resting: resting)
         return
       }
@@ -3962,20 +3964,20 @@
       // of the motion.
       let chosen = !overlayLeaving && !blank && (stored.zoom != nil || stored.atFit)
       let atFit = chosen && zoom <= fit
-      // The frame's size in layout's own units, never rounded up past the
+      // The scale box's size in layout's own units, never rounded up past the
       // room, and centered in the room as measured (`paneWidth`, not the
       // whole pixels `clientHeight` rounds to): at its fit Hamlet Q1's
       // title page, its pane 472.7 high and rounded to 473, stood a
       // fraction of a pixel past its pane, and the pane showed a
       // scrollbar for it (user, 2026-10-31).
-      let frameWidth = ViewerZoom.layoutFloor(natural.width * zoom)
-      let frameHeight = ViewerZoom.layoutFloor(natural.height * zoom)
-      frame.style.setProperty("width", doubleToString(frameWidth) + "px")
-      frame.style.setProperty("height", doubleToString(frameHeight) + "px")
-      frame.style.setProperty("margin-inline-start", doubleToString(ViewerZoom.layoutFloor(max(0, (paneWidth - frameWidth) / 2))) + "px")
+      let scaleBoxWidth = ViewerZoom.layoutFloor(natural.width * zoom)
+      let scaleBoxHeight = ViewerZoom.layoutFloor(natural.height * zoom)
+      scaleBox.style.setProperty("width", doubleToString(scaleBoxWidth) + "px")
+      scaleBox.style.setProperty("height", doubleToString(scaleBoxHeight) + "px")
+      scaleBox.style.setProperty("margin-inline-start", doubleToString(ViewerZoom.layoutFloor(max(0, (paneWidth - scaleBoxWidth) / 2))) + "px")
       // Down too, as the image is in its pane (user, 2026-10-28): a page
       // shorter than its pane stands in its middle.
-      frame.style.setProperty("margin-block-start", doubleToString(ViewerZoom.layoutFloor(max(0, (paneHeight - frameHeight) / 2))) + "px")
+      scaleBox.style.setProperty("margin-block-start", doubleToString(ViewerZoom.layoutFloor(max(0, (paneHeight - scaleBoxHeight) / 2))) + "px")
       layer.style.setProperty("transform", "scale(" + doubleToString(zoom) + ")")
       layer.setAttribute(data("zoom"), doubleToString(zoom))
       lastFit = fit
@@ -4003,11 +4005,11 @@
 
     /// Reflow returns to ordinary layout, with its own wrapping and CSS zoom.
     private func restoreFlow(of layer: DOM.Element) {
-      guard let frame = layer.parentElement,
-        stringEquals(frame.getAttribute(data("page-scale")) ?? "", "true"),
-        let parent = frame.parentElement else { return }
-      parent.insertBefore(layer, frame)
-      parent.removeChild(frame)
+      guard let scaleBox = layer.parentElement,
+        stringEquals(scaleBox.getAttribute(data("page-scale")) ?? "", "true"),
+        let parent = scaleBox.parentElement else { return }
+      parent.insertBefore(layer, scaleBox)
+      parent.removeChild(scaleBox)
       for property in ["position", "inset", "transform", "transform-origin"] {
         _ = layer.style.removeProperty(property)
       }
@@ -4061,12 +4063,12 @@
       // A margin does not affect the measured width. Removing it briefly
       // shrinks the scroll range and loses the reader's previous position.
       let margin = pixels(layer.style.getPropertyValue("margin-inline-start")) * previous
-      if codeView == nil && !reflowOn && stringEquals(layer.getAttribute(data("framed")) ?? "", "true") {
-        // A page set in its work's frame is its own size.
+      if codeView == nil && !reflowOn && stringEquals(layer.getAttribute(data("type-area")) ?? "", "true") {
+        // A page set in its work's type area is its own size.
         _ = layer.style.removeProperty("min-width")
         _ = layer.style.removeProperty("min-height")
       } else if codeView == nil && !reflowOn {
-        // Center a stable page frame, not the width of its shortest text.
+        // Center a stable page box, not the width of its shortest text.
         // Canvas proportions describe the page only; no text coordinates.
         let ratio = canvasIndex < imageWidths.count && canvasIndex < imageHeights.count
           && imageWidths[canvasIndex] > 0 && imageHeights[canvasIndex] > 0
@@ -4957,9 +4959,9 @@
       if let structure, stringEquals(structure.key, key) { return structure }
       // Measured unturned (`overlayWarp`): the layout's own rows.
       if let warp = overlayWarp {
-        let turned = warp.frame.style.getPropertyValue("transform")
-        warp.frame.style.setProperty("transform", warp.plain)
-        defer { warp.frame.style.setProperty("transform", turned) }
+        let turned = warp.scaleBox.style.getPropertyValue("transform")
+        warp.scaleBox.style.setProperty("transform", warp.plain)
+        defer { warp.scaleBox.style.setProperty("transform", turned) }
         return measuredStructure(layer, page: page, key: key)
       }
       return measuredStructure(layer, page: page, key: key)
@@ -4972,9 +4974,9 @@
         let box = layer.getBoundingClientRect(), let context = document.createElement("canvas").getContext("2d")
       else { return nil }
       // The body's leading in the layer's pixels: the body type's (the
-      // frame's em) times the scale's leading in rem.
-      let frame = layer.querySelector(".tei-text-block")
-      let rem = pixels(window.getComputedStyle(frame ?? layer).getPropertyValue("font-size"))
+      // type area's em) times the scale's leading in rem.
+      let textBlockElement = layer.querySelector(".tei-text-block")
+      let rem = pixels(window.getComputedStyle(textBlockElement ?? layer).getPropertyValue("font-size"))
       let leading = leadingRem * rem
       guard leading > 0 else { return nil }
 
@@ -5075,9 +5077,9 @@
         }
         return StructurePairing.lastLinesLeft(StructurePairing.rows(lines))
       }
-      let editionMain = editionRows(of: [frame ?? layer])
+      let editionMain = editionRows(of: [textBlockElement ?? layer])
       // The edition's notes (each child of a margin area: a note's section
-      // or its printed frame), each its rows, its box and its place's sides
+      // or its printed box), each its rows, its box and its place's sides
       // (`TEIRenderer.marginalAreas`: "top-left" is top and margin-left).
       var notes: [(box: StructureRow, rows: [StructureRow], sides: [String])] = []
       for margin in layer.querySelectorAll(".tei-margin") {
@@ -5095,28 +5097,28 @@
         }
       }
       // Each scan block of marginalia goes to the edition's note nearest it
-      // on its side of the frame (gnorium-python `layout_measure.side`: the
+      // on its side of the type area (gnorium-python `layout_measure.side`: the
       // side it lies wholly beyond, both at a corner, else the nearest
-      // edge), the frame the edition's, the scan laid in it: a note may
+      // edge), the type area the edition's, the scan laid in it: a note may
       // gather several (a bookplate the measurement cuts in blocks).
-      let frameBox: StructureRow = {
-        guard let edges = (frame ?? layer).getBoundingClientRect() else { return StructureRow(left: 0, top: 0, right: 0, bottom: 0) }
+      let typeAreaBox: StructureRow = {
+        guard let edges = (textBlockElement ?? layer).getBoundingClientRect() else { return StructureRow(left: 0, top: 0, right: 0, bottom: 0) }
         return StructureRow(
           left: (edges.left - box.x) / scale, top: (edges.top - box.y) / scale, right: (edges.right - box.x) / scale,
           bottom: (edges.bottom - box.y) / scale)
       }()
       func sides(of block: StructureRow) -> [String] {
         let beyond = [
-          ("top", frameBox.top - block.bottom), ("bottom", block.top - frameBox.bottom),
-          ("margin-left", frameBox.left - block.right), ("margin-right", block.left - frameBox.right),
+          ("top", typeAreaBox.top - block.bottom), ("bottom", block.top - typeAreaBox.bottom),
+          ("margin-left", typeAreaBox.left - block.right), ("margin-right", block.left - typeAreaBox.right),
         ]
         let clear = beyond.filter { $0.1 >= 0 }.map { $0.0 }
         if !clear.isEmpty { return clear }
         let middle = (block.top + block.bottom) / 2
         let center = (block.left + block.right) / 2
         let near = [
-          ("top", middle - frameBox.top), ("bottom", frameBox.bottom - middle), ("margin-left", center - frameBox.left),
-          ("margin-right", frameBox.right - center),
+          ("top", middle - typeAreaBox.top), ("bottom", typeAreaBox.bottom - middle), ("margin-left", center - typeAreaBox.left),
+          ("margin-right", typeAreaBox.right - center),
         ]
         var nearest = near[0]
         for side in near where side.1 < nearest.1 { nearest = side }
@@ -5328,8 +5330,8 @@
       guard !rawVisible, !reflowOn, let scale = drawnScale(of: layer), let size = shownImageSize,
         let map = scanToLayer(layer, drawnAt: scale), let box = layer.getBoundingClientRect()
       else { return [] }
-      let frame = layer.querySelector(".tei-text-block")
-      let em = pixels(window.getComputedStyle(frame ?? layer).getPropertyValue("font-size"))
+      let textBlockElement = layer.querySelector(".tei-text-block")
+      let em = pixels(window.getComputedStyle(textBlockElement ?? layer).getPropertyValue("font-size"))
       let leading = (parseDouble(page.getAttribute(data("body-leading")) ?? "") ?? 1) * em
       var out: [(edition: StructureRow, scan: [Double], state: String)] = []
       for figure in layer.querySelectorAll(".tei-figure[data-zone]") {

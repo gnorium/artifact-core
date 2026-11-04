@@ -31,7 +31,7 @@ enum OverlayRegistration {
   /// an image of `size` pixels) on the rendered main text block's box
   /// (`box`: left, top, right, bottom).
   ///
-  /// Where the work's frame is declared (`typeScale` > 0: the box's units
+  /// Where the work's type area is declared (`typeScale` > 0: the box's units
   /// per pixel of the scan, the rendered em over the work's em on the scan,
   /// `data-scan-em`), always at the type's scale: the scan at its own size
   /// from the block's top, centered across it. Only the scan's global
@@ -42,10 +42,10 @@ enum OverlayRegistration {
   /// has it, never the whole scan shrunk onto the edition's block; a
   /// scanner's stretch across a justified page shows as a difference.
   ///
-  /// With no frame declared (0), by the block itself: its height, centered
+  /// With no type area declared (0), by the block itself: its height, centered
   /// across it, the scan's own proportions kept (a line's width is the
   /// face's, so a centered block's width is no measure of the scan's); a
-  /// block spanning the frame's measure (`spans`: its lines justified to
+  /// block spanning the type area's measure (`spans`: its lines justified to
   /// it) by its width, from its left, its proportions kept too.
   /// Across, by the edge the block is set from (`anchor`, user
   /// 2026-10-27): a left-set block's left edge on the rendered block's
@@ -65,7 +65,7 @@ enum OverlayRegistration {
     let down = ((corners[6] - corners[0]) * (corners[6] - corners[0]) + (corners[7] - corners[1]) * (corners[7] - corners[1])).squareRoot()
     guard down > 0 else { return box }
     let typed = typeScale > 0
-    // With no frame declared, by the block's height; a block spanning the
+    // With no type area declared, by the block's height; a block spanning the
     // measure by its width, from its left: one scale both ways, the image
     // never stretched (user, 2026-10-28: the image stays as its pane shows
     // it, the edition laid on it).

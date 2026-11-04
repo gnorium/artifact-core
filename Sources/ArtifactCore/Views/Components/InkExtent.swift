@@ -21,7 +21,7 @@ struct InkExtent {
     right > left && bottom > top ? [left, top, right, bottom] : nil
   }
 
-  /// Takes a box drawn as it is: a rule's, a figure's, a printed frame's.
+  /// Takes a box drawn as it is: a rule's, a figure's, a printed box's.
   mutating func take(left: Double, top: Double, right: Double, bottom: Double) {
     guard right > left, bottom > top else { return }
     self.left = min(self.left, left)
