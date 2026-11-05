@@ -22,16 +22,16 @@ public enum TileURL {
     tileWidth: Int,
     scaleFactor: Int,
     x: Int, y: Int,
-    imageWidth: Int,
-    imageHeight: Int,
+    frameWidth: Int,
+    frameHeight: Int,
     format: String = "jpg"
   ) -> String {
     let scaledW = tileWidth * scaleFactor
     let scaledH = tileWidth * scaleFactor
     let regionX = x * scaledW
     let regionY = y * scaledH
-    let regionW = min(scaledW, imageWidth - regionX)
-    let regionH = min(scaledH, imageHeight - regionY)
+    let regionW = min(scaledW, frameWidth - regionX)
+    let regionH = min(scaledH, frameHeight - regionY)
     // The tile at its level: the region's width over the scale factor,
     // rounded up (IIIF's canonical tile size). The region's full width
     // was an upscale the server refuses, or renders at `scaleFactor`

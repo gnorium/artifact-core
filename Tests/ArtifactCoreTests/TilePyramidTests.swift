@@ -129,7 +129,7 @@ final class TilePyramidTests: XCTestCase {
 
   func testBestTileAsksForTheTileAtItsLevel() {
     let url = TileURL.bestTile(
-      serviceID: service, tileWidth: 512, scaleFactor: 2, x: 2, y: 0, imageWidth: 2346, imageHeight: 3140)
+      serviceID: service, tileWidth: 512, scaleFactor: 2, x: 2, y: 0, frameWidth: 2346, frameHeight: 3140)
     XCTAssertEqual(url, service + "/2048,0,298,1024/149,/0/default.jpg")
   }
 }

@@ -45,7 +45,7 @@ final class ArtifactHeaderTests: XCTestCase {
     }.build()
   }
 
-  private func imagesAlone(header: String?) -> DOM.Node {
+  private func framesAlone(header: String?) -> DOM.Node {
     ArtifactView(
       manifestURL: "/testaments/manifest?url=x", rawSwitch: true, header: header,
       canvas: { div {}.data("service-id", "https://h/i1") }
@@ -95,8 +95,8 @@ final class ArtifactHeaderTests: XCTestCase {
     XCTAssertTrue(css.contains("\(on) .artifact-under-markup"), "the header on leaves the diff under the pane")
   }
 
-  func testWithNoMarkupTheHeaderStandsBesideTheImagesAlone() throws {
-    let node = imagesAlone(header: Self.header)
+  func testWithNoMarkupTheHeaderStandsBesideTheFramesAlone() throws {
+    let node = framesAlone(header: Self.header)
     XCTAssertNil(first("artifact-xml-toggle", in: node), "an XML switch with no markup")
     XCTAssertNotNil(first("artifact-header-toggle", in: node))
     let viewport = try XCTUnwrap(first("artifact-markup-viewport", in: node))
@@ -107,10 +107,10 @@ final class ArtifactHeaderTests: XCTestCase {
   }
 
   func testNoHeaderNoSwitchNoPane() {
-    for node in [withMarkup(header: nil), imagesAlone(header: nil)] {
+    for node in [withMarkup(header: nil), framesAlone(header: nil)] {
       XCTAssertNil(first("artifact-header-toggle", in: node))
       XCTAssertNil(first("artifact-document-header", in: node))
     }
-    XCTAssertNil(first("artifact-markup-viewport", in: imagesAlone(header: nil)), "a column with nothing in it")
+    XCTAssertNil(first("artifact-markup-viewport", in: framesAlone(header: nil)), "a column with nothing in it")
   }
 }

@@ -129,8 +129,8 @@
     /// Whether a canvas is shown: an answer that arrives after it was put
     /// away draws nothing.
     private var showing = false
-    private var imageW: Int = 0
-    private var imageH: Int = 0
+    private var frameW: Int = 0
+    private var frameH: Int = 0
 
     // The view as last told; whether its images have been asked for since
     // the canvas was shown; the frame the next ask waits on.
@@ -157,15 +157,15 @@
     init(viewport: DOM.Element, spinner: DOM.Element) {
       spinnerEl = spinner
       let svgNamespace = "http://www.w3.org/2000/svg"
-      // The viewport's own size, user units its CSS pixels (`ImageView`'s
+      // The viewport's own size, user units its CSS pixels (`FrameView`'s
       // styles); its one group carries the pan and zoom, and is clipped to
       // the image's rectangle in the group's own units: whatever is drawn
       // lies on the image, at any zoom, and a stale strip of an earlier
       // zoom has no place to be drawn beside it.
       let svg = document.createElementNS(svgNamespace, "svg")
-      svg.setAttribute(.class, "image-tile-surface")
+      svg.setAttribute(.class, "frame-tile-surface")
       Self.surfaces += 1
-      let clipID = "image-tile-clip-\(intToString(Self.surfaces))"
+      let clipID = "frame-tile-clip-\(intToString(Self.surfaces))"
       let defs = document.createElementNS(svgNamespace, "defs")
       let clip = document.createElementNS(svgNamespace, "clipPath")
       clip.setAttribute("id", clipID)
@@ -176,7 +176,7 @@
       defs.appendChild(clip)
       svg.appendChild(defs)
       let c = document.createElementNS(svgNamespace, "g")
-      c.setAttribute(.class, "image-tile-compositor")
+      c.setAttribute(.class, "frame-tile-compositor")
       c.setAttribute("clip-path", "url(#\(clipID))")
       svg.appendChild(c)
       viewport.insertBefore(svg, spinner)
@@ -197,8 +197,8 @@
       laterImages = images
       serviceAllowed = live
       showing = true
-      imageW = width
-      imageH = height
+      frameW = width
+      frameH = height
       clipRect?.setAttribute("width", intToString(width))
       clipRect?.setAttribute("height", intToString(height))
       if !images.isEmpty || !live {
@@ -220,7 +220,7 @@
       health = ImageServices.health(forURL: base)
       let known = ImageServices.info(of: base)
       imageFormat = known?.format ?? ServiceInfo.defaultFormat
-      pyramid = TilePyramid(width: imageW, height: imageH, info: known)
+      pyramid = TilePyramid(width: frameW, height: frameH, info: known)
       readInfo()
     }
 
@@ -237,7 +237,7 @@
       // Read by another canvas or view already: taken as it is.
       if let known = ImageServices.info(of: base) {
         imageFormat = known.format
-        pyramid = TilePyramid(width: imageW, height: imageH, info: known)
+        pyramid = TilePyramid(width: frameW, height: frameH, info: known)
         return
       }
       readingInfo = true
@@ -245,7 +245,7 @@
         readingInfo = false
         guard showing, stringEquals(TilePyramid.base(self.serviceID), base), let info else { return }
         imageFormat = info.format
-        pyramid = TilePyramid(width: imageW, height: imageH, info: info)
+        pyramid = TilePyramid(width: frameW, height: frameH, info: info)
         if flushed { flush() }
       }
     }
@@ -266,8 +266,8 @@
         if host.gate(.whole, now: ImageServices.now) == .closed { continue }
         plainImage = image
         let tile = Tile(
-          key: Self.plainKey, rank: 0, kind: .whole, health: host, url: image, x: 0, y: 0, width: imageW,
-          height: imageH, wholeWidth: 0, isCopy: true)
+          key: Self.plainKey, rank: 0, kind: .whole, health: host, url: image, x: 0, y: 0, width: frameW,
+          height: frameH, wholeWidth: 0, isCopy: true)
         tiles[Self.plainKey] = tile
         copyKeys = [Self.plainKey]
         queue = [Self.plainKey]
@@ -305,7 +305,7 @@
       pendingZoom = zoom
       pendingVW = viewportW
       pendingVH = viewportH
-      guard showing, imageW > 0, imageH > 0, drawsService else { return }
+      guard showing, frameW > 0, frameH > 0, drawsService else { return }
       // A canvas just shown asks at once.
       guard flushed else {
         flush()
@@ -446,7 +446,7 @@
     /// Asks for what the view needs now and lets go of the requests it no
     /// longer needs.
     private func flush() {
-      guard showing, drawsService, imageW > 0, imageH > 0, pendingZoom > 0, pendingVW > 0,
+      guard showing, drawsService, frameW > 0, frameH > 0, pendingZoom > 0, pendingVW > 0,
         pendingVH > 0, let health
       else { return }
       flushed = true
@@ -463,10 +463,10 @@
           copyKeys.append(requestWhole(width: width, health: health, isCopy: true))
         }
       }
-      let neededWidth = Int((zoom * Self.devicePixelRatio * Double(imageW)).rounded(.up))
+      let neededWidth = Int((zoom * Self.devicePixelRatio * Double(frameW)).rounded(.up))
       let inView =
-        (Double(imageW) * zoom).rounded() <= pendingVW.rounded()
-        && (Double(imageH) * zoom).rounded() <= pendingVH.rounded()
+        (Double(frameW) * zoom).rounded() <= pendingVW.rounded()
+        && (Double(frameH) * zoom).rounded() <= pendingVH.rounded()
       let tileGate = health.gate(.tile, now: now)
       var wanted: [Int] = []
       var alongside: [Int] = []
@@ -483,7 +483,7 @@
         }
       } else if tileGate == .open {
         let scale = pyramid.tileScale(needed: neededWidth)
-        rank = TilePyramid.scaled(imageW, by: scale)
+        rank = TilePyramid.scaled(frameW, by: scale)
         for tile in pyramid.visibleTiles(
           scale: scale, panX: pendingPanX, panY: pendingPanY, zoom: zoom, viewportWidth: pendingVW,
           viewportHeight: pendingVH)
@@ -536,8 +536,8 @@
       ensure(
         Tile(
           key: key, rank: width, kind: .whole, health: health,
-          url: pyramid.wholeURL(service: serviceID, width: width, format: imageFormat), x: 0, y: 0, width: imageW,
-          height: imageH, wholeWidth: width, isCopy: isCopy))
+          url: pyramid.wholeURL(service: serviceID, width: width, format: imageFormat), x: 0, y: 0, width: frameW,
+          height: frameH, wholeWidth: width, isCopy: isCopy))
       return key
     }
 
@@ -550,7 +550,7 @@
       let overlapY = row + 1 < pyramid.rows(scale: scale) ? scale : 0
       ensure(
         Tile(
-          key: key, rank: TilePyramid.scaled(imageW, by: scale), kind: .tile, health: health,
+          key: key, rank: TilePyramid.scaled(frameW, by: scale), kind: .tile, health: health,
           url: pyramid.tileURL(service: serviceID, scale: scale, column: column, row: row, format: imageFormat),
           x: box.x, y: box.y, width: box.width + overlapX, height: box.height + overlapY, wholeWidth: 0,
           isCopy: false))
@@ -771,7 +771,7 @@
     /// The image element of a tile, in the group of its rank.
     private func makeElement(_ tile: Tile) -> DOM.Element {
       let img = document.createElementNS("http://www.w3.org/2000/svg", "image")
-      img.setAttribute(.class, "image-tile-image")
+      img.setAttribute(.class, "frame-tile-image")
       img.setAttribute(.draggable, "false")
       img.setAttribute("x", intToString(tile.x))
       img.setAttribute("y", intToString(tile.y))

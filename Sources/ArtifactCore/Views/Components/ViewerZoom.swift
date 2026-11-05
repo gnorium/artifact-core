@@ -18,7 +18,7 @@ public enum ViewerZoom {
   /// so it stands as the reader turns images of any size or shape (user,
   /// 2026-10-30): a page zoomed to twice its fit turns to the next page at
   /// twice that page's fit, never at the same pixels per image pixel.
-  static let imageKey = "gnorium:artifact-zoom:image"
+  static let frameKey = "gnorium:artifact-zoom:frame"
 
   /// What a view shows of its page (pane sync, a dev experiment, user
   /// 2026-10-12): the point at the view's middle as fractions of the
@@ -96,8 +96,8 @@ public enum ViewerZoom {
   /// it stands centered.
   public struct Surface: Sendable {
     /// The image's own pixels (0: not read yet).
-    public var imageWidth = 0.0
-    public var imageHeight = 0.0
+    public var frameWidth = 0.0
+    public var frameHeight = 0.0
     public var viewportWidth = 0.0
     public var viewportHeight = 0.0
     public var zoom = 1.0
@@ -128,12 +128,12 @@ public enum ViewerZoom {
     /// across images of different sizes and shapes (`lay`'s start, the
     /// session's kept zoom), as a `Region`'s is; 1 before it has an image
     /// and its fit.
-    public var scale: Double { imageWidth > 0 && imageHeight > 0 && minZoom > 0 ? zoom / minZoom : 1 }
+    public var scale: Double { frameWidth > 0 && frameHeight > 0 && minZoom > 0 ? zoom / minZoom : 1 }
 
     /// Whether the image has a size and any zoom to give: one shown at its
     /// actual size (or larger) has none to zoom in to.
     public var canZoom: Bool {
-      imageWidth > 0 && imageHeight > 0 && maxZoom - minZoom > Self.room
+      frameWidth > 0 && frameHeight > 0 && maxZoom - minZoom > Self.room
     }
 
     /// The least zoom a fit may fall short of the actual size by and still
@@ -142,16 +142,16 @@ public enum ViewerZoom {
 
     /// The zoom that shows the whole image in a viewport of this size.
     public static func fit(
-      imageWidth: Double, imageHeight: Double, viewportWidth: Double, viewportHeight: Double
+      frameWidth: Double, frameHeight: Double, viewportWidth: Double, viewportHeight: Double
     ) -> Double {
-      min(viewportWidth / imageWidth, viewportHeight / imageHeight)
+      min(viewportWidth / frameWidth, viewportHeight / frameHeight)
     }
 
     /// What the surface shows now, nil until the image has a size.
     var region: Region? {
-      guard imageWidth > 0, imageHeight > 0, minZoom > 0 else { return nil }
-      let width = imageWidth * zoom
-      let height = imageHeight * zoom
+      guard frameWidth > 0, frameHeight > 0, minZoom > 0 else { return nil }
+      let width = frameWidth * zoom
+      let height = frameHeight * zoom
       return Region(
         centerX: (viewportWidth / 2 - panX) / width, centerY: (viewportHeight / 2 - panY) / height,
         scale: zoom / minZoom, maxScale: maxZoom / minZoom)
@@ -160,11 +160,11 @@ public enum ViewerZoom {
     /// The image at `region`: its zoom over its fit, clamped, the point at
     /// its middle.
     mutating func show(region: Region) {
-      guard imageWidth > 0, imageHeight > 0 else { return }
+      guard frameWidth > 0, frameHeight > 0 else { return }
       zoom = clamped(minZoom * region.scale)
       atFit = isFit(zoom)
-      panX = viewportWidth / 2 - region.centerX * imageWidth * zoom
-      panY = viewportHeight / 2 - region.centerY * imageHeight * zoom
+      panX = viewportWidth / 2 - region.centerX * frameWidth * zoom
+      panY = viewportHeight / 2 - region.centerY * frameHeight * zoom
       clampPan()
     }
 
@@ -182,8 +182,8 @@ public enum ViewerZoom {
       minZoom = fit
       zoom = start.map { clamped(minZoom * $0) } ?? minZoom
       atFit = isFit(zoom)
-      panX = (viewportWidth - imageWidth * zoom) / 2
-      panY = (viewportHeight - imageHeight * zoom) / 2
+      panX = (viewportWidth - frameWidth * zoom) / 2
+      panY = (viewportHeight - frameHeight * zoom) / 2
     }
 
     /// The viewport changed size to `width` by `height`, whose fit is now
@@ -195,17 +195,17 @@ public enum ViewerZoom {
       let kept = region
       viewportWidth = width
       viewportHeight = height
-      guard imageWidth > 0, imageHeight > 0 else { return }
+      guard frameWidth > 0, frameHeight > 0 else { return }
       minZoom = fit
       if let kept, !atFit {
         zoom = clamped(minZoom * kept.scale)
         atFit = isFit(zoom)
-        panX = viewportWidth / 2 - kept.centerX * imageWidth * zoom
-        panY = viewportHeight / 2 - kept.centerY * imageHeight * zoom
+        panX = viewportWidth / 2 - kept.centerX * frameWidth * zoom
+        panY = viewportHeight / 2 - kept.centerY * frameHeight * zoom
       } else {
         zoom = minZoom
-        panX = (viewportWidth - imageWidth * zoom) / 2
-        panY = (viewportHeight - imageHeight * zoom) / 2
+        panX = (viewportWidth - frameWidth * zoom) / 2
+        panY = (viewportHeight - frameHeight * zoom) / 2
       }
       clampPan()
     }
@@ -231,8 +231,8 @@ public enum ViewerZoom {
     /// Never past an edge: smaller than the viewport, an image is centered
     /// and does not pan; larger, it leaves no empty gap at any edge.
     public mutating func clampPan() {
-      let iw = imageWidth * zoom
-      let ih = imageHeight * zoom
+      let iw = frameWidth * zoom
+      let ih = frameHeight * zoom
       if iw <= viewportWidth {
         panX = (viewportWidth - iw) / 2
       } else {

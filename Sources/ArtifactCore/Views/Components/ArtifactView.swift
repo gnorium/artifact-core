@@ -201,7 +201,7 @@
     public func build() -> DOM.Node {
       // An image the reader draws itself, for an image the slot lacks, is
       // styled by the image's own sheet, which the page must link.
-      _ = ImageView(serviceID: "").build()
+      _ = FrameView(serviceID: "").build()
 
       return div {
         // ── Header ──────────────────────────────────────────────────────────
@@ -1001,7 +1001,7 @@
         CSS.Property("content-visibility", "auto")
         CSS.Property("contain-intrinsic-block-size", "auto 1lh")
       }
-      selector("&[data-overlay-active='true'] .image-viewport") { CSS.Property("touch-action", "none") }
+      selector("&[data-overlay-active='true'] .frame-viewport") { CSS.Property("touch-action", "none") }
       selector("& .artifact-detach-toggle[aria-pressed='true'] .button-view:disabled") {
         backgroundColor(backgroundColorBlue).important()
         borderColor(backgroundColorBlue).important()
@@ -1297,7 +1297,7 @@
     /// Where the page-images switch keeps its state: for the browser
     /// session, so it holds across the reader's pages and the site's, and is
     /// off again in a new session. Storage refused reads as off.
-    static let canvasShownKey = "gnorium:artifact-page-images"
+    static let canvasShownKey = "gnorium:artifact-page-frames"
     /// Reflow's choice, kept for the session as the page images' is.
     static let reflowKey = "gnorium:artifact-reflow"
     /// Detach's choice, kept for the session; synced until detached.
@@ -1372,7 +1372,7 @@
     /// The pages, by the image service each reads, with their sizes and
     /// labels where a manifest gives them.
     private var serviceIDs: [String] = []
-    private var imageWidths: [Int] = []
+    private var frameWidths: [Int] = []
     /// Each canvas's plain images in place of its service, tried in order,
     /// where it has them (`ArtifactManifest.Page.images`): by the manifest's
     /// place.
@@ -1383,7 +1383,7 @@
     /// Whether each canvas is shown with no image (`ArtifactManifest.Page
     /// .blank`): by the manifest's place.
     private var blankPages: [Bool] = []
-    private var imageHeights: [Int] = []
+    private var frameHeights: [Int] = []
     private var canvasLabels: [String] = []
     private var canvasIndex: Int = 0
 
@@ -1399,8 +1399,8 @@
     private var markupPanes: [DOM.Element] { root.querySelectorAll(".artifact-markup [data-service-id]") }
     /// The canvas slot, when the viewer has one, and the canvases read so far.
     private var object: DOM.Element?
-    private var canvases: [ImageView] = []
-    private var shownCanvas: ImageView?
+    private var canvases: [FrameView] = []
+    private var shownCanvas: FrameView?
     /// The canvases a host lets the reader draw a crop box on
     /// (`artifact-crop-mode`), by image service.
     private var cropServices: [String] = []
@@ -1654,7 +1654,7 @@
       } else if !aside, overlayPutAway {
         overlayPutAway = false
         reflectSyncApplies()
-        if !overlayOn, overlayApplies, imagesShown {
+        if !overlayOn, overlayApplies, framesShown {
           pressOverlay(true)
           setOverlay(true)
         } else {
@@ -1760,7 +1760,7 @@
     /// Otherwise the code is not read for one—a whole page's text at every
     /// key and every move of the pointer (user, 2026-10-15).
     private func drawsRegions(of code: DOM.Element) -> Bool {
-      imagesShown
+      framesShown
     }
 
     private func followCaret() {
@@ -2050,7 +2050,7 @@
       // with no scan the pane is the text's own again. Back on, the overlay
       // comes back as it was.
       if !shown, overlayOn {
-        overlayBeforeImagesOff = true
+        overlayBeforeFramesOff = true
         pressOverlay(false)
         setOverlay(false)
       }
@@ -2058,8 +2058,8 @@
       reflectCanvasShown()
       if shown {
         if canvasIndex < serviceIDs.count { showCanvas(canvasIndex) }
-        if overlayBeforeImagesOff {
-          overlayBeforeImagesOff = false
+        if overlayBeforeFramesOff {
+          overlayBeforeFramesOff = false
           if overlayApplies && !rawVisible && !reflowOn {
             pressOverlay(true)
             setOverlay(true)
@@ -2073,7 +2073,7 @@
 
     /// Whether the overlay was on when the images were put away: turned
     /// back on with them (`setCanvasShown`).
-    private var overlayBeforeImagesOff = false
+    private var overlayBeforeFramesOff = false
 
     /// The overlay's switch shown as `on`, as the reader sets the overlay
     /// itself (`setCanvasShown`, `reflectPageMarkup`), never by a press.
@@ -2086,14 +2086,14 @@
     /// Whether the page on screen has an image to show: none on a page
     /// shown with no image (`isBlank`: changed at its source with no copy of
     /// what was sent kept, or every copy failed to load; user, 2026-10-17).
-    private var pageHasImage: Bool { !isBlank(canvasIndex) }
+    private var pageHasFrame: Bool { !isBlank(canvasIndex) }
 
     /// Whether the page images are on screen: the person's switch on
     /// (`canvasShown`, kept as they left it) and an image to show. A page
     /// with none shows its text alone, as with the images off, only while it
     /// is on screen: the next page with one shows it as the switch says
     /// (user, 2026-10-17).
-    private var imagesShown: Bool { canvasShown && pageHasImage }
+    private var framesShown: Bool { canvasShown && pageHasFrame }
 
     /// The viewer's column and the switch, as the state is: the switch's
     /// wrapper (which its styles read) and its button (which assistive
@@ -2103,12 +2103,12 @@
     /// (user, 2026-10-17).
     private func reflectCanvasShown() {
       reflectSyncApplies()
-      let shown = imagesShown
+      let shown = framesShown
       root.setAttribute(data("canvas-shown"), shown ? "true" : "false")
       canvasToggle?.setAttribute("aria-pressed", shown ? "true" : "false")
       guard let button = canvasToggle?.querySelector("button") else { return }
       button.setAttribute("aria-pressed", shown ? "true" : "false")
-      if pageHasImage {
+      if pageHasFrame {
         button.removeAttribute("disabled")
         button.removeAttribute("aria-disabled")
       } else {
@@ -2148,13 +2148,13 @@
     private func reflectSyncApplies() {
       // Held while the edition fades out in place, as a pane takes its
       // place (`overlayAside`): nothing moves until it is gone.
-      let active = overlayOn && !codeShown && !headerVisible && !reflowOn && imagesShown
+      let active = overlayOn && !codeShown && !headerVisible && !reflowOn && framesShown
       root.setAttribute(data("overlay-active"), active ? "true" : "false")
       // The overlay's switch disabled, as Detach's is, where it cannot
       // apply: Raw, the Header, Reflow, the images put away, a page with no
       // markup or no image (`overlayApplies`, user, 2026-10-17, 2026-10-26).
       if let button = root.querySelector(".artifact-overlay-toggle button") {
-        if codeShown || headerVisible || reflowOn || !imagesShown || !overlayApplies {
+        if codeShown || headerVisible || reflowOn || !framesShown || !overlayApplies {
           button.setAttribute("disabled", "")
           button.setAttribute("aria-disabled", "true")
         } else {
@@ -2166,7 +2166,7 @@
       detachToggle?.setAttribute("aria-pressed", detached ? "true" : "false")
       detachToggle?.querySelector("button")?.setAttribute("aria-pressed", detached ? "true" : "false")
       guard let button = detachToggle?.querySelector("button") else { return }
-      if codeShown || reflowOn || !imagesShown || overlayOn {
+      if codeShown || reflowOn || !framesShown || overlayOn {
         button.setAttribute("disabled", "")
         button.setAttribute("aria-disabled", "true")
       } else {
@@ -2352,9 +2352,9 @@
     }
 
     /// Whether the overlay has anything to lay on the page on screen: markup
-    /// of its own, and an image to compare it against (`pageHasImage`, the
+    /// of its own, and an image to compare it against (`pageHasFrame`, the
     /// rule the images switch follows too; user, 2026-10-17).
-    private var overlayApplies: Bool { pageHasMarkup && pageHasImage }
+    private var overlayApplies: Bool { pageHasMarkup && pageHasFrame }
 
     /// The page on screen turned, or left with no image: on one the overlay
     /// does not apply to (`overlayApplies`) it goes off, its switch
@@ -2468,7 +2468,7 @@
             pane.scrollTop = self.overlayScrollStart.y
             self.matchedScroll = (pane.scrollLeft, pane.scrollTop)
           } else if self.syncs {
-            self.matchImage()
+            self.matchFrame()
           }
           self.leavingBefore = nil
           self.editionBefore = nil
@@ -2499,32 +2499,32 @@
     /// the page by the text block's top and the lines' median baseline
     /// (`registrationShift`), which moves the edition, never the image.
     /// Nil where the image has no place yet or the page no text block.
-    private func editionOnImage(_ layer: DOM.Element) -> (zoom: Double, x: Double, y: Double)? {
-      guard let image = shownCanvas?.placement, let zone = overlayZone(),
+    private func editionOnFrame(_ layer: DOM.Element) -> (zoom: Double, x: Double, y: Double)? {
+      guard let frame = shownCanvas?.placement, let zone = overlayZone(),
         let measured = textBlock(in: layer, drawnAt: currentZoom()), measured.count == 4,
         measured[2] > measured[0], measured[3] > measured[1]
       else { return nil }
-      let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? image.width : image.height) }
+      let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? frame.width : frame.height) }
       let across = ((corners[2] - corners[0]) * (corners[2] - corners[0]) + (corners[3] - corners[1]) * (corners[3] - corners[1])).squareRoot()
       let down = ((corners[6] - corners[0]) * (corners[6] - corners[0]) + (corners[7] - corners[1]) * (corners[7] - corners[1])).squareRoot()
       guard across > 0, down > 0 else { return nil }
       let page = root.querySelector(".artifact-markup .tei-page[data-active='true']")
-      let scanEm = OverlayRegistration.scanEm(page?.getAttribute(data("scan-em")) ?? "", width: image.width)
+      let scanEm = OverlayRegistration.scanEm(page?.getAttribute(data("scan-em")) ?? "", width: frame.width)
       // The layer's pixels per scan pixel at its zoom 1: the type's scale.
       let typeScale = scanEm > 0 && overlayTarget.em > 0 ? overlayTarget.em / scanEm : 0
       let zoom: Double
       if typeScale > 0 {
-        zoom = image.zoom / typeScale
+        zoom = frame.zoom / typeScale
       } else if overlayTarget.spans {
-        zoom = across * image.zoom / (measured[2] - measured[0])
+        zoom = across * frame.zoom / (measured[2] - measured[0])
       } else {
-        zoom = down * image.zoom / (measured[3] - measured[1])
+        zoom = down * frame.zoom / (measured[3] - measured[1])
       }
       guard zoom > 0 else { return nil }
       // The scan's text block's top edge on screen.
-      let width = across * image.zoom
-      let left = image.x + image.panX + corners[0] * image.zoom
-      let top = image.y + image.panY + corners[1] * image.zoom
+      let width = across * frame.zoom
+      let left = frame.x + frame.panX + corners[0] * frame.zoom
+      let top = frame.y + frame.panY + corners[1] * frame.zoom
       let anchor: OverlayAnchor = typeScale <= 0 && overlayTarget.spans ? .left : overlayTarget.anchor
       let x: Double
       switch anchor {
@@ -2582,11 +2582,11 @@
     }
 
     /// The shown canvas's image size in its pixels, nil until known.
-    private var shownImageSize: (width: Double, height: Double)? {
-      guard canvasIndex < imageWidths.count, canvasIndex < imageHeights.count, imageWidths[canvasIndex] > 0,
-        imageHeights[canvasIndex] > 0
+    private var shownFrameSize: (width: Double, height: Double)? {
+      guard canvasIndex < frameWidths.count, canvasIndex < frameHeights.count, frameWidths[canvasIndex] > 0,
+        frameHeights[canvasIndex] > 0
       else { return nil }
-      return (Double(imageWidths[canvasIndex]), Double(imageHeights[canvasIndex]))
+      return (Double(frameWidths[canvasIndex]), Double(frameHeights[canvasIndex]))
     }
 
     /// The space a zone's corners are in, over the whole image.
@@ -2925,7 +2925,7 @@
     ) -> OverlayViewport {
       var content = (left: 0.0, top: 0.0, right: natural.width, bottom: natural.height)
       var actual = ViewerZoom.actualSize
-      if let zone = overlayZone(), let size = shownImageSize, let measured = textBlock(in: layer, drawnAt: 1) {
+      if let zone = overlayZone(), let size = shownFrameSize, let measured = textBlock(in: layer, drawnAt: 1) {
         let box = laid(measured, zone: zone, size: size)
         let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
         let corners = (0..<8).map { zone[$0] / Self.zoneExtent * ($0 % 2 == 0 ? size.width : size.height) }
@@ -2945,7 +2945,7 @@
 
     /// The layer where the overlay lays it (user, 2026-10-28): the image
     /// stays as its pane shows it, and the edition slides and zooms onto
-    /// the image's text block (`editionOnImage`), from where the reader had
+    /// the image's text block (`editionOnFrame`), from where the reader had
     /// it; at rest there, following the image as the reader zooms and pans
     /// it (`zoomOverlay`, `panOverlay`); going off, back to where it was
     /// (`editionBefore`). Set by the layer's scale and its scale box's
@@ -2966,13 +2966,13 @@
       let from = overlayFrom.map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? viewport.fitted
       func between(_ a: Double, _ b: Double) -> Double { a + (b - a) * progress }
       // On the image: where its text block is as the image's pane shows it
-      // (`editionOnImage`), the overlay's room fitting it where the image
+      // (`editionOnFrame`), the overlay's room fitting it where the image
       // has no place yet.
-      let onImage = editionOnImage(layer).map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? viewport.fitted
+      let onFrame = editionOnFrame(layer).map { (zoom: $0.zoom, x: $0.x - origin.x, y: $0.y - origin.y) } ?? viewport.fitted
       if overlayOn && progress >= 1 {
-        view = onImage
+        view = onFrame
       } else if overlayOn {
-        view = (between(from.zoom, onImage.zoom), between(from.x, onImage.x), between(from.y, onImage.y))
+        view = (between(from.zoom, onFrame.zoom), between(from.x, onFrame.x), between(from.y, onFrame.y))
       } else {
         // Out: from where it lay on the image back to where the reader had
         // it in its pane (`editionBefore`), the pane sliding back on the
@@ -2999,7 +2999,7 @@
         // block's own four corners, the edition and its structure with
         // it, eased in and out with the slide.
         let warp = overlayOn ? progress : 1 - progress
-        if warp > 0, let quads = imageZoneQuads() {
+        if warp > 0, let quads = frameZoneQuads() {
           var from: [Double] = []
           var to: [Double] = []
           for corner in 0..<4 {
@@ -3032,14 +3032,14 @@
 
     /// The image's text block on screen as the image's pane shows it: its
     /// four corners as photographed, and the leveled block registration
-    /// lays the edition's on (`editionOnImage`): from its first corner,
+    /// lays the edition's on (`editionOnFrame`): from its first corner,
     /// its sides' own lengths, upright. Nil before the image has a place.
-    private func imageZoneQuads() -> (photographed: [Double], leveled: [Double])? {
-      guard let image = shownCanvas?.placement, let zone = overlayZone() else { return nil }
+    private func frameZoneQuads() -> (photographed: [Double], leveled: [Double])? {
+      guard let frame = shownCanvas?.placement, let zone = overlayZone() else { return nil }
       var photographed: [Double] = []
       for index in 0..<8 {
-        let pixel = zone[index] / Self.zoneExtent * (index % 2 == 0 ? image.width : image.height)
-        photographed.append((index % 2 == 0 ? image.x + image.panX : image.y + image.panY) + pixel * image.zoom)
+        let pixel = zone[index] / Self.zoneExtent * (index % 2 == 0 ? frame.width : frame.height)
+        photographed.append((index % 2 == 0 ? frame.x + frame.panX : frame.y + frame.panY) + pixel * frame.zoom)
       }
       let across = ((photographed[2] - photographed[0]) * (photographed[2] - photographed[0])
         + (photographed[3] - photographed[1]) * (photographed[3] - photographed[1])).squareRoot()
@@ -3365,7 +3365,7 @@
       event.preventDefault()
       pane.focus(DOM.FocusOptions(preventScroll: true))
       textMatchAnimation += 1
-      matchImage()
+      matchFrame()
       panMoved = false
       panStart = (event.clientX, event.clientY, pane.scrollLeft, pane.scrollTop)
       endPan()
@@ -3377,7 +3377,7 @@
         }
         pane.scrollLeft = start.left - (e.clientX - start.x)
         pane.scrollTop = start.top - (e.clientY - start.y)
-        self.matchImage()
+        self.matchFrame()
       }
       panUpListener = window.addEventListener(.mouseup) { [self] _ in
         self.panStart = nil
@@ -3445,7 +3445,7 @@
         setZoom(nil, atFit: false)
         sessionStorage.removeItem(Self.zoomKey + zoomKind)
         applyZoom(about: nil)
-        matchImage()
+        matchFrame()
       } else if stringEquals(key, "ArrowLeft") {
         pane.scrollLeft -= ViewerZoom.wheelTravel
       } else if stringEquals(key, "ArrowRight") {
@@ -3469,7 +3469,7 @@
       applyZoom(about: anchor)
       // Even at a zoom limit, cancelling a reattach must bring the image
       // to the text's current view, including the newest input.
-      matchImage()
+      matchFrame()
     }
 
     // MARK: - Pane sync
@@ -3500,7 +3500,7 @@
     /// shown layer at zoom 1), and the layer's size at zoom 1. Nil where
     /// the page has no text block or none is drawn; then each pane is
     /// matched by its whole, as before.
-    private func syncBlocks() -> (image: [Double], text: [Double], layer: (width: Double, height: Double))? {
+    private func syncBlocks() -> (frame: [Double], text: [Double], layer: (width: Double, height: Double))? {
       // The layer's own size, its layout's: its box over the zoom its
       // attribute states read a page turned to, not yet scaled, at the
       // page before's zoom (Hamlet Q1's cover from p. 3, a zoom set by
@@ -3527,16 +3527,16 @@
     /// A region of the text (fractions of its layer, its zoom over its fit)
     /// as the image's: the same point of the text block, and the same
     /// share of its width in view (`syncBlocks`).
-    private func imageTerms(_ text: ViewerZoom.Region) -> ViewerZoom.Region {
+    private func frameTerms(_ text: ViewerZoom.Region) -> ViewerZoom.Region {
       guard let blocks = syncBlocks(), let sizing = shownCanvas?.sizing, let pane = markupPane, lastFit > 0,
         pane.clientWidth > 0
       else { return text }
-      let (image, block, layer) = blocks
+      let (frame, block, layer) = blocks
       let u = (text.centerX * layer.width - block[0]) / (block[2] - block[0])
       let v = (text.centerY * layer.height - block[1]) / (block[3] - block[1])
       // The share of the block's width the text pane shows, and the image's zoom that shows the same.
       let share = Double(pane.clientWidth) / (text.scale * lastFit) / (block[2] - block[0])
-      let zoom = sizing.viewportWidth / (share * (image[2] - image[0]))
+      let zoom = sizing.viewportWidth / (share * (frame[2] - frame[0]))
       let factor = zoom / sizing.fit / text.scale
       // The text at its fit is the image at its fit, as `textTerms` has it
       // the other way: a mode, never a number. The leaf fills its pane and
@@ -3545,22 +3545,22 @@
       // past its fit, its edge cut off, and the text, mapped back, past
       // its own, a scrollbar across.
       return .init(
-        centerX: (image[0] + u * (image[2] - image[0])) / sizing.width,
-        centerY: (image[1] + v * (image[3] - image[1])) / sizing.height,
+        centerX: (frame[0] + u * (frame[2] - frame[0])) / sizing.width,
+        centerY: (frame[1] + v * (frame[3] - frame[1])) / sizing.height,
         scale: text.scale <= Self.wholeScale ? 1 : text.scale * factor, maxScale: text.maxScale * factor)
     }
 
-    /// A region of the image as the text's (`imageTerms` the other way).
-    private func textTerms(_ image: ViewerZoom.Region) -> ViewerZoom.Region {
+    /// A region of the image as the text's (`frameTerms` the other way).
+    private func textTerms(_ frame: ViewerZoom.Region) -> ViewerZoom.Region {
       guard let blocks = syncBlocks(), let sizing = shownCanvas?.sizing, let pane = markupPane, lastFit > 0,
-        pane.clientWidth > 0, image.scale > 0
-      else { return image }
+        pane.clientWidth > 0, frame.scale > 0
+      else { return frame }
       let (scan, block, layer) = blocks
-      let u = (image.centerX * sizing.width - scan[0]) / (scan[2] - scan[0])
-      let v = (image.centerY * sizing.height - scan[1]) / (scan[3] - scan[1])
-      let share = sizing.viewportWidth / (image.scale * sizing.fit) / (scan[2] - scan[0])
+      let u = (frame.centerX * sizing.width - scan[0]) / (scan[2] - scan[0])
+      let v = (frame.centerY * sizing.height - scan[1]) / (scan[3] - scan[1])
+      let share = sizing.viewportWidth / (frame.scale * sizing.fit) / (scan[2] - scan[0])
       let zoom = Double(pane.clientWidth) / (share * (block[2] - block[0]))
-      let factor = zoom / lastFit / image.scale
+      let factor = zoom / lastFit / frame.scale
       // The image at its fit is the text at its fit, each its whole in
       // its pane: a mode, never a number. Mapped as a number, it was
       // the fit of the page turned from (`lastFit`) over a layer not yet
@@ -3569,7 +3569,7 @@
       return .init(
         centerX: (block[0] + u * (block[2] - block[0])) / layer.width,
         centerY: (block[1] + v * (block[3] - block[1])) / layer.height,
-        scale: image.scale <= Self.wholeScale ? 1 : image.scale * factor, maxScale: image.maxScale * factor)
+        scale: frame.scale <= Self.wholeScale ? 1 : frame.scale * factor, maxScale: frame.maxScale * factor)
     }
 
     /// How far over its fit the text zooms with no image beside it.
@@ -3607,7 +3607,7 @@
     /// frame, the latest region winning, so it never stutters.
     private var pendingTextRegion: ViewerZoom.Region?
     private var matchQueued = false
-    private var pendingImageMatch = false
+    private var pendingFrameMatch = false
 
     private var textMatchAnimation = 0
 
@@ -3616,7 +3616,7 @@
     private func animateTextMatch(to target: ViewerZoom.Region) {
       textMatchAnimation += 1
       pendingTextRegion = nil
-      pendingImageMatch = false
+      pendingFrameMatch = false
       guard syncs, let start = textRegion(), !window.matchMedia("(prefers-reduced-motion: reduce)") else {
         matchText(to: target)
         return
@@ -3642,7 +3642,7 @@
     private func matchText(to region: ViewerZoom.Region) {
       textMatchAnimation += 1
       pendingTextRegion = textTerms(region)
-      pendingImageMatch = false
+      pendingFrameMatch = false
       scheduleMatch()
     }
 
@@ -3654,13 +3654,13 @@
       _ = window.requestAnimationFrame { [self] in
         self.matchQueued = false
         let region = self.pendingTextRegion
-        let image = self.pendingImageMatch
+        let frame = self.pendingFrameMatch
         self.pendingTextRegion = nil
-        self.pendingImageMatch = false
+        self.pendingFrameMatch = false
         if let region {
           self.applyMatchText(region)
-        } else if image, self.syncs, let canvas = self.shownCanvas, let region = self.textRegion() {
-          canvas.show(region: self.imageTerms(region))
+        } else if frame, self.syncs, let canvas = self.shownCanvas, let region = self.textRegion() {
+          canvas.show(region: self.frameTerms(region))
         }
       }
     }
@@ -3695,9 +3695,9 @@
 
     /// The image at the text's region, when the reader moved the text: at
     /// the next frame, once however many moves it saw.
-    private func matchImage() {
+    private func matchFrame() {
       pendingTextRegion = nil
-      pendingImageMatch = true
+      pendingFrameMatch = true
       scheduleMatch()
     }
 
@@ -3710,7 +3710,7 @@
       }
       matchedScroll = nil
       textMatchAnimation += 1
-      matchImage()
+      matchFrame()
     }
 
     /// "12.5px" as 12.5; anything else as 0.
@@ -3895,9 +3895,9 @@
         parent.insertBefore(scaleBox, layer)
         scaleBox.appendChild(layer)
       }
-      let ratio = canvasIndex < imageWidths.count && canvasIndex < imageHeights.count
-        && imageWidths[canvasIndex] > 0 && imageHeights[canvasIndex] > 0
-        ? Double(imageWidths[canvasIndex]) / Double(imageHeights[canvasIndex]) : 0.75
+      let ratio = canvasIndex < frameWidths.count && canvasIndex < frameHeights.count
+        && frameWidths[canvasIndex] > 0 && frameHeights[canvasIndex] > 0
+        ? Double(frameWidths[canvasIndex]) / Double(frameHeights[canvasIndex]) : 0.75
       layer.style.setProperty("zoom", "1")
       layer.style.setProperty("position", "absolute")
       layer.style.setProperty("inset", "0 auto auto 0")
@@ -3994,7 +3994,7 @@
       } else if !settled, let anchor, let point, let newBox = layer.getBoundingClientRect() {
         pane.scrollLeft += newBox.x - paneBox.x + point.0 * zoom - anchor.x
         pane.scrollTop += newBox.y - paneBox.y + point.1 * zoom - anchor.y
-        if !matching { matchImage() }
+        if !matching { matchFrame() }
       } else {
         pane.scrollLeft = oldScroll.x
         pane.scrollTop = oldScroll.y
@@ -4070,9 +4070,9 @@
       } else if codeView == nil && !reflowOn {
         // Center a stable page box, not the width of its shortest text.
         // Canvas proportions describe the page only; no text coordinates.
-        let ratio = canvasIndex < imageWidths.count && canvasIndex < imageHeights.count
-          && imageWidths[canvasIndex] > 0 && imageHeights[canvasIndex] > 0
-          ? Double(imageWidths[canvasIndex]) / Double(imageHeights[canvasIndex]) : 0.75
+        let ratio = canvasIndex < frameWidths.count && canvasIndex < frameHeights.count
+          && frameWidths[canvasIndex] > 0 && frameHeights[canvasIndex] > 0
+          ? Double(frameWidths[canvasIndex]) / Double(frameHeights[canvasIndex]) : 0.75
         let pageWidth = 640.0
         layer.style.setProperty("min-width", doubleToString(pageWidth) + "px")
         layer.style.setProperty("min-height", doubleToString(pageWidth / ratio) + "px")
@@ -4211,7 +4211,7 @@
           pane.scrollTop += newBox.y - paneBox.y + point.1 * zoom - anchor.y
         }
         // The reader zoomed the text: the image follows (pane sync).
-        if !matching { matchImage() }
+        if !matching { matchFrame() }
       } else {
         pane.scrollLeft = oldScroll.x
         pane.scrollTop = oldScroll.y
@@ -4262,8 +4262,8 @@
           if manifest.pages.isEmpty { return }
           if canvasIndex < serviceIDs.count { startService = serviceIDs[canvasIndex] }
           serviceIDs = []
-          imageWidths = []
-          imageHeights = []
+          frameWidths = []
+          frameHeights = []
           canvasLabels = []
           plainImages = []
           liveImages = []
@@ -4274,8 +4274,8 @@
           plainImages.append(page.images)
           liveImages.append(page.live)
           blankPages.append(page.blank)
-          imageWidths.append(page.width)
-          imageHeights.append(page.height)
+          frameWidths.append(page.width)
+          frameHeights.append(page.height)
           canvasLabels.append(page.label)
         }
         if manifest.pages.isEmpty, let reason = manifest.error {
@@ -4320,8 +4320,8 @@
         }
         for service in services {
           serviceIDs.append(service)
-          imageWidths.append(0)
-          imageHeights.append(0)
+          frameWidths.append(0)
+          frameHeights.append(0)
           canvasLabels.append("")
         }
         open()
@@ -4329,8 +4329,8 @@
       }
       for pane in markupPanes {
         serviceIDs.append(pane.dataset["service-id"] ?? "")
-        imageWidths.append(0)
-        imageHeights.append(0)
+        frameWidths.append(0)
+        frameHeights.append(0)
         canvasLabels.append("")
       }
       open()
@@ -4359,11 +4359,11 @@
     /// the four either side fetched ahead. The rest fetch nothing until they
     /// are paged to.
     private func showCanvas(_ idx: Int) {
-      guard canvasShown, object != nil, imageWidths[idx] > 0, imageHeights[idx] > 0 else { return }
+      guard canvasShown, object != nil, frameWidths[idx] > 0, frameHeights[idx] > 0 else { return }
       // A page shown with no image (`ArtifactManifest.Page.blank`, or every
       // copy failed to load; user, 2026-10-17): no canvas active and none
       // read, the image pane put away and the text alone, as with the images
-      // off (`imagesShown`)—never the image its service serves now, nor the
+      // off (`framesShown`)—never the image its service serves now, nor the
       // last page's.
       if isBlank(idx) {
         for element in object?.querySelectorAll("[data-service-id]") ?? [] {
@@ -4382,7 +4382,7 @@
       if let shown = shownCanvas, shown !== canvas { shown.hide() }
       shownCanvas = canvas
       canvas.show(
-        width: imageWidths[idx], height: imageHeights[idx], images: idx < plainImages.count ? plainImages[idx] : [],
+        width: frameWidths[idx], height: frameHeights[idx], images: idx < plainImages.count ? plainImages[idx] : [],
         live: idx >= liveImages.count || liveImages[idx])
       // Synced, the text opens on the image's part of the page, at its
       // size, rather than at 100%.
@@ -4401,7 +4401,7 @@
           where neighbor >= 0 && neighbor < serviceIDs.count && readsService(neighbor) {
             urls.append(
               contentsOf: canvas.openingURLs(
-                serviceID: serviceIDs[neighbor], width: imageWidths[neighbor], height: imageHeights[neighbor]))
+                serviceID: serviceIDs[neighbor], width: frameWidths[neighbor], height: frameHeights[neighbor]))
           }
         }
         // Waiting no longer than the host's own answers say a whole image
@@ -4440,22 +4440,22 @@
 
     /// The reader of a canvas, made the first time it is shown: over the
     /// slot's canvas for that image service, else one drawn for it.
-    private func canvasReader(ofService service: String) -> ImageView {
+    private func canvasReader(ofService service: String) -> FrameView {
       for canvas in canvases where stringEquals(canvas.serviceID, service) {
         return canvas
       }
       var element: DOM.Element?
-      for candidate in object?.querySelectorAll(".image-view") ?? []
+      for candidate in object?.querySelectorAll(".frame-view") ?? []
       where stringEquals(candidate.dataset["service-id"] ?? "", service) {
         element = candidate
         break
       }
       if element == nil {
-        let drawn = ImageView.make(serviceID: service)
+        let drawn = FrameView.make(serviceID: service)
         object?.appendChild(drawn)
         element = drawn
       }
-      let canvas = ImageView(root: element ?? ImageView.make(serviceID: service))
+      let canvas = FrameView(root: element ?? FrameView.make(serviceID: service))
       let viewer = root
       canvas.onCrop = { detail in
         viewer.dispatchEvent(CustomEvent(type: "artifact-crop-change", detail: detail))
@@ -4646,7 +4646,7 @@
         // form may hold a viewer among its fields.
         if let _ = e.target?.closest("input, textarea, select, [contenteditable='true']") { return }
         // A focused pane's arrows pan it, as its own keys do.
-        if let target = e.target, let pane = target.closest(".artifact-markup, .image-viewport"), pane.id == target.id {
+        if let target = e.target, let pane = target.closest(".artifact-markup, .frame-viewport"), pane.id == target.id {
           return
         }
         if stringEquals(e.key, "ArrowLeft") { navigate(-1) }
@@ -4941,7 +4941,7 @@
     /// nil where the page's text block was not measured or its image's
     /// size is not known.
     private func scanToLayer(_ layer: DOM.Element, drawnAt scale: Double) -> Homography? {
-      guard let zone = overlayZone(), let size = shownImageSize, let measured = textBlock(in: layer, drawnAt: scale)
+      guard let zone = overlayZone(), let size = shownFrameSize, let measured = textBlock(in: layer, drawnAt: scale)
       else { return nil }
       let box = laid(measured, zone: zone, size: size)
       let target = [box[0], box[1], box[2], box[1], box[2], box[3], box[0], box[3]]
@@ -4970,7 +4970,7 @@
     private func measuredStructure(_ layer: DOM.Element, page: DOM.Element, key: String) -> Structure? {
       let zones = scanLayout(of: page)
       guard !zones.isEmpty, let leadingRem = parseDouble(page.getAttribute(data("body-leading")) ?? ""),
-        let scale = drawnScale(of: layer), let size = shownImageSize, let map = scanToLayer(layer, drawnAt: scale),
+        let scale = drawnScale(of: layer), let size = shownFrameSize, let map = scanToLayer(layer, drawnAt: scale),
         let box = layer.getBoundingClientRect(), let context = document.createElement("canvas").getContext("2d")
       else { return nil }
       // The body's leading in the layer's pixels: the body type's (the
@@ -5327,7 +5327,7 @@
     private func figurePairs(_ layer: DOM.Element, page: DOM.Element) -> [(
       edition: StructureRow, scan: [Double], state: String
     )] {
-      guard !rawVisible, !reflowOn, let scale = drawnScale(of: layer), let size = shownImageSize,
+      guard !rawVisible, !reflowOn, let scale = drawnScale(of: layer), let size = shownFrameSize,
         let map = scanToLayer(layer, drawnAt: scale), let box = layer.getBoundingClientRect()
       else { return [] }
       let textBlockElement = layer.querySelector(".tei-text-block")
@@ -5519,9 +5519,9 @@
     /// sheet there—never in the text pane, where a click on the word itself
     /// opens it. Each is told as an event that bubbles to the document,
     /// where the gloss's dialog listens (gnorium-web `GlossHydration`):
-    /// `artifact-image-word` on the edition's word (its page, line and
+    /// `artifact-frame-word` on the edition's word (its page, line and
     /// place are its own attributes; the image's service its detail),
-    /// `artifact-image-element` on the image pane with the image's service
+    /// `artifact-frame-element` on the image pane with the image's service
     /// and the element's index. A press that moved panned the image:
     /// nothing opens.
     private func openScanWord(x: Double, y: Double) {
@@ -5534,13 +5534,13 @@
         linked.boxes.contains { point.x >= $0[0] && point.x <= $0[2] && point.y >= $0[1] && point.y <= $0[3] }
       }), let part = word.parts.first {
         markEdition(word.parts)
-        part.dispatchEvent(CustomEvent(type: "artifact-image-word", detail: canvas.serviceID, bubbles: true))
+        part.dispatchEvent(CustomEvent(type: "artifact-frame-word", detail: canvas.serviceID, bubbles: true))
         return
       }
       if let element = elementAt(point, in: links), let object {
         object.dispatchEvent(
           CustomEvent(
-            type: "artifact-image-element",
+            type: "artifact-frame-element",
             detail: stringJoin([canvas.serviceID, intToString(element.index)], separator: " "), bubbles: true))
       }
     }
@@ -5549,7 +5549,7 @@
     /// the zones of the words its markup marks as the quote's
     /// (`.tei-highlight`, `TEIView`), and of those it marks as its lemma
     /// (`data-highlight="title"`), a band a line, tinted as the text pane tints them
-    /// (`ImageView.showQuote`) for as long as its page is shown; none where
+    /// (`FrameView.showQuote`) for as long as its page is shown; none where
     /// Raw is shown or the tools linked none of its words.
     private func showQuote() {
       guard let canvas = shownCanvas else { return }

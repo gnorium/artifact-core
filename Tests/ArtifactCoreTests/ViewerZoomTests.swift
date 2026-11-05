@@ -9,15 +9,15 @@ import XCTest
 final class ViewerZoomTests: XCTestCase {
   /// 1000 by 800 pixels in a 500 by 400 surface: a fit of 0.5.
   private func surface(
-    image: (Double, Double) = (1000, 800), viewport: (Double, Double) = (500, 400)
+    frame: (Double, Double) = (1000, 800), viewport: (Double, Double) = (500, 400)
   ) -> ViewerZoom.Surface {
     var surface = ViewerZoom.Surface()
-    surface.imageWidth = image.0
-    surface.imageHeight = image.1
+    surface.frameWidth = frame.0
+    surface.frameHeight = frame.1
     surface.lay(
       viewportWidth: viewport.0, viewportHeight: viewport.1,
       fit: ViewerZoom.Surface.fit(
-        imageWidth: image.0, imageHeight: image.1, viewportWidth: viewport.0, viewportHeight: viewport.1))
+        frameWidth: frame.0, frameHeight: frame.1, viewportWidth: viewport.0, viewportHeight: viewport.1))
     return surface
   }
 
@@ -63,13 +63,13 @@ final class ViewerZoomTests: XCTestCase {
     XCTAssertTrue(surface.atFit)
   }
 
-  func testAnImageAlreadyAtItsActualSizeHasNoZoomIn() {
-    var surface = surface(image: (400, 300), viewport: (500, 400))
+  func testAFrameAlreadyAtItsActualSizeHasNoZoomIn() {
+    var surface = surface(frame: (400, 300), viewport: (500, 400))
     // 400 wide in 500: its fit is 1.
     XCTAssertEqual(surface.minZoom, 1.25, accuracy: 1e-12, "the fit is the surface's, not the page's")
     var exact = ViewerZoom.Surface()
-    exact.imageWidth = 400
-    exact.imageHeight = 300
+    exact.frameWidth = 400
+    exact.frameHeight = 300
     exact.lay(viewportWidth: 400, viewportHeight: 300, fit: 1)
     XCTAssertFalse(exact.canZoom)
     exact.zoom(to: 3, aboutX: 200, y: 150)
@@ -80,15 +80,15 @@ final class ViewerZoomTests: XCTestCase {
     XCTAssertEqual(surface.zoom, 1.25, accuracy: 1e-12)
   }
 
-  func testAZoomKeepsTheImagePointUnderThePointer() {
+  func testAZoomKeepsTheFramePointUnderThePointer() {
     var surface = surface()
     // The image point under (125, 100) before and after.
-    func imagePoint(_ s: ViewerZoom.Surface, _ x: Double, _ y: Double) -> (Double, Double) {
+    func framePoint(_ s: ViewerZoom.Surface, _ x: Double, _ y: Double) -> (Double, Double) {
       ((x - s.panX) / s.zoom, (y - s.panY) / s.zoom)
     }
-    let before = imagePoint(surface, 125, 100)
+    let before = framePoint(surface, 125, 100)
     surface.zoom(to: 0.8, aboutX: 125, y: 100)
-    let after = imagePoint(surface, 125, 100)
+    let after = framePoint(surface, 125, 100)
     XCTAssertEqual(before.0, after.0, accuracy: 1e-9)
     XCTAssertEqual(before.1, after.1, accuracy: 1e-9)
   }
@@ -104,7 +104,7 @@ final class ViewerZoomTests: XCTestCase {
     XCTAssertEqual(surface.panX, 500 - 1000, accuracy: 1e-9)
     XCTAssertEqual(surface.panY, 400 - 800, accuracy: 1e-9)
     // Smaller than the surface across: centered, no panning there.
-    var narrow = self.surface(image: (200, 800), viewport: (500, 400))
+    var narrow = self.surface(frame: (200, 800), viewport: (500, 400))
     narrow.zoom(to: 1, aboutX: 250, y: 200)
     narrow.pan(by: 300, 0)
     XCTAssertEqual(narrow.panX, (500 - 200) / 2, accuracy: 1e-9)
@@ -153,7 +153,7 @@ final class ViewerZoomTests: XCTestCase {
     XCTAssertEqual(region.maxScale, 2, accuracy: 1e-12, "the actual size over a fit of 0.5")
   }
 
-  func testWithNoImageThereIsNoRegionAndNoRoom() {
+  func testWithNoFrameThereIsNoRegionAndNoRoom() {
     let surface = ViewerZoom.Surface()
     XCTAssertNil(surface.region)
     XCTAssertFalse(surface.canZoom)
@@ -170,7 +170,7 @@ final class ViewerZoomTests: XCTestCase {
     XCTAssertEqual(ViewerZoom.Surface().scale, 1, accuracy: 1e-12, "no fit yet: at it")
   }
 
-  func testLaidAtAScaleTheNextImageKeepsTheZoomOverItsOwnFit() {
+  func testLaidAtAScaleTheNextFrameKeepsTheZoomOverItsOwnFit() {
     // A landscape page zoomed to 1.5 times its fit, then a portrait page
     // of another resolution laid at the kept scale: 1.5 times its own fit,
     // not the same pixels per image pixel.
@@ -179,9 +179,9 @@ final class ViewerZoomTests: XCTestCase {
     let kept = landscape.scale
     XCTAssertEqual(kept, 1.5, accuracy: 1e-12)
     var portrait = ViewerZoom.Surface()
-    portrait.imageWidth = 800
-    portrait.imageHeight = 1200
-    let fit = ViewerZoom.Surface.fit(imageWidth: 800, imageHeight: 1200, viewportWidth: 500, viewportHeight: 400)
+    portrait.frameWidth = 800
+    portrait.frameHeight = 1200
+    let fit = ViewerZoom.Surface.fit(frameWidth: 800, frameHeight: 1200, viewportWidth: 500, viewportHeight: 400)
     XCTAssertEqual(fit, 400.0 / 1200.0, accuracy: 1e-12)
     portrait.lay(viewportWidth: 500, viewportHeight: 400, fit: fit, scale: kept)
     XCTAssertEqual(portrait.scale, 1.5, accuracy: 1e-9)
@@ -201,8 +201,8 @@ final class ViewerZoomTests: XCTestCase {
 
   func testAScaleAtOrUnderTheFitLaysItAtTheFitAndOneTooLargeAtTheActualSize() {
     var atFit = ViewerZoom.Surface()
-    atFit.imageWidth = 1000
-    atFit.imageHeight = 800
+    atFit.frameWidth = 1000
+    atFit.frameHeight = 800
     atFit.lay(viewportWidth: 500, viewportHeight: 400, fit: 0.5, scale: 0.4)
     XCTAssertEqual(atFit.zoom, 0.5, accuracy: 1e-12, "never below the fit")
     XCTAssertTrue(atFit.atFit)
@@ -211,8 +211,8 @@ final class ViewerZoomTests: XCTestCase {
     atFit.lay(viewportWidth: 500, viewportHeight: 400, fit: 0.5, scale: nil)
     XCTAssertTrue(atFit.atFit, "none kept: the fit")
     var past = ViewerZoom.Surface()
-    past.imageWidth = 1000
-    past.imageHeight = 800
+    past.frameWidth = 1000
+    past.frameHeight = 800
     past.lay(viewportWidth: 500, viewportHeight: 400, fit: 0.5, scale: 10)
     XCTAssertEqual(past.zoom, 1, accuracy: 1e-12, "no further than the actual size")
     XCTAssertFalse(past.atFit)
@@ -223,8 +223,8 @@ final class ViewerZoomTests: XCTestCase {
     // A small image in a large surface: its fit is past its actual size, so
     // the fit is all the zoom it has, whatever scale was kept.
     var small = ViewerZoom.Surface()
-    small.imageWidth = 400
-    small.imageHeight = 300
+    small.frameWidth = 400
+    small.frameHeight = 300
     small.lay(viewportWidth: 1000, viewportHeight: 750, fit: 2.5, scale: 1.5)
     XCTAssertEqual(small.zoom, 2.5, accuracy: 1e-12)
     XCTAssertTrue(small.atFit)

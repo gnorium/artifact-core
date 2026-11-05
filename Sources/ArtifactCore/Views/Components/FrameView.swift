@@ -12,11 +12,11 @@
   /// detail the zoom asks for over it.
   ///
   /// Drawn empty. Nothing is fetched until the image is shown
-  /// (`ImageView.show(width:height:)`), and an image put away lets go of
+  /// (`FrameView.show(width:height:)`), and an image put away lets go of
   /// its tiles, so a viewer holding four hundred images reads one image at
   /// a time. ``ArtifactView`` takes images in its image slot and shows the
   /// one whose `data-service-id` is the image on screen.
-  public struct ImageView: HTMLContent {
+  public struct FrameView: HTMLContent {
     /// The image service the image reads, as a manifest names it.
     let serviceID: String
     /// Whether it is the image shown before the viewer is hydrated.
@@ -34,13 +34,13 @@
           div {
             RotatingDottedRingSectorView(ariaHidden: true)
           }
-          .class("image-spinner")
+          .class("frame-spinner")
           .data("visible", "false")
         }
-        .class("image-viewport")
+        .class("frame-viewport")
         .data("dragging", "false")
       }
-      .class("image-view")
+      .class("frame-view")
       .data("service-id", serviceID)
       .data("active", active ? "true" : "false")
       .style {
@@ -67,27 +67,27 @@
         selector("&[data-aspect-ratio='1:1']") { paddingBottom(perc(100)) }
         selector("&[data-aspect-ratio='3:4']") { paddingBottom(perc((4.0 / 3.0) * 100)) }
         selector("&[data-aspect-ratio='2:3']") { paddingBottom(perc((3.0 / 2.0) * 100)) }
-        descendant(".image-image") {
+        descendant(".frame-image") {
           display(.block)
           width(perc(100))
           height(perc(100))
         }
-        descendant(".image-image[data-has-aspect-ratio='true']") {
+        descendant(".frame-image[data-has-aspect-ratio='true']") {
           position(.absolute)
           insetBlockStart(0)
           insetInlineStart(0)
         }
-        descendant(".image-image[data-object-fit='cover']") { objectFit(.cover) }
-        descendant(".image-image[data-object-fit='contain']") { objectFit(.contain) }
-        descendant(".image-image[data-object-fit='fill']") { objectFit(.fill) }
-        descendant(".image-image[data-object-fit='none']") { objectFit(.none) }
-        descendant(".image-image[data-object-fit='scale-down']") { objectFit(.scaleDown) }
-        descendant(".image-image[data-object-position='center']") { objectPosition(.center) }
-        descendant(".image-image[data-object-position='top']") { objectPosition(.top) }
-        descendant(".image-image[data-object-position='bottom']") { objectPosition(.bottom) }
-        descendant(".image-image[data-object-position='left']") { objectPosition(.left) }
-        descendant(".image-image[data-object-position='right']") { objectPosition(.right) }
-        descendant(".image-placeholder") {
+        descendant(".frame-image[data-object-fit='cover']") { objectFit(.cover) }
+        descendant(".frame-image[data-object-fit='contain']") { objectFit(.contain) }
+        descendant(".frame-image[data-object-fit='fill']") { objectFit(.fill) }
+        descendant(".frame-image[data-object-fit='none']") { objectFit(.none) }
+        descendant(".frame-image[data-object-fit='scale-down']") { objectFit(.scaleDown) }
+        descendant(".frame-image[data-object-position='center']") { objectPosition(.center) }
+        descendant(".frame-image[data-object-position='top']") { objectPosition(.top) }
+        descendant(".frame-image[data-object-position='bottom']") { objectPosition(.bottom) }
+        descendant(".frame-image[data-object-position='left']") { objectPosition(.left) }
+        descendant(".frame-image[data-object-position='right']") { objectPosition(.right) }
+        descendant(".frame-placeholder") {
           position(.absolute)
           insetBlockStart(0)
           insetInlineStart(0)
@@ -102,7 +102,7 @@
         }
         // Explicit flex(1) and a zero minimum height make flex size it to
         // the room it has, not to the image.
-        descendant(".image-viewport") {
+        descendant(".frame-viewport") {
           width(perc(100))
           flex(1)
           minHeight(0)
@@ -111,9 +111,9 @@
           cursor(.grab)
           userSelect(.none)
         }
-        descendant(".image-viewport[data-clickable='true']") { cursor(.pointer) }
-        descendant(".image-viewport[data-dragging='true']") { cursor(.grabbing) }
-        descendant(".image-spinner") {
+        descendant(".frame-viewport[data-clickable='true']") { cursor(.pointer) }
+        descendant(".frame-viewport[data-dragging='true']") { cursor(.grabbing) }
+        descendant(".frame-spinner") {
           display(.none)
           position(.absolute)
           inset(0)
@@ -122,7 +122,7 @@
           justifyContent(.center)
           backgroundColor(backgroundColorBase)
         }
-        descendant(".image-spinner[data-visible='true']") { display(.flex) }
+        descendant(".frame-spinner[data-visible='true']") { display(.flex) }
         // The tile layer is the viewport's own size, user units its CSS
         // pixels, and clips what it draws: the tiles' group carries the
         // pan and zoom and is itself clipped to the image's rectangle
@@ -130,35 +130,35 @@
         // not composited (no `will-change`): WebKit left strips of the
         // image's edge at earlier positions on a composited SVG group as
         // the zoom changed, and a layer of that size is its own cost.
-        descendant(".image-tile-surface") {
+        descendant(".frame-tile-surface") {
           position(.absolute)
           inset(0)
           width(perc(100))
           height(perc(100))
           overflow(.hidden)
         }
-        descendant(".image-tile-compositor") {
+        descendant(".frame-tile-compositor") {
           transformOrigin(px(0), px(0))
         }
         // Drawing a crop box: a crosshair, not a hand.
-        descendant(".image-viewport[data-cropping='true']") { cursor(.crosshair) }
+        descendant(".frame-viewport[data-cropping='true']") { cursor(.crosshair) }
         // A crop box over the image, and the region the markup names where
         // the caret or the pointer is: the house ring (two border widths, one
         // color), the image seen through it. The ring stands wholly outside
         // the box (user, 2026-10-31: Hamlet Q1's title page, the box of "for"
         // drawn on the f's foot): a zone tight to its ink keeps its ink clear,
         // the ring's inner edge on the zone's edge.
-        selector("& .image-crop", "& .image-region") {
+        selector("& .frame-crop", "& .frame-region") {
           position(.absolute)
           boxSizing(.borderBox)
           CSS.Property("outline", "calc(2 * \(borderWidthBase.value)) solid \(colorBlue.value)")
           pointerEvents(.none)
         }
-        descendant(".image-crop") { zIndex(5) }
+        descendant(".frame-crop") { zIndex(5) }
         // An encoded zone on the image (copy evidence, note, signature, figure)
         // outlined in neutral borderColorBase when hovered on the image;
         // nothing is drawn at rest.
-        descendant(".image-element") {
+        descendant(".frame-element") {
           position(.absolute)
           zIndex(4)
           boxSizing(.borderBox)
@@ -170,7 +170,7 @@
         // either scheme. Blue (user, 2026-10-29): yellow is Find's alone,
         // and a pointed word in yellow read as a match; the edition's word
         // wears the same blue at the same opacity.
-        descendant(".image-word") {
+        descendant(".frame-word") {
           position(.absolute)
           zIndex(1)
           backgroundColor(colorBlue)
@@ -183,22 +183,22 @@
         // magenta one over it, multiplied into the scan so the print reads
         // whole through them; no line (blue is the pointed word's, yellow
         // Find's).
-        selector("& .image-quote", "& .image-lemma") {
+        selector("& .frame-quote", "& .frame-lemma") {
           position(.absolute)
           zIndex(1)
           mixBlendMode(CSS.BlendMode.multiply)
           pointerEvents(.none)
         }
-        descendant(".image-quote") {
+        descendant(".frame-quote") {
           backgroundColor(backgroundColorVioletSubtle)
         }
-        descendant(".image-lemma") {
+        descendant(".frame-lemma") {
           zIndex(2)
           backgroundColor(backgroundColorMagentaSubtle)
         }
         // A selected form's bands ringed (user, 2026-11-03): a 2px line
         // round each, drawn on it, no tint of its own.
-        descendant(".image-lemma-selected") {
+        descendant(".frame-lemma-selected") {
           position(.absolute)
           zIndex(3)
           pointerEvents(.none)
@@ -206,25 +206,25 @@
           borderRadius(borderRadiusMinimal)
           boxSizing(.borderBox)
         }
-        descendant(".image-lemma-selected[hidden]") { display(.none) }
-        descendant(".image-region") { zIndex(4) }
+        descendant(".frame-lemma-selected[hidden]") { display(.none) }
+        descendant(".frame-region") { zIndex(4) }
         // The 0–1000 space drawn over the image while a region is: lines
         // every 100, 50, 10, 5 and 1, each finer level fainter and drawn
         // only once its lines stand 4px apart on screen (its gradients set
         // as the image is scaled), each 100 named along the top and the left
         // edges. Above the dim, under the region's ring.
-        selector("& .image-grid", "& .image-grid-lines") {
+        selector("& .frame-grid", "& .frame-grid-lines") {
           position(.absolute)
           zIndex(3)
           pointerEvents(.none)
         }
         // The pointer's place in the 0–1000 space, beside it.
-        descendant(".image-readout") {
+        descendant(".frame-readout") {
           position(.absolute)
           zIndex(6)
           pointerEvents(.none)
         }
-        selector("& .image-grid-label", "& .image-readout") {
+        selector("& .frame-grid-label", "& .frame-readout") {
           position(.absolute)
           paddingInline(spacing2)
           fontSize(fontSizeMedium16)
@@ -236,11 +236,11 @@
         // Under twice its fit (`gridLabelsFrom`), the edges' names put away:
         // there they crowd the image, the pointer's place names a point
         // (user, 2026-10-28).
-        selector("& .image-grid[data-labels='off'] .image-grid-label") { display(.none) }
+        selector("& .frame-grid[data-labels='off'] .frame-grid-label") { display(.none) }
         // Everything but the region dimmed, as an image editor marks a
         // selection: a backdrop over the viewport, the region (and its ring)
         // cut out of it.
-        descendant(".image-region-dim") {
+        descendant(".frame-region-dim") {
           position(.absolute)
           inset(0)
           zIndex(2)
@@ -250,7 +250,7 @@
         }
         // A box's corners, each a handle a drag resizes it by (the box's
         // body moves it).
-        descendant(".image-crop-handle") {
+        descendant(".frame-crop-handle") {
           position(.absolute)
           width(spacing8)
           height(spacing8)
@@ -259,12 +259,12 @@
           border(borderWidthBase, .solid, colorBlue)
           transform(translate(perc(-50), perc(-50)))
         }
-        descendant(".image-crop-handle[data-corner='nw']") { left(px(0)); top(px(0)) }
-        descendant(".image-crop-handle[data-corner='ne']") { left(perc(100)); top(px(0)) }
-        descendant(".image-crop-handle[data-corner='sw']") { left(px(0)); top(perc(100)) }
-        descendant(".image-crop-handle[data-corner='se']") { left(perc(100)); top(perc(100)) }
+        descendant(".frame-crop-handle[data-corner='nw']") { left(px(0)); top(px(0)) }
+        descendant(".frame-crop-handle[data-corner='ne']") { left(perc(100)); top(px(0)) }
+        descendant(".frame-crop-handle[data-corner='sw']") { left(px(0)); top(perc(100)) }
+        descendant(".frame-crop-handle[data-corner='se']") { left(perc(100)); top(perc(100)) }
         // A polygon zone's vertices, each a handle a drag moves by.
-        descendant(".image-vertex") {
+        descendant(".frame-vertex") {
           position(.absolute)
           zIndex(7)
           width(spacing8)
@@ -275,23 +275,23 @@
           transform(translate(perc(-50), perc(-50)))
           pointerEvents(.none)
         }
-        descendant(".image-viewport[data-crop-hover='vertex']") { cursor(.move) }
-        descendant(".image-viewport[data-crop-hover='move']") { cursor(.move) }
-        selector("& .image-viewport[data-crop-hover='nw']", "& .image-viewport[data-crop-hover='se']") {
+        descendant(".frame-viewport[data-crop-hover='vertex']") { cursor(.move) }
+        descendant(".frame-viewport[data-crop-hover='move']") { cursor(.move) }
+        selector("& .frame-viewport[data-crop-hover='nw']", "& .frame-viewport[data-crop-hover='se']") {
           cursor(.nwseResize)
         }
-        selector("& .image-viewport[data-crop-hover='ne']", "& .image-viewport[data-crop-hover='sw']") {
+        selector("& .frame-viewport[data-crop-hover='ne']", "& .frame-viewport[data-crop-hover='sw']") {
           cursor(.neswResize)
         }
         selector(
-          "& .image-crop[hidden]", "& .image-element[hidden]", "& .image-word[hidden]", "& .image-quote[hidden]", "& .image-lemma[hidden]",
-          "& .image-region[hidden]", "& .image-region-dim[hidden]", "& .image-grid[hidden]",
-          "& .image-readout[hidden]", "& .image-vertex[hidden]"
+          "& .frame-crop[hidden]", "& .frame-element[hidden]", "& .frame-word[hidden]", "& .frame-quote[hidden]", "& .frame-lemma[hidden]",
+          "& .frame-region[hidden]", "& .frame-region-dim[hidden]", "& .frame-grid[hidden]",
+          "& .frame-readout[hidden]", "& .frame-vertex[hidden]"
         ) {
           display(.none)
         }
-        descendant(".image-tile-image[data-loaded='false']") { opacity(0) }
-        descendant(".image-tile-image[data-loaded='true']") { opacity(1) }
+        descendant(".frame-tile-image[data-loaded='false']") { opacity(0) }
+        descendant(".frame-tile-image[data-loaded='true']") { opacity(1) }
       }
     }
   }
@@ -307,7 +307,7 @@
 
   /// One image, read: its tiles, its zoom and pan, the gestures that change
   /// them. Made by the viewer the first time the image is shown.
-  final class ImageView: @unchecked Sendable {
+  final class FrameView: @unchecked Sendable {
     let root: DOM.Element
     let serviceID: String
     private var viewport: DOM.Element?
@@ -318,13 +318,13 @@
     /// this reader has always used. It never zooms out past its fit (user,
     /// 2026-11-01).
     private var surface = ViewerZoom.Surface()
-    private var imageW: Int {
-      get { Int(surface.imageWidth) }
-      set { surface.imageWidth = Double(newValue) }
+    private var frameW: Int {
+      get { Int(surface.frameWidth) }
+      set { surface.frameWidth = Double(newValue) }
     }
-    private var imageH: Int {
-      get { Int(surface.imageHeight) }
-      set { surface.imageHeight = Double(newValue) }
+    private var frameH: Int {
+      get { Int(surface.frameHeight) }
+      set { surface.frameHeight = Double(newValue) }
     }
     private var zoom: Double {
       get { surface.zoom }
@@ -381,14 +381,14 @@
     /// image is in the text's terms (`ArtifactView`'s sync); nil before it
     /// has them.
     var sizing: (width: Double, height: Double, fit: Double, viewportWidth: Double, viewportHeight: Double)? {
-      guard imageW > 0, imageH > 0, minZoom > 0, viewportW > 0 else { return nil }
-      return (Double(imageW), Double(imageH), minZoom, viewportW, viewportH)
+      guard frameW > 0, frameH > 0, minZoom > 0, viewportW > 0 else { return nil }
+      return (Double(frameW), Double(frameH), minZoom, viewportW, viewportH)
     }
 
     /// The image at `region`: its zoom over its fit, clamped, the point at
     /// its middle. Told to no one: it is the text's move, matched.
     func show(region: ViewerZoom.Region) {
-      guard imageW > 0, imageH > 0 else { return }
+      guard frameW > 0, frameH > 0 else { return }
       surface.show(region: region)
       // Kept for the session as its own zoom is: a text zoomed out to its
       // fit leaves the image at its fit for the next page too, never at the
@@ -398,14 +398,14 @@
       updateTransform()
     }
 
-    /// The image's zoom kept for the session (`ViewerZoom.imageKey`): "fit",
+    /// The image's zoom kept for the session (`ViewerZoom.frameKey`): "fit",
     /// or its zoom over its fit, which the next image shown lays at
     /// (`fitToViewport`) whatever its size or shape (user, 2026-10-30).
     /// Every zoom the reader makes keeps it—the image's own, the overlay's,
     /// and the text's matched onto it—so a turn never zooms back to a zoom
     /// the reader left.
     private func keepZoom() {
-      sessionStorage.setItem(ViewerZoom.imageKey, atFit ? "fit" : doubleToString(surface.scale))
+      sessionStorage.setItem(ViewerZoom.frameKey, atFit ? "fit" : doubleToString(surface.scale))
     }
 
     private func tellRegion() {
@@ -482,9 +482,9 @@
     init(root: DOM.Element) {
       self.root = root
       serviceID = root.dataset["service-id"] ?? ""
-      let vp = root.querySelector(".image-viewport")
+      let vp = root.querySelector(".frame-viewport")
       viewport = vp
-      if let vp, let spinner = root.querySelector(".image-spinner") {
+      if let vp, let spinner = root.querySelector(".frame-spinner") {
         compositor = TileCompositor(viewport: vp, spinner: spinner)
       }
       // Whenever the viewport resizes (a sidebar toggled, the window
@@ -504,8 +504,8 @@
         surface.resize(
           viewportWidth: w, viewportHeight: h,
           fit: ViewerZoom.Surface.fit(
-            imageWidth: surface.imageWidth, imageHeight: surface.imageHeight, viewportWidth: w, viewportHeight: h))
-        guard imageW > 0, imageH > 0 else { return }
+            frameWidth: surface.frameWidth, frameHeight: surface.frameHeight, viewportWidth: w, viewportHeight: h))
+        guard frameW > 0, frameH > 0 else { return }
         updateTransform()
       }
       setupGestures()
@@ -515,14 +515,14 @@
     /// and the page drew none for.
     static func make(serviceID: String) -> DOM.Element {
       let canvas = document.createElement(.div)
-      canvas.className = "image-view"
+      canvas.className = "frame-view"
       canvas.setAttribute(data("service-id"), serviceID)
       canvas.setAttribute(data("active"), "false")
       let viewport = document.createElement(.div)
-      viewport.className = "image-viewport"
+      viewport.className = "frame-viewport"
       viewport.setAttribute(data("dragging"), "false")
       let spinner = document.createElement(.div)
-      spinner.className = "image-spinner"
+      spinner.className = "frame-spinner"
       spinner.setAttribute(data("visible"), "false")
       spinner.appendChild(RotatingDottedRingSectorFactory.createElement())
       viewport.appendChild(spinner)
@@ -536,8 +536,8 @@
     /// was sent)—the service where none loads only as
     /// `live` lets it, else no image (`onNoImage`).
     func show(width: Int, height: Int, images: [String] = [], live: Bool = true) {
-      imageW = width
-      imageH = height
+      frameW = width
+      frameH = height
       fitToViewport()
       compositor?.setCanvas(serviceID: serviceID, width: width, height: height, images: images, live: live)
       updateTransform()
@@ -556,7 +556,7 @@
     /// markup's pane put away): at its fit, or the session's zoom over it
     /// (`fitToViewport`).
     func refit() {
-      guard imageW > 0, imageH > 0 else { return }
+      guard frameW > 0, frameH > 0 else { return }
       fitToViewport()
       updateTransform()
     }
@@ -600,9 +600,9 @@
       surface.lay(
         viewportWidth: width, viewportHeight: height,
         fit: ViewerZoom.Surface.fit(
-          imageWidth: surface.imageWidth, imageHeight: surface.imageHeight, viewportWidth: width,
+          frameWidth: surface.frameWidth, frameHeight: surface.frameHeight, viewportWidth: width,
           viewportHeight: height),
-        scale: parseDouble(sessionStorage.getItem(ViewerZoom.imageKey) ?? ""))
+        scale: parseDouble(sessionStorage.getItem(ViewerZoom.frameKey) ?? ""))
     }
 
     /// Whether the reader's overlay holds the scan still (user,
@@ -637,9 +637,9 @@
     var isAtFit: Bool { atFit }
 
     var spot: (centerX: Double, centerY: Double, zoom: Double)? {
-      guard imageW > 0, imageH > 0, zoom > 0, viewportW > 0 else { return nil }
+      guard frameW > 0, frameH > 0, zoom > 0, viewportW > 0 else { return nil }
       return (
-        (viewportW / 2 - panX) / (Double(imageW) * zoom), (viewportH / 2 - panY) / (Double(imageH) * zoom), zoom
+        (viewportW / 2 - panX) / (Double(frameW) * zoom), (viewportH / 2 - panY) / (Double(frameH) * zoom), zoom
       )
     }
 
@@ -649,10 +649,10 @@
     /// pixels per image pixel) and its own size in pixels; nil before it
     /// has one.
     var placement: (x: Double, y: Double, panX: Double, panY: Double, zoom: Double, width: Double, height: Double)? {
-      guard imageW > 0, imageH > 0, zoom > 0, let box = viewport?.getBoundingClientRect(), box.width > 0 else {
+      guard frameW > 0, frameH > 0, zoom > 0, let box = viewport?.getBoundingClientRect(), box.width > 0 else {
         return nil
       }
-      return (box.x, box.y, panX, panY, zoom, Double(imageW), Double(imageH))
+      return (box.x, box.y, panX, panY, zoom, Double(frameW), Double(frameH))
     }
 
     /// The overlay's zoom, the image's (user, 2026-10-28): by `factor`
@@ -660,7 +660,7 @@
     /// the edition laid on it following. The overlay holds the image's own
     /// gestures (`locked`); this is the overlay's.
     func zoomInOverlay(by factor: Double, clientX: Double, clientY: Double) {
-      guard imageW > 0, imageH > 0, factor > 0, let box = viewport?.getBoundingClientRect() else { return }
+      guard frameW > 0, frameH > 0, factor > 0, let box = viewport?.getBoundingClientRect() else { return }
       // The edition rides on it, and the edition goes no smaller than its
       // fit: the overlay's image stops at its own.
       surface.zoom(to: max(minZoom, zoom * factor), aboutX: clientX - box.x, y: clientY - box.y)
@@ -675,7 +675,7 @@
     /// the viewport's middle, and the fit kept for the session (user,
     /// 2026-10-30)—where `refit` lays it at the session's kept zoom again.
     func fitInOverlay() {
-      guard imageW > 0, imageH > 0 else { return }
+      guard frameW > 0, frameH > 0 else { return }
       surface.zoom(to: minZoom, aboutX: viewportW / 2, y: viewportH / 2)
       keepZoom()
       updateTransform()
@@ -683,7 +683,7 @@
 
     /// The overlay's pan, the image's, by `dx`, `dy` (the window's pixels).
     func panInOverlay(by dx: Double, _ dy: Double) {
-      guard imageW > 0, imageH > 0 else { return }
+      guard frameW > 0, frameH > 0 else { return }
       surface.pan(by: dx, dy)
       updateTransform()
     }
@@ -701,17 +701,17 @@
     /// it zooms into the text's place as it fades out; going off, back into
     /// its pane as it fades in.
     func blend(own: (centerX: Double, centerY: Double, zoom: Double), zone: [Double], target: [Double], progress: Double) {
-      guard zone.count == 8, target.count == 4, imageW > 0, imageH > 0,
+      guard zone.count == 8, target.count == 4, frameW > 0, frameH > 0,
         let box = viewport?.getBoundingClientRect(), box.width > 0, box.height > 0
       else { return }
       blending = true
       viewportW = box.width
       viewportH = box.height
-      minZoom = min(viewportW / Double(imageW), viewportH / Double(imageH))
-      let x0 = zone[0] / Self.zoneExtent * Double(imageW)
-      let y0 = zone[1] / Self.zoneExtent * Double(imageH)
-      let x1 = zone[2] / Self.zoneExtent * Double(imageW)
-      let y1 = zone[3] / Self.zoneExtent * Double(imageH)
+      minZoom = min(viewportW / Double(frameW), viewportH / Double(frameH))
+      let x0 = zone[0] / Self.zoneExtent * Double(frameW)
+      let y0 = zone[1] / Self.zoneExtent * Double(frameH)
+      let x1 = zone[2] / Self.zoneExtent * Double(frameW)
+      let y1 = zone[3] / Self.zoneExtent * Double(frameH)
       let span = ((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)).squareRoot()
       guard span > 0 else { return }
       let laidZoom = (target[2] - target[0]) / span
@@ -722,7 +722,7 @@
       // image then stops, and it jumped there once the overlay was off
       // (user, 2026-10-26).
       let ownZoom = max(minZoom, min(max(maxZoom, own.zoom), own.zoom))
-      let width = Double(imageW) * ownZoom, height = Double(imageH) * ownZoom
+      let width = Double(frameW) * ownZoom, height = Double(frameH) * ownZoom
       var ownX = viewportW / 2 - own.centerX * width
       var ownY = viewportH / 2 - own.centerY * height
       ownX = width <= viewportW ? (viewportW - width) / 2 : min(0, max(viewportW - width, ownX))
@@ -745,11 +745,11 @@
     /// overlay as it goes off (user, 2026-10-14). Told to no one: it is the
     /// text's spot, matched.
     func showSpot(centerX: Double, centerY: Double, zoom value: Double) {
-      guard imageW > 0, imageH > 0, minZoom > 0 else { return }
+      guard frameW > 0, frameH > 0, minZoom > 0 else { return }
       zoom = max(minZoom, min(max(maxZoom, value), value))
       atFit = surface.isFit(zoom)
-      panX = viewportW / 2 - centerX * Double(imageW) * zoom
-      panY = viewportH / 2 - centerY * Double(imageH) * zoom
+      panX = viewportW / 2 - centerX * Double(frameW) * zoom
+      panY = viewportH / 2 - centerY * Double(frameH) * zoom
       clampPan()
       updateTransform()
     }
@@ -764,15 +764,15 @@
     /// them.
     func showWord(_ boxes: [[Double]]) {
       let boxes = boxes.filter { $0.count == 4 }
-      guard !boxes.isEmpty, imageW > 0, imageH > 0 else {
+      guard !boxes.isEmpty, frameW > 0, frameH > 0 else {
         wordBoxes = []
         drawWord()
         return
       }
       wordBoxes = boxes.map { box in
         [
-          box[0] / Self.zoneExtent * Double(imageW), box[1] / Self.zoneExtent * Double(imageH),
-          box[2] / Self.zoneExtent * Double(imageW), box[3] / Self.zoneExtent * Double(imageH),
+          box[0] / Self.zoneExtent * Double(frameW), box[1] / Self.zoneExtent * Double(frameH),
+          box[2] / Self.zoneExtent * Double(frameW), box[3] / Self.zoneExtent * Double(frameH),
         ]
       }
       // Into view: each axis moved by the least that shows the word's
@@ -809,7 +809,7 @@
     private var wordBands: [DOM.Element] = []
 
     private func drawWord() {
-      while wordBands.count < wordBoxes.count, let band = overlay("image-word") { wordBands.append(band) }
+      while wordBands.count < wordBoxes.count, let band = overlay("frame-word") { wordBands.append(band) }
       for (index, band) in wordBands.enumerated() {
         guard index < wordBoxes.count else {
           band.setAttribute(.hidden, "")
@@ -845,9 +845,9 @@
     private var selectedBands: [DOM.Element] = []
 
     private func drawQuote() {
-      while quoteBands.count < quoteBoxes.count, let band = overlay("image-quote") { quoteBands.append(band) }
-      while lemmaBands.count < lemmaBoxes.count, let band = overlay("image-lemma") { lemmaBands.append(band) }
-      while selectedBands.count < selectedBoxes.count, let band = overlay("image-lemma-selected") {
+      while quoteBands.count < quoteBoxes.count, let band = overlay("frame-quote") { quoteBands.append(band) }
+      while lemmaBands.count < lemmaBoxes.count, let band = overlay("frame-lemma") { lemmaBands.append(band) }
+      while selectedBands.count < selectedBoxes.count, let band = overlay("frame-lemma-selected") {
         selectedBands.append(band)
       }
       placeTints(quoteBands, at: quoteBoxes)
@@ -858,13 +858,13 @@
     /// Tints laid over their zones, the ones past them hidden.
     private func placeTints(_ bands: [DOM.Element], at boxes: [[Double]]) {
       for (index, band) in bands.enumerated() {
-        guard index < boxes.count, imageW > 0, imageH > 0 else {
+        guard index < boxes.count, frameW > 0, frameH > 0 else {
           band.setAttribute(.hidden, "")
           continue
         }
         let box = boxes[index]
-        let scaleX = Double(imageW) / Self.zoneExtent
-        let scaleY = Double(imageH) / Self.zoneExtent
+        let scaleX = Double(frameW) / Self.zoneExtent
+        let scaleY = Double(frameH) / Self.zoneExtent
         place(
           band, x: box[0] * scaleX, y: box[1] * scaleY, width: (box[2] - box[0]) * scaleX,
           height: (box[3] - box[1]) * scaleY)
@@ -874,11 +874,11 @@
     /// A point of the viewport in the 0–1000 space over the image; nil off
     /// it or before the image has a size.
     func spacePoint(clientX: Double, clientY: Double) -> (x: Double, y: Double)? {
-      guard imageW > 0, imageH > 0, zoom > 0, let rect = viewport?.getBoundingClientRect() else { return nil }
+      guard frameW > 0, frameH > 0, zoom > 0, let rect = viewport?.getBoundingClientRect() else { return nil }
       let x = (clientX - rect.x - panX) / zoom
       let y = (clientY - rect.y - panY) / zoom
-      guard x >= 0, y >= 0, x <= Double(imageW), y <= Double(imageH) else { return nil }
-      return (x / Double(imageW) * Self.zoneExtent, y / Double(imageH) * Self.zoneExtent)
+      guard x >= 0, y >= 0, x <= Double(frameW), y <= Double(frameH) else { return nil }
+      return (x / Double(frameW) * Self.zoneExtent, y / Double(frameH) * Self.zoneExtent)
     }
 
     /// The space a zone's corners are in, over the whole image.
@@ -912,14 +912,14 @@
     }
 
     private func drawElement() {
-      guard elementW > 0, elementH > 0, imageW > 0, imageH > 0 else {
+      guard elementW > 0, elementH > 0, frameW > 0, frameH > 0 else {
         elementBox?.setAttribute(.hidden, "")
         return
       }
-      if case .none = elementBox { elementBox = overlay("image-element") }
+      if case .none = elementBox { elementBox = overlay("frame-element") }
       guard let box = elementBox else { return }
-      let scaleX = Double(imageW) / 1000
-      let scaleY = Double(imageH) / 1000
+      let scaleX = Double(frameW) / 1000
+      let scaleY = Double(frameH) / 1000
       place(box, x: elementX * scaleX, y: elementY * scaleY, width: elementW * scaleX, height: elementH * scaleY)
     }
 
@@ -959,11 +959,11 @@
       regionH = Double(height)
       editing = true
       // Mid-drag, the box is the drag's.
-      if mouseMoveListener < 0, imageW > 0, imageH > 0 {
-        cropX = regionX * Double(imageW) / 1000
-        cropY = regionY * Double(imageH) / 1000
-        cropW = regionW * Double(imageW) / 1000
-        cropH = regionH * Double(imageH) / 1000
+      if mouseMoveListener < 0, frameW > 0, frameH > 0 {
+        cropX = regionX * Double(frameW) / 1000
+        cropY = regionY * Double(frameH) / 1000
+        cropW = regionW * Double(frameW) / 1000
+        cropH = regionH * Double(frameH) / 1000
       }
       drawCrop()
       drawRegion()
@@ -983,7 +983,7 @@
     }
 
     private func drawRegion() {
-      guard regionW > 0, regionH > 0, imageW > 0, imageH > 0 else {
+      guard regionW > 0, regionH > 0, frameW > 0, frameH > 0 else {
         regionBox?.setAttribute(.hidden, "")
         regionDim?.setAttribute(.hidden, "")
         grid?.setAttribute(.hidden, "")
@@ -992,17 +992,17 @@
         return
       }
       if case .none = grid { grid = gridElement() }
-      if case .none = gridLines { gridLines = overlay("image-grid-lines") }
+      if case .none = gridLines { gridLines = overlay("frame-grid-lines") }
       if let grid {
-        place(grid, x: 0, y: 0, width: Double(imageW), height: Double(imageH))
+        place(grid, x: 0, y: 0, width: Double(frameW), height: Double(frameH))
         grid.setAttribute(data("labels"), zoom < minZoom * Self.gridLabelsFrom ? "off" : "on")
       }
       if let gridLines { drawGridLevels(gridLines) }
-      if case .none = regionDim { regionDim = overlay("image-region-dim") }
-      if case .none = regionBox { regionBox = overlay("image-region") }
+      if case .none = regionDim { regionDim = overlay("frame-region-dim") }
+      if case .none = regionBox { regionBox = overlay("frame-region") }
       guard let box = regionBox else { return }
-      let scaleX = Double(imageW) / 1000
-      let scaleY = Double(imageH) / 1000
+      let scaleX = Double(frameW) / 1000
+      let scaleY = Double(frameH) / 1000
       let x = regionX * scaleX
       let y = regionY * scaleY
       let w = regionW * scaleX
@@ -1028,14 +1028,14 @@
     /// The 0–1000 grid, laid out once in its own percentages: placed over
     /// the image, it scales with it.
     private func gridElement() -> DOM.Element? {
-      guard let grid = overlay("image-grid") else { return nil }
+      guard let grid = overlay("frame-grid") else { return nil }
       var value = 0
       while value <= 1000 {
         for axis in ["x", "y"] {
           // The 0 corner is named once, on the top edge.
           if value == 0, stringEquals(axis, "y") { continue }
           let label = document.createElement(.div)
-          label.className = "image-grid-label"
+          label.className = "frame-grid-label"
           label.setAttribute(data("axis"), axis)
           label.textContent = intToString(value)
           // Centered on its line, kept inside the image at the ends.
@@ -1068,8 +1068,8 @@
     /// thousands of pixels, the browser left the lines out at some zooms).
     /// Named on the layer (`data-levels`, "100 50 10") for whoever reads it.
     private func drawGridLevels(_ lines: DOM.Element) {
-      let shownW = Double(imageW) * zoom
-      let shownH = Double(imageH) * zoom
+      let shownW = Double(frameW) * zoom
+      let shownH = Double(frameH) * zoom
       let left = max(0, panX)
       let top = max(0, panY)
       let right = min(viewportW, panX + shownW)
@@ -1116,22 +1116,22 @@
     /// The pointer's place in the 0–1000 space beside it, while a region
     /// is drawn and the pointer is on the image.
     private func showReadout(clientX: Double, clientY: Double) {
-      guard regionW > 0, regionH > 0, imageW > 0, imageH > 0, let rect = viewport?.getBoundingClientRect() else {
+      guard regionW > 0, regionH > 0, frameW > 0, frameH > 0, let rect = viewport?.getBoundingClientRect() else {
         readout?.setAttribute(.hidden, "")
         return
       }
       let x = (clientX - rect.x - panX) / zoom
       let y = (clientY - rect.y - panY) / zoom
-      guard x >= 0, y >= 0, x <= Double(imageW), y <= Double(imageH) else {
+      guard x >= 0, y >= 0, x <= Double(frameW), y <= Double(frameH) else {
         readout?.setAttribute(.hidden, "")
         return
       }
-      if case .none = readout { readout = overlay("image-readout") }
+      if case .none = readout { readout = overlay("frame-readout") }
       guard let readout else { return }
       readout.textContent = stringJoin(
         [
-          intToString(Int((x / Double(imageW) * 1000).rounded())), ", ",
-          intToString(Int((y / Double(imageH) * 1000).rounded())),
+          intToString(Int((x / Double(frameW) * 1000).rounded())), ", ",
+          intToString(Int((y / Double(frameH) * 1000).rounded())),
         ], separator: "")
       readout.removeAttribute(.hidden)
       readout.style.setProperty("left", pixels(clientX - rect.x + 12))
@@ -1193,11 +1193,11 @@
 
     /// The box in the 0–1000 space, rounded, kept inside it.
     private var cropBox1000: (x: Int, y: Int, w: Int, h: Int) {
-      guard imageW > 0, imageH > 0 else { return (0, 0, 0, 0) }
-      let x = max(0, min(999, Int((cropX / Double(imageW) * 1000).rounded())))
-      let y = max(0, min(999, Int((cropY / Double(imageH) * 1000).rounded())))
-      let w = max(1, min(1000 - x, Int((cropW / Double(imageW) * 1000).rounded())))
-      let h = max(1, min(1000 - y, Int((cropH / Double(imageH) * 1000).rounded())))
+      guard frameW > 0, frameH > 0 else { return (0, 0, 0, 0) }
+      let x = max(0, min(999, Int((cropX / Double(frameW) * 1000).rounded())))
+      let y = max(0, min(999, Int((cropY / Double(frameH) * 1000).rounded())))
+      let w = max(1, min(1000 - x, Int((cropW / Double(frameW) * 1000).rounded())))
+      let h = max(1, min(1000 - y, Int((cropH / Double(frameH) * 1000).rounded())))
       return (x, y, w, h)
     }
 
@@ -1209,17 +1209,17 @@
     }
 
     private func drawCrop() {
-      guard cropW > 0, cropH > 0, imageW > 0 else {
+      guard cropW > 0, cropH > 0, frameW > 0 else {
         cropBox?.setAttribute(.hidden, "")
         return
       }
       // The box's element, made the first time a box is drawn, its corners
       // handles.
       if case .none = cropBox {
-        cropBox = overlay("image-crop")
+        cropBox = overlay("frame-crop")
         for corner in ["nw", "ne", "sw", "se"] {
           let handle = document.createElement(.div)
-          handle.className = "image-crop-handle"
+          handle.className = "frame-crop-handle"
           handle.setAttribute(data("corner"), corner)
           cropBox?.appendChild(handle)
         }
@@ -1231,13 +1231,13 @@
     /// The vertices' handles over the image, one a vertex, placed as the
     /// image is panned and zoomed; the spare ones hidden.
     private func drawVertices() {
-      guard editing, imageW > 0, imageH > 0 else {
+      guard editing, frameW > 0, frameH > 0 else {
         for handle in vertexHandles { handle.setAttribute(.hidden, "") }
         return
       }
       let count = vertices.count / 2
       while vertexHandles.count < count {
-        guard let handle = overlay("image-vertex") else { break }
+        guard let handle = overlay("frame-vertex") else { break }
         vertexHandles.append(handle)
       }
       for (index, handle) in vertexHandles.enumerated() {
@@ -1246,15 +1246,15 @@
           continue
         }
         handle.removeAttribute(.hidden)
-        handle.style.setProperty("left", pixels(panX + Double(vertices[index * 2]) / 1000 * Double(imageW) * zoom))
-        handle.style.setProperty("top", pixels(panY + Double(vertices[index * 2 + 1]) / 1000 * Double(imageH) * zoom))
+        handle.style.setProperty("left", pixels(panX + Double(vertices[index * 2]) / 1000 * Double(frameW) * zoom))
+        handle.style.setProperty("top", pixels(panY + Double(vertices[index * 2 + 1]) / 1000 * Double(frameH) * zoom))
       }
     }
 
     /// The vertex a point of the viewport is on (within a handle's reach),
     /// or -1.
     private func vertexAt(clientX: Double, clientY: Double) -> Int {
-      guard editing, imageW > 0, imageH > 0, let rect = viewport?.getBoundingClientRect() else { return -1 }
+      guard editing, frameW > 0, frameH > 0, let rect = viewport?.getBoundingClientRect() else { return -1 }
       let x = clientX - rect.x
       let y = clientY - rect.y
       let reach = 8.0
@@ -1262,8 +1262,8 @@
       var nearest = reach * reach
       var index = 0
       while index * 2 + 1 < vertices.count {
-        let vx = panX + Double(vertices[index * 2]) / 1000 * Double(imageW) * zoom
-        let vy = panY + Double(vertices[index * 2 + 1]) / 1000 * Double(imageH) * zoom
+        let vx = panX + Double(vertices[index * 2]) / 1000 * Double(frameW) * zoom
+        let vy = panY + Double(vertices[index * 2 + 1]) / 1000 * Double(frameH) * zoom
         let distance = (x - vx) * (x - vx) + (y - vy) * (y - vy)
         if distance <= nearest {
           nearest = distance
@@ -1280,7 +1280,7 @@
     private func beginVertex(_ index: Int) {
       viewport?.setAttribute(data("dragging"), "true")
       mouseMoveListener = window.addEventListener(.mousemove) { [self] e in
-        let point = imagePoint(clientX: e.clientX, clientY: e.clientY)
+        let point = framePoint(clientX: e.clientX, clientY: e.clientY)
         moveVertex(index, toX: point.x, y: point.y)
         onVertexEdit?(index, vertices[index * 2], vertices[index * 2 + 1], false)
       }
@@ -1293,18 +1293,18 @@
     /// Vertex `index` at a point of the image (pixels), whole in the
     /// 0–1000 space; the region's box and the crop box follow.
     private func moveVertex(_ index: Int, toX px: Double, y py: Double) {
-      guard index * 2 + 1 < vertices.count, imageW > 0, imageH > 0 else { return }
-      vertices[index * 2] = max(0, min(1000, Int((px / Double(imageW) * 1000).rounded())))
-      vertices[index * 2 + 1] = max(0, min(1000, Int((py / Double(imageH) * 1000).rounded())))
+      guard index * 2 + 1 < vertices.count, frameW > 0, frameH > 0 else { return }
+      vertices[index * 2] = max(0, min(1000, Int((px / Double(frameW) * 1000).rounded())))
+      vertices[index * 2 + 1] = max(0, min(1000, Int((py / Double(frameH) * 1000).rounded())))
       if let box = MarkupRegion.box(around: vertices) {
         regionX = Double(box.x)
         regionY = Double(box.y)
         regionW = Double(box.width)
         regionH = Double(box.height)
-        cropX = regionX * Double(imageW) / 1000
-        cropY = regionY * Double(imageH) / 1000
-        cropW = regionW * Double(imageW) / 1000
-        cropH = regionH * Double(imageH) / 1000
+        cropX = regionX * Double(frameW) / 1000
+        cropY = regionY * Double(frameH) / 1000
+        cropW = regionW * Double(frameW) / 1000
+        cropH = regionH * Double(frameH) / 1000
       }
       drawCrop()
       drawRegion()
@@ -1312,11 +1312,11 @@
     }
 
     /// A point of the viewport in image pixels, kept on the image.
-    private func imagePoint(clientX: Double, clientY: Double) -> (x: Double, y: Double) {
+    private func framePoint(clientX: Double, clientY: Double) -> (x: Double, y: Double) {
       let rect = viewport?.getBoundingClientRect()
       let x = (clientX - (rect?.x ?? 0) - panX) / zoom
       let y = (clientY - (rect?.y ?? 0) - panY) / zoom
-      return (max(0, min(Double(imageW), x)), max(0, min(Double(imageH), y)))
+      return (max(0, min(Double(frameW), x)), max(0, min(Double(frameH), y)))
     }
 
     /// Where a point of the viewport stands on the box: on a corner's
@@ -1345,7 +1345,7 @@
     /// A drag on the box: a handle resizes it, its body moves it, and
     /// anywhere else draws a new one.
     private func beginCrop(clientX: Double, clientY: Double, part: String) {
-      let start = imagePoint(clientX: clientX, clientY: clientY)
+      let start = framePoint(clientX: clientX, clientY: clientY)
       cropStartX = start.x
       cropStartY = start.y
       if stringEquals(part, "move") {
@@ -1368,11 +1368,11 @@
       }
       viewport?.setAttribute(data("dragging"), "true")
       mouseMoveListener = window.addEventListener(.mousemove) { [self] e in
-        let point = imagePoint(clientX: e.clientX, clientY: e.clientY)
+        let point = framePoint(clientX: e.clientX, clientY: e.clientY)
         switch cropDrag {
         case .move:
-          cropX = max(0, min(Double(imageW) - cropW, anchorX + point.x - cropStartX))
-          cropY = max(0, min(Double(imageH) - cropH, anchorY + point.y - cropStartY))
+          cropX = max(0, min(Double(frameW) - cropW, anchorX + point.x - cropStartX))
+          cropY = max(0, min(Double(frameH) - cropH, anchorY + point.y - cropStartY))
         case .resize, .draw:
           cropX = min(anchorX, point.x)
           cropY = min(anchorY, point.y)
@@ -1413,15 +1413,15 @@
     /// 0–1000 space (with Shift, they resize it); Delete or Backspace
     /// clears it; Escape too.
     private func cropKey(_ key: String, shift: Bool) -> Bool {
-      guard cropping, imageW > 0, imageH > 0 else { return false }
-      let stepX = Double(imageW) / 100
-      let stepY = Double(imageH) / 100
+      guard cropping, frameW > 0, frameH > 0 else { return false }
+      let stepX = Double(frameW) / 100
+      let stepY = Double(frameH) / 100
       if stringEquals(key, "Enter") {
         guard cropW <= 0 else { return false }
-        cropX = Double(imageW) / 4
-        cropY = Double(imageH) / 4
-        cropW = Double(imageW) / 2
-        cropH = Double(imageH) / 2
+        cropX = Double(frameW) / 4
+        cropY = Double(frameH) / 4
+        cropW = Double(frameW) / 2
+        cropH = Double(frameH) / 2
       } else if stringEquals(key, "Delete") || stringEquals(key, "Backspace") || stringEquals(key, "Escape") {
         guard cropW > 0 else { return false }
         clearCrop()
@@ -1430,11 +1430,11 @@
         let dx = stringEquals(key, "ArrowLeft") ? -stepX : stringEquals(key, "ArrowRight") ? stepX : 0
         let dy = stringEquals(key, "ArrowUp") ? -stepY : stringEquals(key, "ArrowDown") ? stepY : 0
         if shift {
-          cropW = max(stepX, min(Double(imageW) - cropX, cropW + dx))
-          cropH = max(stepY, min(Double(imageH) - cropY, cropH + dy))
+          cropW = max(stepX, min(Double(frameW) - cropX, cropW + dx))
+          cropH = max(stepY, min(Double(frameH) - cropY, cropH + dy))
         } else {
-          cropX = max(0, min(Double(imageW) - cropW, cropX + dx))
-          cropY = max(0, min(Double(imageH) - cropH, cropY + dy))
+          cropX = max(0, min(Double(frameW) - cropW, cropX + dx))
+          cropY = max(0, min(Double(frameH) - cropH, cropY + dy))
         }
       } else {
         return false
@@ -1468,14 +1468,14 @@
         e.preventDefault()
         vp.focus(DOM.FocusOptions(preventScroll: true))
         endDrag()
-        if cropping, imageW > 0, imageH > 0 {
+        if cropping, frameW > 0, frameH > 0 {
           vp.focus()
           beginCrop(clientX: e.clientX, clientY: e.clientY, part: cropPart(clientX: e.clientX, clientY: e.clientY))
           return
         }
         // An edited region's box takes a drag on itself; anywhere else
         // pans, and the focus stays in the editor.
-        if editing, imageW > 0, imageH > 0 {
+        if editing, frameW > 0, frameH > 0 {
           let vertex = vertexAt(clientX: e.clientX, clientY: e.clientY)
           if vertex >= 0 {
             beginVertex(vertex)
@@ -1503,7 +1503,7 @@
         mouseUpListener = window.addEventListener(.mouseup) { [self] _ in
           endDrag()
           if atFit {
-            panX = (viewportW - Double(imageW) * zoom) / 2
+            panX = (viewportW - Double(frameW) * zoom) / 2
             updateTransform()
           }
         }
@@ -1531,7 +1531,7 @@
       zoomInput = ViewerZoom.Input(
         on: vp, takes: { true }, current: { [self] in zoom },
         zoomTo: { [self] value, x, y in
-          guard imageW > 0, imageH > 0, !locked else { return }
+          guard frameW > 0, frameH > 0, !locked else { return }
           zoom(to: value, aboutX: x, y: y)
         })
 
@@ -1545,7 +1545,7 @@
           e.stopPropagation()
           return
         }
-        guard imageW > 0, imageH > 0, !locked else { return }
+        guard frameW > 0, frameH > 0, !locked else { return }
         guard let command = ViewerZoom.command(forKey: e.key) else { return }
         switch command {
         case .zoomIn, .zoomOut:

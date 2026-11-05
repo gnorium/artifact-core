@@ -89,7 +89,7 @@ final class MarkupRegionTests: XCTestCase {
     XCTAssertTrue(found.editable)
   }
 
-  func testAPolygonOutsideTheImageNamesNothing() {
+  func testAPolygonOutsideTheFrameNamesNothing() {
     XCTAssertNil(region(#"<zone points="900,900 1100,900 1100,950"/>"#, caretAt: "points"))
   }
 }

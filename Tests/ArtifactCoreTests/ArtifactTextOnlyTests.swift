@@ -54,7 +54,7 @@ final class ArtifactTextOnlyTests: XCTestCase {
     XCTAssertEqual(count("artifact-xml-toggle", in: node), 1)
   }
 
-  func testTextBesideImagesKeepsItsChrome() {
+  func testTextBesideFramesKeepsItsChrome() {
     let node = ArtifactView(manifestURL: "/testaments/manifest?url=x", rawSwitch: true, pageCount: 1) {
       div { "Page" }.data("service-id", "https://h/i1")
     } canvas: {
