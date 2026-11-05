@@ -990,7 +990,10 @@
       // into view: a Hamlet header's 688 lines and 1,209 diff rows took a
       // 180 ms frame to show, 20 ms so (dev, 2026-10-26). Unwrapped alone,
       // every line one line high, so a line not laid out yet stands
-      // exactly where it will (the diff's scroll sync reads them).
+      // exactly where it will (the diff's scroll sync reads them). Each such
+      // line is style-contained, so a code line's number is its own
+      // (`CodeLines.numberAttribute`): a counter run across the lines read 0
+      // on every one (user, 2026-11-05).
       selector(
         "&:not([data-reflow='true']) .artifact-document-header .code-line",
         "&:not([data-reflow='true']) .artifact-markup .code-line",
