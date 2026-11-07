@@ -64,4 +64,33 @@ final class ArtifactTextOnlyTests: XCTestCase {
     XCTAssertEqual(count("artifact-page-nav", in: node), 1)
     XCTAssertEqual(count("artifact-reflow-toggle", in: node), 1)
   }
+
+  /// Text that follows the frame on screen, a quote typed against a Source
+  /// URL's frames (user, 2026-11-05), traces none of them: XML, Reflow, the
+  /// pager, fullscreen and the Frame switch, never Detach or Overlay. A
+  /// page's own markup beside its frame keeps both.
+  func testTypedTextBesideFramesHasNoDetachOrOverlay() {
+    for typed in [true, false] {
+      let node = ArtifactView(
+        manifestURL: "/testaments/manifest?url=x", rawSwitch: true, canvasSwitch: true, markupFollowsCanvas: true,
+        typedText: typed
+      ) {
+        div { "Bought of Sir Henry Bunbury." }.data("service-id", "")
+      }.build()
+      XCTAssertEqual(count("artifact-xml-toggle", in: node), 1)
+      XCTAssertEqual(count("artifact-reflow-toggle", in: node), 1)
+      XCTAssertEqual(count("artifact-page-nav", in: node), 1)
+      XCTAssertEqual(count("artifact-fullscreen-button", in: node), 1)
+      XCTAssertEqual(count("artifact-canvas-toggle", in: node), 1)
+      XCTAssertEqual(count("artifact-detach-toggle", in: node), 0, "typed: \(typed)")
+      XCTAssertEqual(count("artifact-overlay-toggle", in: node), 0, "typed: \(typed)")
+    }
+    let traced = ArtifactView(manifestURL: "/testaments/manifest?url=x", rawSwitch: true, canvasSwitch: true, pageCount: 1) {
+      div { "Page" }.data("service-id", "https://h/i1")
+    } canvas: {
+      div {}.data("service-id", "https://h/i1")
+    }.build()
+    XCTAssertEqual(count("artifact-detach-toggle", in: traced), 1)
+    XCTAssertEqual(count("artifact-overlay-toggle", in: traced), 1)
+  }
 }

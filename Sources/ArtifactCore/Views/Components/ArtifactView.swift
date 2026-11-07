@@ -125,6 +125,27 @@
     /// header names a page that has no image, its name and ordinal being
     /// none (`data-printed-page`). Nil: none.
     let printedPage: String?
+    /// Whether the markup's one page follows the image (user, 2026-11-05: a
+    /// quote typed against whichever frame of a Source URL is on screen, a
+    /// Source box's Quote card): it reads the canvas shown, whichever it
+    /// is, beside it as a page's trace is, the slot filled from the
+    /// manifest's canvases. Its Images switch is on until turned off, its
+    /// choice kept for the session apart from every other reader's: there
+    /// is no transcript to read instead (`ArtifactHydration.followingCanvasShownKey`).
+    let markupFollowsCanvas: Bool
+    /// The frames, by number from 1, a page that follows the image
+    /// (`markupFollowsCanvas`) belongs to (user, 2026-11-05: a stored typed
+    /// quote's, "on paging through it still shows pg 326's quote and diff
+    /// why?"): on any other frame its pane is empty, no page active, no
+    /// ring and no diff (`data-markup-shown`). Empty: every frame (a Quote
+    /// card being typed, which reads whichever frame is on screen).
+    let markupFrames: [Int]
+    /// Whether the markup is a quote's text as typed (user, 2026-11-05: a
+    /// typed quote, in a form or read, stood one tiny line fitted to the
+    /// pane): one readable size, the body's, never fitted to a page or the
+    /// pane, its line running on past the pane, which scrolls sideways
+    /// under it; the wheel the pane's own.
+    let typedText: Bool
 
     public init(
       manifestURL: String = "",
@@ -139,6 +160,9 @@
       pageCount: Int? = nil,
       windowed: Bool = false,
       printedPage: String? = nil,
+      markupFollowsCanvas: Bool = false,
+      markupFrames: [Int] = [],
+      typedText: Bool = false,
       @HTMLBuilder markup: () -> [DOM.Node] = { [] },
       @HTMLBuilder canvas: () -> [DOM.Node] = { [] },
       @HTMLBuilder footerSwitches: () -> [DOM.Node] = { [] },
@@ -159,6 +183,9 @@
       self.pageCount = pageCount.flatMap { $0 > 0 ? $0 : nil }
       self.windowed = windowed
       self.printedPage = printedPage
+      self.markupFollowsCanvas = markupFollowsCanvas
+      self.markupFrames = markupFrames
+      self.typedText = typedText
       self.markup = markup()
       self.canvas = canvas()
       self.footerSwitches = footerSwitches()
@@ -171,7 +198,15 @@
     /// Whether the header shows the page-images switch: only when there are
     /// page images to show. Drawn hidden: the reader shows it once the
     /// manifest confirms an image (`data-canvas-confirmed`).
-    private var switchesCanvas: Bool { canvasSwitch && !canvas.isEmpty && !markup.isEmpty }
+    private var switchesCanvas: Bool { canvasSwitch && (!canvas.isEmpty || markupFollowsCanvas) && !markup.isEmpty }
+
+    /// Whether the text pane traces the canvas shown: that canvas's own
+    /// page of markup, which Detach keeps on the image's part of the page
+    /// and Overlay lays on the scan (user, 2026-11-05). Text that follows
+    /// whichever canvas is on screen (`markupFollowsCanvas`) or is a quote
+    /// as typed (`typedText`) traces none: neither switch, the panes never
+    /// synced (`ArtifactHydration`'s `tracesCanvas`).
+    private var traced: Bool { switchesCanvas && !markupFollowsCanvas && !typedText }
 
     /// Whether the viewer holds text alone (user, 2026-11-01: a quote with
     /// no source images): no images to read, none to show. Its chrome is
@@ -317,8 +352,9 @@
           // The object: the canvas of the page on screen. A viewer with no
           // markup is the object alone, its slot drawn empty for the
           // reader to fill with the manifest's canvases—a testament not yet
-          // read, say, whose pages exist only as images.
-          if !canvas.isEmpty || markup.isEmpty {
+          // read, say, whose pages exist only as images; so is one whose
+          // markup follows the image (`markupFollowsCanvas`).
+          if !canvas.isEmpty || markup.isEmpty || markupFollowsCanvas {
             div {
               canvas
             }
@@ -379,8 +415,10 @@
               // page whose text is not yet the scan's. Disabled where it
               // cannot apply (Raw, Reflow, the images put away), its state
               // kept underneath; disabled and off while the overlay is on,
-              // which holds both panes still (user, 2026-10-14).
-              if switchesCanvas {
+              // which holds both panes still (user, 2026-10-14). Only where
+              // the text traces the canvas (`traced`): typed text has no
+              // place on the page to keep or lay (user, 2026-11-05).
+              if traced {
                 ToggleButtonView(
                   label: "Detach",
                   icon: IconView(icon: { s in RefreshClockwiseOffIconView(size: s) }, size: ButtonView.ButtonSize.medium.iconSize),
@@ -469,6 +507,15 @@
       .data("windowed", windowed)
       .data("page-count", pageCount ?? 0)
       .data("printed-page", printedPage ?? "")
+      .data("markup-follows-canvas", markupFollowsCanvas)
+      // The frames its following page belongs to, and whether the frame it
+      // opens on is one: the server's paint as the reader keeps it
+      // (`showMarkup`).
+      .data("markup-frames", markupFrames.map { "\($0)" }.joined(separator: " "))
+      .data(
+        "markup-shown",
+        !markupFollowsCanvas || markupFrames.isEmpty || markupFrames.contains((startCanvas ?? 0) + 1))
+      .data("typed-text", typedText)
       // The Header switch's state, off at first (`header`).
       .data("header", false)
       // The English switch's state, which a host's rules within the viewer
@@ -502,7 +549,19 @@
         width(perc(100))
         height(perc(100))
         borderRadius(borderRadiusBase)
-        overflow(.hidden)
+        // Clipped, never a scroller (user, 2026-11-05): a box that only
+        // clips, as this one and its viewer and panes below do, scrolls
+        // sideways under a focus or a scrollIntoView when hidden, and what
+        // it holds then stands cut off at its start with nothing to scroll
+        // it back. Only the panes inside (`.artifact-markup`, the frame's
+        // viewport) and the bars' rows scroll. A clip is no scroll container,
+        // so its least size is its content's (a hidden box's was 0): set to
+        // 0 here and on every clipped flex box below, or a tall page grew
+        // the reader past its height and cut off its own foot and the
+        // footer (user, 2026-11-05).
+        overflow(.clip)
+        minWidth(0)
+        minHeight(0)
         border(borderWidthBase, .solid, borderColorSubtle)
         backgroundColor(backgroundColorBase)
       }
@@ -532,11 +591,16 @@
       // One row, never wrapped: past its width it scrolls sideways under
       // a swipe, with no scrollbar drawn (the tabs' pattern), and never
       // the page.
+      // As tall as the footer whether or not it holds a control (user,
+      // 2026-11-05: "header should be as tall as footer"): a medium
+      // control and the 8 above and under it, a label alone too.
       descendant(".artifact-header-row") {
         display(.flex)
         alignItems(.center)
         gap(spacing12)
         minWidth(0)
+        boxSizing(.borderBox)
+        minHeight(ButtonView.ButtonSize.medium.minSize + spacing8 * 2)
         padding(spacing8)
         overflowX(.auto)
         overflowY(.hidden)
@@ -605,8 +669,9 @@
         position(.relative)
         width(perc(100))
         minWidth(0)
+        minHeight(0)
         maxWidth(perc(100))
-        overflow(.hidden)
+        overflow(.clip)
         // Side by side is a comparison; stacked is what fits. On a narrow
         // screen the object takes the top half and its markup the bottom,
         // rather than two columns too thin to read either.
@@ -620,24 +685,28 @@
         position(.relative)
         minWidth(0)
         minHeight(0)
-        overflow(.hidden)
+        overflow(.clip)
       }
       descendant(".artifact-markup-viewport") {
         flex(1, 1, perc(50))
         position(.relative)
         minWidth(0)
         minHeight(0)
-        overflow(.hidden)
+        overflow(.clip)
         // The pane, then what the host shows under it (`underMarkup`).
         display(.flex)
         flexDirection(.column)
       }
       // Its 1px edge is always there, transparent until the pane is ringed
-      // (the host colors it): ringed or not, the text stands in the same
-      // place, under the header's label.
+      // (the host colors it), and so is the 1px around it the ring's
+      // outline is drawn in, outward (user, 2026-11-05: "Draw the ring
+      // outside"): the viewer clips its panes at its edge, and an outline
+      // drawn inward lay over the page's outermost pixel, now the page
+      // has no inset. Ringed or not, the text stands in the same place.
       descendant(".artifact-markup-box") {
         position(.relative)
         border(borderWidthBase, .solid, borderColorTransparent)
+        margin(borderWidthBase)
         display(.flex)
         flexDirection(.column)
         flex("1 1 auto")
@@ -649,15 +718,26 @@
         flex("1 1 auto")
         minHeight(0)
       }
-      // Under the markup pane, in its column, a zone as the pane is: one
-      // scrollport, both ways, at the pane's level (user, 2026-10-15);
-      // what it holds never scrolls within it. The pane keeps the rest of
-      // the column.
+      // A following page off its own frames (`markupFrames`): the pane
+      // empty, as the server paints it and the reader keeps it.
+      selector("&[data-markup-shown='false'] .artifact-markup .tei-page") {
+        display(.none).important()
+      }
+      // Under the markup pane, in its column, a zone for what the host
+      // shows under the pane (a page's diff), laid out in it as a column.
+      // The zone never scrolls: what it holds is a pane of its own, its box
+      // the one scroller, both ways, its sideways bar at its foot as the
+      // pane's is (user, 2026-11-05: the diff "should scroll just like the
+      // quote pane"). Clipped with no least size of its own, as every
+      // clipped box of the reader is. The pane keeps the rest of the column.
       descendant(".artifact-under-markup") {
+        display(.flex)
+        flexDirection(.column)
         flexShrink(0)
         minWidth(0)
+        minHeight(0)
         maxHeight(perc(40))
-        overflow(.auto)
+        overflow(.clip)
       }
       // A diff under its pane on the page's own ground, as the pane above
       // it is: never the scan or the edition showing through it while the
@@ -669,9 +749,12 @@
       // column as radio toggles do: the header on puts the markup's pane
       // (and what stands under it, a page's diff) away, never stacked
       // with the page's code.
+      // Edged and ringed as the markup's box is, the same room around it
+      // for the ring's outline, drawn outward: the two share the column.
       descendant(".artifact-document-header") {
         display(.none)
         border(borderWidthBase, .solid, borderColorTransparent)
+        margin(borderWidthBase)
       }
       descendant(".artifact-under-header") {
         display(.none)
@@ -680,7 +763,7 @@
         selector("& .artifact-document-header[data-ring='\(state)']") {
           border(borderWidthBase, .solid, color)
           outline(borderWidthBase, .solid, color)
-          CSS.Property("outline-offset", "calc(-2 * \(borderWidthBase.value))")
+          outlineOffset(px(0))
         }
         // The switch wears the ring only while the header is put away;
         // shown, the pane wears it (user, 2026-10-26).
@@ -710,7 +793,9 @@
       }
       // Laid out so while the overlay it put away leaves too (`overlayAside`):
       // the diff as it will rest, never its whole length pushing the header
-      // out of the column and then snapping (user, 2026-10-27).
+      // out of the column and then snapping (user, 2026-10-27). A zone as
+      // the markup's is (`.artifact-under-markup`): it never scrolls, its
+      // diff's box does, as the pane above it does (user, 2026-11-05).
       selector(
         "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-under-header",
         "&[data-header='true'][data-overlay-put-away='true'][data-overlay-fading='true'] .artifact-under-header"
@@ -720,7 +805,7 @@
         flex("1 1 0")
         minWidth(0)
         minHeight(0)
-        overflow(.auto)
+        overflow(.clip)
       }
       selector(
         "&[data-header='true']:not([data-overlay-active='true']):not([data-overlay-registered='true']) .artifact-markup-box",
@@ -766,9 +851,9 @@
         minWidth(0)
         minHeight(0)
         overflow(.auto)
-        // No padding of its own (user, 2026-10-10): the markup view
-        // carries the text's inset, so a state ring drawn on the pane
-        // (TestamentView) sits on the pane's own edges, with the canvas
+        // No padding of its own (user, 2026-10-10), nor has the markup
+        // view (user, 2026-11-05): a state ring drawn on the pane's box
+        // (TestamentView) stands just outside the pane, with the canvas
         // shown and put away alike.
         padding(0)
         // The divider sits on the markup's far edge, because the markup
@@ -857,15 +942,15 @@
       selector("&[data-reflow='true'] .artifact-markup", "&[data-raw='true'] .artifact-markup") {
         cursor(.auto)
       }
-      // Reflowed, its text keeps the text pane's inset at every zoom (user,
-      // 2026-11-03: the title page's "THE" stood against the pane's top at
-      // its fit, its last line against its foot): the page around the
-      // zoomed text carries it, never the text, whose zoom shrank it.
-      // Reflow drops the scan's own margins; the zoom's fit keeps it
-      // (`applyZoom`: what stands around the layer in the pane).
-      selector("&[data-reflow='true']:not([data-raw='true']) .artifact-markup .tei-page") {
-        padding(spacing16)
-      }
+      // No inset on any pane (user, 2026-11-05): the text fills its pane
+      // edge to edge as the scan fills its own, the two matching exactly,
+      // so the trace stays on the frame (TEIView has none of its own). The
+      // white around the text is its page's own (its type area's margins),
+      // never the pane's. A page with no margins of its own (a typed quote,
+      // a page with no type area) runs to the pane's edge, Reflow on or off
+      // alike. Reflowed, the page keeps the scale it has unreflowed
+      // (reversing 2026-11-03's fixed inset, which drew it smaller), fitted
+      // as the unreflowed page is, edge to edge.
       // The same two positioned panes interpolate into an overlay,
       // rather than switching layout models halfway through the reveal.
       selector("&[data-canvas-shown='true']:has(.artifact-markup-viewport) .artifact-markup-viewport", "&[data-canvas-shown='true']:has(.artifact-markup-viewport) .artifact-object") {
@@ -963,22 +1048,26 @@
       selector("&[data-overlay-put-away='true'][data-overlay-fading='true'][data-raw='true'] .artifact-under-markup") {
         CSS.Property("opacity", "calc(1 - var(--artifact-overlay-progress, 0))")
       }
-      // A code pane's numbered lines (the XML's, the header's) each hold
-      // their number inside their own box, the gutter their own padding
-      // and the code view's inset reached by their margin: a line laid
-      // out as it comes into view paints within its box alone (below),
-      // and a number drawn outside it, in the code's padding, was clipped
-      // away (user, 2026-10-27); so too a line's ground runs the whole row.
+      // A code pane (the XML's, the header's, the XML's stand-in on its
+      // way in) has no inset either (user, 2026-11-05: "rm padding from
+      // xml pane too"), as the frame and the text have none: its lines run
+      // from the pane's edge, the first at its top.
+      selector("& .artifact-markup .code-view", "& .artifact-document-header .code-view", "& .artifact-xml-handoff .code-view") {
+        padding(0)
+      }
+      // Its numbered lines each hold their number inside their own box, the
+      // gutter their own padding (the number's 4 either side, CodeView's):
+      // a line laid out as it comes into view paints within its box alone
+      // (below), and a number drawn outside it was clipped away (user,
+      // 2026-10-27); so too a line's ground runs the whole row.
       selector("& .artifact-markup .code-view[data-lined='true'] .code-code", "& .artifact-document-header .code-view[data-lined='true'] .code-code", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-code") {
         CSS.Property("padding-inline-start", "0")
       }
       selector("& .artifact-markup .code-view[data-lined='true'] .code-line", "& .artifact-document-header .code-view[data-lined='true'] .code-line", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line") {
-        CSS.Property("margin-inline", "calc(-1 * \(spacing16.value))")
-        CSS.Property("padding-inline-start", "calc(\(spacing16.value) + var(--gutter) + 2 * \(spacing4.value))")
-        CSS.Property("padding-inline-end", spacing16.value)
+        CSS.Property("padding-inline-start", "calc(var(--gutter) + 2 * \(spacing4.value))")
       }
       selector("& .artifact-markup .code-view[data-lined='true'] .code-line::before", "& .artifact-document-header .code-view[data-lined='true'] .code-line::before", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line::before") {
-        CSS.Property("inset-inline-start", spacing16.value)
+        CSS.Property("inset-inline-start", "0")
       }
       // A code line whose box the image shows as the pointer is on it
       // (`markRegionLine`): its ground a selected line's, gutter to edge,
@@ -993,11 +1082,16 @@
       // exactly where it will (the diff's scroll sync reads them). Each such
       // line is style-contained, so a code line's number is its own
       // (`CodeLines.numberAttribute`): a counter run across the lines read 0
-      // on every one (user, 2026-11-05).
+      // on every one (user, 2026-11-05). Never an editor's lines (the
+      // Revise page's, `data-code-editing`): Chrome edits a line whose
+      // contents are skipped (off screen, or shown since the last frame)
+      // as if it were not there, so a page pasted over them whole came out
+      // with its lines reversed and each line break doubled, and read as
+      // changed (ReviseEditorTests, 2026-11-06).
       selector(
-        "&:not([data-reflow='true']) .artifact-document-header .code-line",
-        "&:not([data-reflow='true']) .artifact-markup .code-line",
-        "&:not([data-reflow='true']) .artifact-xml-handoff .code-line",
+        "&:not([data-reflow='true']) .artifact-document-header .code-code:not([data-code-editing='true']) .code-line",
+        "&:not([data-reflow='true']) .artifact-markup .code-code:not([data-code-editing='true']) .code-line",
+        "&:not([data-reflow='true']) .artifact-xml-handoff .code-code:not([data-code-editing='true']) .code-line",
         "&:not([data-reflow='true']) .artifact-under-header .diff-row",
         "&:not([data-reflow='true']) .artifact-under-markup .diff-row"
       ) {
@@ -1091,7 +1185,14 @@
       selector("& .artifact-markup .code-view", "& .artifact-markup .code-view .code-gutter") {
         backgroundColor(backgroundColorBase).important()
       }
-      descendant(".artifact-markup [data-layer='markup'] .code-view") {
+      // An editor's too (a Revise page's, CodeEditorView): in a form field
+      // it is its own sideways scrollport (2026-10-28), but in the pane the
+      // pane is the one scroller, both ways, so its lines scroll with the
+      // pane and its diff's box follows the pane, never a box nested in it.
+      selector(
+        "& .artifact-markup [data-layer='markup'] .code-view",
+        "& .artifact-markup [data-layer='markup'] .code-editor-view"
+      ) {
         width(perc(100))
         minWidth(0)
         maxWidth(perc(100))
@@ -1130,18 +1231,15 @@
         boxSizing(.borderBox)
         borderBlockStart(borderWidthBase, .solid, borderColorSubtle)
       }
-      // Its text where the rendered text starts below when left-aligned
-      // (user, 2026-10-12): the text's 16 inset in its layer, inside the
-      // TEI view's 1px ring padding inside the box's 1px edge (ringed or
-      // not), less the row's 8.
+      // At the header row's own padding, nothing added (user, 2026-11-05:
+      // "label without padding would look wack, remove additional padding
+      // we added but not 0 it, keep header overall padding"): the inset
+      // that lined it up with the text's old 16 is gone with that inset.
       descendant(".artifact-canvas-label") {
         fontSize(fontSizeMedium16)
         color(colorBase)
         flex(1)
         minWidth(0)
-        CSS.Property(
-          "padding-inline-start",
-          "calc(\(spacing16.value) - \(spacing8.value) + 2 * \(borderWidthBase.value))")
       }
       edgeFadeView("& .artifact-canvas-label")
       selector(".artifact-fullscreen-button") {
@@ -1301,6 +1399,10 @@
     /// session, so it holds across the reader's pages and the site's, and is
     /// off again in a new session. Storage refused reads as off.
     static let canvasShownKey = "gnorium:artifact-page-frames"
+    /// The same, for a reader whose page follows the image (a Quote card's,
+    /// `markupFollowsCanvas`): on until turned off, its own (user,
+    /// 2026-11-05), never another reader's.
+    static let followingCanvasShownKey = "gnorium:artifact-quote-frames"
     /// Reflow's choice, kept for the session as the page images' is.
     static let reflowKey = "gnorium:artifact-reflow"
     /// Detach's choice, kept for the session; synced until detached.
@@ -1320,11 +1422,15 @@
       for reader in instance?.readers ?? [] { reader.setReflow(on) }
     }
 
-    /// The page images shown or put away in every reader on the page, as
-    /// one reader's switch was pressed, and the choice kept for the session.
-    static func showCanvases(_ shown: Bool) {
-      sessionStorage.setItem(canvasShownKey, shown ? "true" : "false")
-      for reader in instance?.readers ?? [] { reader.setCanvasShown(shown) }
+    /// The page images shown or put away in every reader on the page of
+    /// its kind (one whose page follows the image, `following`, or any
+    /// other), as one reader's switch was pressed, and the choice kept for
+    /// the session.
+    static func showCanvases(_ shown: Bool, following: Bool = false) {
+      sessionStorage.setItem(following ? followingCanvasShownKey : canvasShownKey, shown ? "true" : "false")
+      for reader in instance?.readers ?? [] where reader.markupFollowsCanvas == following {
+        reader.setCanvasShown(shown)
+      }
     }
 
     /// The viewers under `root`, which may be a fragment swapped in after the
@@ -1353,6 +1459,40 @@
             startCanvas: parseInt(viewer.dataset["start-canvas"] ?? ""),
             startService: viewer.dataset["start-service"] ?? ""
           ))
+      }
+    }
+  }
+
+  /// The manifests a page reads, each read once and shared by every
+  /// reader that names it (2026-11-05: a Revise page of forty quote cards
+  /// asked for its few manifests ninety times and was refused): an answer
+  /// kept by its address, a read under way answering every reader that asks
+  /// for it meanwhile. An answer that read nothing this time
+  /// (`ArtifactManifest.CanvasSwitch.pending`: no answer, unread, too many
+  /// reads) is not kept: the next ask, a reader's retry, reads again.
+  enum ManifestReads {
+    nonisolated(unsafe) static var answers: [(url: String, json: String)] = []
+    nonisolated(unsafe) static var waiting: [(url: String, callbacks: [@Sendable (String?) -> Void])] = []
+
+    static func read(_ url: String, _ callback: @escaping @Sendable (String?) -> Void) {
+      if let kept = answers.first(where: { stringEquals($0.url, url) }) {
+        callback(kept.json)
+        return
+      }
+      if let at = waiting.firstIndex(where: { stringEquals($0.url, url) }) {
+        waiting[at].callbacks.append(callback)
+        return
+      }
+      waiting.append((url: url, callbacks: [callback]))
+      window.fetch(url) { response in
+        let json = response.jsonString
+        var callbacks: [@Sendable (String?) -> Void] = []
+        if let at = waiting.firstIndex(where: { stringEquals($0.url, url) }) {
+          callbacks = waiting[at].callbacks
+          waiting.remove(at: at)
+        }
+        if ArtifactManifest.parse(json).canvasSwitch != .pending { answers.append((url: url, json: json)) }
+        for each in callbacks { each(json) }
       }
     }
   }
@@ -1540,8 +1680,37 @@
       }
       if stringIsEmpty(manifestURL) {
         pageMarkup()
+      } else if markupFollowsCanvas {
+        // A quote's reader (its page follows the image: a stored quote's, a
+        // Quote card's) reads its manifest once it comes near the screen:
+        // a page of forty quotes reads none it does not show.
+        let url = manifestURL
+        whenNear { [self] in self.loadManifest(url: url) }
       } else {
         loadManifest(url: manifestURL)
+      }
+    }
+
+    /// The observer waiting for the viewer to come near the screen
+    /// (`whenNear`); -1 for none.
+    private var nearHandle: Int32 = -1
+
+    /// `action` once the viewer is on screen or within a screen of it (an
+    /// `IntersectionObserver` whose margin is the screen's height), at once
+    /// where it already is; a viewer with no box (in a closed accordion)
+    /// waits till it has one.
+    private func whenNear(_ action: @escaping @Sendable () -> Void) {
+      let height = window.innerHeight
+      if let rect = root.getBoundingClientRect(), rect.height > 0, rect.bottom > -height, rect.top < 2 * height {
+        action()
+        return
+      }
+      let margin = stringJoin([intToString(Int(height)), "px 0px"], separator: "")
+      nearHandle = root.observeIntersection(rootMargin: margin) { [self] near in
+        guard near, self.nearHandle >= 0 else { return }
+        self.root.unobserveIntersection(self.nearHandle)
+        self.nearHandle = -1
+        action()
       }
     }
 
@@ -2016,18 +2185,22 @@
       canvasToggle = toggle
       canvasShown = false
       reflectCanvasShown()
+      let following = markupFollowsCanvas
       _ = toggle.addEventListener("toggle-button-update") { (event: Event) in
-        ArtifactHydration.showCanvases(stringEquals(event.detail, "true"))
+        ArtifactHydration.showCanvases(stringEquals(event.detail, "true"), following: following)
       }
     }
 
     /// The manifest named an image: the switch offered, as this session
-    /// left it.
+    /// left it; a reader whose page follows the image, on until turned off.
     private func confirmCanvasSwitch() {
       guard let _ = canvasToggle, !canvasConfirmed else { return }
       canvasConfirmed = true
       root.setAttribute(data("canvas-confirmed"), "true")
-      canvasShown = stringEquals(sessionStorage.getItem(ArtifactHydration.canvasShownKey) ?? "false", "true")
+      canvasShown =
+        markupFollowsCanvas
+        ? stringEquals(sessionStorage.getItem(ArtifactHydration.followingCanvasShownKey) ?? "true", "true")
+        : stringEquals(sessionStorage.getItem(ArtifactHydration.canvasShownKey) ?? "false", "true")
       reflectCanvasShown()
     }
 
@@ -2193,6 +2366,7 @@
     func setReflow(_ on: Bool) {
       guard let toggle = reflowToggle else { return }
       root.setAttribute(data("reflow"), on ? "true" : "false")
+      reflowedPass = nil
       // A text pane's own cursor, never the pan's (`setupZoom`).
       if on {
         markupPane?.removeAttribute(data("over-text"))
@@ -2202,6 +2376,8 @@
       toggle.setAttribute("aria-pressed", on ? "true" : "false")
       toggle.querySelector("button")?.setAttribute("aria-pressed", on ? "true" : "false")
       overlayAside()
+      // The overlay's structure is the unreflowed page's alone (`drawStructure`).
+      drawStructure()
       // The grid of a page set in its type area is Reflow off's alone.
       showLayers()
     }
@@ -2225,6 +2401,17 @@
     /// put away has left the scan (`overlayAside`)—until then the edition
     /// is the rendering, moved and faded as it leaves.
     private var codeLayerShown: Bool { rawVisible && !(overlayPutAway && (overlayOn || overlayLeaving)) }
+    /// The shown page is a quote's text as typed (`ArtifactView.typedText`:
+    /// one typed in, gnorium-web `QuoteTyped`, or one read): it opens at
+    /// one readable size, never fitted (`applyZoomLayout`); the plain wheel
+    /// the pane's own, a pinch its zoom (`wheel`).
+    private var typedLayerShown: Bool {
+      guard !codeShown, shownLayer() != nil else { return false }
+      return typedMarkup
+    }
+
+    /// Whether the markup is a quote's text as typed (`ArtifactView.typedText`).
+    private var typedMarkup: Bool { stringEquals(root.getAttribute(data("typed-text")) ?? "", "true") }
 
     /// The one layer of each page that shows, by two switches (user,
     /// 2026-10-07): the language switch picks the markup or its
@@ -2253,7 +2440,11 @@
             element.closest("[data-page-scale='true']")?.style.display(.none)
           } else {
             showLayer(element)
-            element.closest("[data-page-scale='true']")?.style.display(.block)
+            // Its scale box a box while the page is scaled, none of its own
+            // while it flows (`restoreFlow`).
+            if let scaleBox = element.closest("[data-page-scale='true']") {
+              if reflowOn { scaleBox.style.display(.contents) } else { scaleBox.style.display(.block) }
+            }
           }
         }
       }
@@ -2297,6 +2488,10 @@
     private var markupZoom: Double?
     private var renderingAtFit: Bool?
     private var markupAtFit: Bool?
+    /// Text typed in's zoom (`typedLayerShown`), nil at its own size: the
+    /// reader's pinch alone sets it (`zoom(to:about:)`), never a sync with
+    /// the image or the session's zoom.
+    private var typedZoom: Double?
     private var zoomQueued = false
     /// The zoom a Safari pinch began at (WebKit's `gesturestart`).
     private var gestureStartZoom = 1.0
@@ -2307,6 +2502,15 @@
 
     private var markupPane: DOM.Element? { root.querySelector(".artifact-markup") }
     private var reflowOn: Bool { stringEquals(root.getAttribute(data("reflow")) ?? "", "true") }
+    /// Whether the markup's one page follows the image (`ArtifactView.markupFollowsCanvas`).
+    var markupFollowsCanvas: Bool {
+      stringEquals(root.getAttribute(data("markup-follows-canvas")) ?? "", "true")
+    }
+    /// The frames its following page belongs to, by number from 1
+    /// (`ArtifactView.markupFrames`); none for every frame.
+    private var markupFrames: [Int] {
+      stringSplit(root.getAttribute(data("markup-frames")) ?? "", separator: " ").compactMap { parseInt($0) }
+    }
     private var overlayOn = false
     private var beforeOverlay: (zoom: Double?, atFit: Bool)?
     private var overlayZoomStart = 1.0
@@ -3244,8 +3448,10 @@
       if rawVisible { return }
       // Reflowed, the pane is a text pane (user, 2026-10-14): the wheel
       // scrolls it natively; a pinch (the browser's ctrl+wheel) or
-      // ctrl/cmd+wheel still zooms its text.
-      if reflowOn && !event.ctrlKey && !event.metaKey { return }
+      // ctrl/cmd+wheel still zooms its text. So is text typed in (a quote's,
+      // `typedLayerShown`): it opens at its one size, the plain wheel
+      // scrolling it, and a pinch zooms it as any text pane's.
+      if (reflowOn || typedLayerShown) && !event.ctrlKey && !event.metaKey { return }
       guard let pane = markupPane, let box = pane.getBoundingClientRect() else { return }
       event.preventDefault()
       if overlayRests {
@@ -3445,6 +3651,7 @@
         zoom(to: currentZoom() * ViewerZoom.wheelFactor(ViewerZoom.wheelTravel), about: middle)
       } else if stringEquals(key, "0") {
         // Its actual size (100%), as the image's 0 sets its own.
+        typedZoom = nil
         setZoom(nil, atFit: false)
         sessionStorage.removeItem(Self.zoomKey + zoomKind)
         applyZoom(about: nil)
@@ -3465,6 +3672,12 @@
     }
 
     private func zoom(to value: Double, about anchor: (x: Double, y: Double)) {
+      // Text typed in zooms alone (`typedZoom`): the image never follows it.
+      if typedLayerShown {
+        typedZoom = value
+        applyZoom(about: anchor)
+        return
+      }
       textMatchAnimation += 1
       // A new wording gesture supersedes an image move awaiting its frame.
       pendingTextRegion = nil
@@ -3590,8 +3803,17 @@
       return max(fit, fit * scale)
     }
 
+    /// Whether the text pane traces the canvas shown (`ArtifactView.traced`):
+    /// text that follows whichever canvas is on screen, or a quote as typed,
+    /// traces none and is never matched to the image (user, 2026-11-05: a
+    /// typed quote opened scrolled to the image's middle, mid-word).
+    private var tracesCanvas: Bool { !markupFollowsCanvas && !typedMarkup }
+
     /// Whether the two are matched now.
-    private var syncs: Bool { !overlayOn && !overlayLeaving && syncOn && !reflowOn && !rawVisible && canvasShown && shownCanvas != nil }
+    private var syncs: Bool {
+      tracesCanvas && !overlayOn && !overlayLeaving && syncOn && !reflowOn && !rawVisible && canvasShown
+        && shownCanvas != nil
+    }
 
     /// What the text shows now, nil until it has a size.
     private func textRegion() -> ViewerZoom.Region? {
@@ -3759,11 +3981,17 @@
       rendered.style.setProperty("visibility", "hidden")
       rendered.style.setProperty("position", "absolute")
       showLayer(rendered)
-      // Reflowed, it wraps to the pane's width, as when shown.
-      if reflowOn { rendered.style.setProperty("width", doubleToString(paneWidth) + "px") }
+      // Reflowed, it wraps to the pane's width, as when shown: its width
+      // set in its own pixels, and its type area's room read from that same
+      // width at every zoom (`--tei-reflow-width`, `setReflowedZoom`).
+      let reflowWidth = rendered.style.getPropertyValue("--tei-reflow-width")
+      if reflowOn {
+        rendered.style.setProperty("width", doubleToString(paneWidth) + "px")
+        rendered.style.setProperty("--tei-reflow-width", doubleToString(paneWidth) + "px")
+      }
       var fit: Double?
       if reflowOn {
-        fit = reflowedFit(rendered, paneHeight: paneHeight)
+        fit = reflowedFit(rendered, paneHeight: paneHeight, width: nil)
       } else if let box = measure(rendered, at: ViewerZoom.actualSize), box.width > 0, box.height > 0 {
         fit = containFit(width: box.width, height: box.height, paneWidth: paneWidth, paneHeight: paneHeight)
       }
@@ -3776,6 +4004,11 @@
       _ = rendered.style.removeProperty("visibility")
       _ = rendered.style.removeProperty("position")
       _ = rendered.style.removeProperty("width")
+      if stringIsEmpty(reflowWidth) {
+        _ = rendered.style.removeProperty("--tei-reflow-width")
+      } else {
+        rendered.style.setProperty("--tei-reflow-width", reflowWidth)
+      }
       if stringIsEmpty(zoom) {
         _ = rendered.style.removeProperty("zoom")
       } else {
@@ -3784,10 +4017,27 @@
       return fit
     }
 
-    /// `layer` at `zoom`: its rendered box.
-    private func measure(_ layer: DOM.Element, at zoom: Double) -> DOM.Rect? {
-      layer.style.setProperty("zoom", doubleToString(zoom))
+    /// `layer` at `zoom`: its rendered box. Reflowed (`width`, its width on
+    /// screen), its own width with it (`setReflowedZoom`).
+    private func measure(_ layer: DOM.Element, at zoom: Double, width: Double? = nil) -> DOM.Rect? {
+      if let width {
+        setReflowedZoom(layer, zoom, width: width)
+      } else {
+        layer.style.setProperty("zoom", doubleToString(zoom))
+      }
       return layer.getBoundingClientRect()
+    }
+
+    /// Reflowed `layer` at `zoom`, and its own width at that zoom, its
+    /// type area's room either side (`--tei-reflow-width`, TEIView): `width`,
+    /// its width on screen in CSS pixels, over its zoom. The reader's
+    /// measure, never the browser's `100cqi` (user, 2026-11-05: the in-app
+    /// browser read `100cqi` inside the zoomed page as its width on screen
+    /// and zoomed that again, and Hamlet Q1's front cover stood left of its
+    /// pane's middle).
+    private func setReflowedZoom(_ layer: DOM.Element, _ zoom: Double, width: Double) {
+      layer.style.setProperty("zoom", doubleToString(zoom))
+      layer.style.setProperty("--tei-reflow-width", doubleToString(width / zoom) + "px")
     }
 
     /// The zoom at which reflowed text's whole height fits `paneHeight`,
@@ -3795,16 +4045,27 @@
     /// wider and shorter, so its height is measured, never estimated. At
     /// `paneHeight /` its height at its actual size it fits (no line is
     /// taller, none are added); at its actual size it does not; the two
-    /// close to within a pixel of its height.
-    private func reflowedFit(_ layer: DOM.Element, paneHeight: Double) -> Double? {
-      guard let whole = measure(layer, at: ViewerZoom.actualSize), whole.height > 0 else { return nil }
+    /// close to within a pixel of its height. `width` is its width on
+    /// screen (`setReflowedZoom`), nil where its own width is set and stays
+    /// (`renderedFit`'s).
+    private func reflowedFit(_ layer: DOM.Element, paneHeight: Double, width: Double?) -> Double? {
+      guard let whole = measure(layer, at: ViewerZoom.actualSize, width: width), whole.height > 0 else { return nil }
       // Shorter than the pane at its actual size, it is read there.
       if whole.height <= paneHeight { return ViewerZoom.actualSize }
       var fits = paneHeight / whole.height
       var overflows = ViewerZoom.actualSize
+      // Half a pixel past that first: text that cannot wrap (a cover's
+      // figures, its lines placed on its leaf) is the same height in its own
+      // pixels at every zoom, so it overflows there and its fit is found in
+      // one probe, not the halving's ten, each of which lays the page out at
+      // another zoom.
+      let past = fits + 0.5 / whole.height
+      if past < overflows, let box = measure(layer, at: past, width: width) {
+        if box.height <= paneHeight { fits = past } else { overflows = past }
+      }
       while (overflows - fits) * whole.height > 1 {
         let middle = (fits + overflows) / 2
-        guard let box = measure(layer, at: middle) else { return nil }
+        guard let box = measure(layer, at: middle, width: width) else { return nil }
         if box.height <= paneHeight { fits = middle } else { overflows = middle }
       }
       return fits
@@ -3816,12 +4077,13 @@
     /// wider than it stood off its middle, user 2026-11-03): the widths
     /// and that content's read at a zoom, its content's narrowed in step
     /// until it fits. Its width is its pane's in its own units, wider as it
-    /// zooms out, and what cannot wrap keeps its own.
-    private func reflowedWidthFit(_ layer: DOM.Element, at zoom: Double) -> Double {
+    /// zooms out, and what cannot wrap keeps its own; `screenWidth` its
+    /// width on screen (`setReflowedZoom`).
+    private func reflowedWidthFit(_ layer: DOM.Element, at zoom: Double, screenWidth: Double) -> Double {
       let textBlockElement = layer.querySelector(":scope > .tei-text-block")
       var fitted = zoom
       for _ in 0..<6 {
-        layer.style.setProperty("zoom", doubleToString(fitted))
+        setReflowedZoom(layer, fitted, width: screenWidth)
         var width = layer.clientWidth
         var content = layer.scrollWidth
         if let textBlockElement, textBlockElement.clientWidth > 0,
@@ -3860,6 +4122,7 @@
         _ = parent.style.removeProperty("transform-origin")
       }
       overlayWarp = nil
+      reflowedPass = nil
       guard let oldBox = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect(),
         let parent = layer.parentElement else { return }
       let previous = currentZoom()
@@ -3888,7 +4151,9 @@
       guard paneWidth > 0, paneHeight > 0 else { return }
       let scaleBox: DOM.Element
       if existing {
+        // A box again where flow had set it aside (`restoreFlow`).
         scaleBox = parent
+        scaleBox.style.display(.block)
       } else {
         scaleBox = document.createElement(.div)
         scaleBox.setAttribute(data("page-scale"), "true")
@@ -4007,12 +4272,16 @@
     }
 
     /// Reflow returns to ordinary layout, with its own wrapping and CSS zoom.
+    /// Its scale box (`applyPageScale`) stays where it is, no box of its own
+    /// (`display: contents`) until the page is scaled again: the layer is
+    /// never moved out of it and back. A move rebuilt each figure's `<use>`
+    /// on every Reflow toggle (user, 2026-11-05: Hamlet Q1's front cover
+    /// toggled slowly, its border a 590 KB path cloned, parsed and drawn
+    /// again each time), and its mutation set off one more zoom pass.
     private func restoreFlow(of layer: DOM.Element) {
       guard let scaleBox = layer.parentElement,
-        stringEquals(scaleBox.getAttribute(data("page-scale")) ?? "", "true"),
-        let parent = scaleBox.parentElement else { return }
-      parent.insertBefore(layer, scaleBox)
-      parent.removeChild(scaleBox)
+        stringEquals(scaleBox.getAttribute(data("page-scale")) ?? "", "true") else { return }
+      scaleBox.style.display(.contents)
       for property in ["position", "inset", "transform", "transform-origin"] {
         _ = layer.style.removeProperty(property)
       }
@@ -4047,6 +4316,41 @@
         matchedScroll = (pane.scrollLeft, pane.scrollTop)
         return
       }
+      // Text typed in opens at one readable size too (user, 2026-11-05: a
+      // quote typed into a text-only reader stood one tiny line, fitted to
+      // the pane): the body's own, never fitted to a page or the pane, its
+      // line running on past the pane, which scrolls sideways under it. A
+      // pinch zooms it from there as any text pane's (`wheel`), about the
+      // point under it, in as far as a page with no image zooms (`maxZoom`)
+      // and never out past its own size. That zoom is this reader's pinch
+      // alone (`typedZoom`), never the session's, which pages' fits set,
+      // nor the image's: typed text is no page laid out to match it by.
+      if typedLayerShown {
+        let left = pane.scrollLeft, top = pane.scrollTop
+        let previous = parseDouble(layer.getAttribute(data("zoom")) ?? "") ?? ViewerZoom.actualSize
+        let oldBox = layer.getBoundingClientRect(), paneBox = pane.getBoundingClientRect()
+        restoreFlow(of: layer)
+        for property in ["min-width", "min-height", "margin-inline-start"] {
+          _ = layer.style.removeProperty(property)
+        }
+        let zoom = max(
+          ViewerZoom.actualSize, min(maxZoom(fit: ViewerZoom.actualSize), typedZoom ?? ViewerZoom.actualSize))
+        layer.style.setProperty("zoom", doubleToString(zoom))
+        layer.setAttribute(data("zoom"), doubleToString(zoom))
+        lastFit = ViewerZoom.actualSize
+        if let anchor, previous > 0, abs(zoom - previous) > 1e-6, let oldBox, let paneBox,
+          let newBox = layer.getBoundingClientRect()
+        {
+          let point = ((paneBox.x + anchor.x - oldBox.x) / previous, (paneBox.y + anchor.y - oldBox.y) / previous)
+          pane.scrollLeft += newBox.x - paneBox.x + point.0 * zoom - anchor.x
+          pane.scrollTop += newBox.y - paneBox.y + point.1 * zoom - anchor.y
+        } else {
+          pane.scrollLeft = left
+          pane.scrollTop = top
+        }
+        matchedScroll = (pane.scrollLeft, pane.scrollTop)
+        return
+      }
       if layer.querySelector(".code-view") == nil && !reflowOn {
         applyPageScale(layer, in: pane, about: anchor, matching: matching)
         return
@@ -4061,6 +4365,31 @@
       // The text's own box: without the code view's pane-filling minimum or
       // the page's centering margin.
       let codeView = layer.querySelector(".code-view")
+      // Reflowed, and nothing changed since the pass that set it (the pane's
+      // size, the layer's place and size in it, its zoom, the zoom asked of
+      // it): left as that pass left it. Its fit is not probed again, so the
+      // page is neither laid out at other zooms nor drawn again for nothing,
+      // as it was on each of the passes a toggle sets off (`showLayers`'s
+      // two, the leaf's resize).
+      if reflowOn, codeView == nil, anchor == nil, let kept = reflowedPass, kept.layer.id == layer.id,
+        abs(previous - kept.zoom) < 1e-6, kept.stands(pane: paneBox, layer: oldBox, scroll: oldScroll)
+      {
+        let stored = storedZoom()
+        let asked = stored.atFit
+          ? kept.fit : max(kept.fit, min(maxZoom(fit: kept.fit), stored.zoom ?? ViewerZoom.actualSize))
+        if abs(asked - kept.asked) < 1e-6 {
+          let fit = min(kept.fit, kept.across)
+          let chosen = stored.zoom != nil || stored.atFit
+          let atFit = chosen && previous <= fit
+          lastFit = fit
+          if chosen {
+            setZoom(previous, atFit: atFit)
+            sessionStorage.setItem(Self.zoomKey + zoomKind, atFit ? "fit" : doubleToString(previous))
+          }
+          matchedScroll = (pane.scrollLeft, pane.scrollTop)
+          return
+        }
+      }
       _ = codeView?.style.removeProperty("min-width")
       _ = codeView?.style.removeProperty("min-height")
       // A margin does not affect the measured width. Removing it briefly
@@ -4096,13 +4425,16 @@
         if reflowOn { _ = pane.style.removeProperty("overflow") }
         return
       }
-      // What stands around the layer in the pane (the view's 1px inset,
-      // which keeps a ring clear), on both sides alike: where the layer
+      // What stands around the layer in the pane (nothing: no pane has an
+      // inset, user 2026-11-05), on both sides alike: where the layer
       // starts, less its centering margin.
       // In CSS pixels, as the page is sized (`screenScale`).
       let screen = screenScale(of: pane, box: paneBox)
       let insetX = max(0, (box.x - paneBox.x) / screen.x + pane.scrollLeft - margin)
       let insetY = max(0, (box.y - paneBox.y) / screen.y + pane.scrollTop)
+      // Reflowed, the layer's width on screen, whatever its zoom: its own
+      // width at each zoom set below (`setReflowedZoom`).
+      let screenWidth = box.width / screen.x
       // The pane's size as if it had no scrollbars: the fit is the zoom at
       // which it needs none, and a size that changed as they came and went
       // would move the fit, the zoom with it, and the bars again.
@@ -4130,7 +4462,7 @@
         }
         fit = rendered
       } else if reflowOn {
-        guard let reflowed = reflowedFit(layer, paneHeight: paneHeight) else {
+        guard let reflowed = reflowedFit(layer, paneHeight: paneHeight, width: screenWidth) else {
           _ = pane.style.removeProperty("overflow")
           return
         }
@@ -4149,13 +4481,16 @@
       } else {
         zoom = max(fit, min(maxZoom(fit: fit), stored.zoom ?? ViewerZoom.actualSize))
       }
+      // What this pass found and was asked, kept for the next (`reflowedPass`).
+      let heightFit = fit
+      let asked = zoom
       // Reflowed, never wider than its pane (user, 2026-11-03): what cannot
       // wrap (a figure, a line placed by its zone on its leaf: Hamlet Q1's
       // front cover, 38 em, on a phone) is zoomed down to the pane's width,
       // its fit with it, so the pane never scrolls sideways.
       var across = Double.infinity
       if reflowOn && codeView == nil {
-        across = reflowedWidthFit(layer, at: zoom)
+        across = reflowedWidthFit(layer, at: zoom, screenWidth: screenWidth)
         zoom = min(zoom, across)
         fit = min(fit, across)
       }
@@ -4173,7 +4508,11 @@
       // own size, never at a fit the reader did not ask for.
       let chosen = stored.zoom != nil || stored.atFit
       let atFit = chosen && zoom <= fit
-      layer.style.setProperty("zoom", doubleToString(zoom))
+      if reflowOn && codeView == nil {
+        setReflowedZoom(layer, zoom, width: screenWidth)
+      } else {
+        layer.style.setProperty("zoom", doubleToString(zoom))
+      }
       layer.setAttribute(data("zoom"), doubleToString(zoom))
       if reflowOn { _ = pane.style.removeProperty("overflow") }
       // The page at least the pane's size, top-aligned: never a gap above
@@ -4187,6 +4526,17 @@
       if let page = layer.closest(".tei-page") {
         page.style.setProperty("min-width", doubleToString(roomWidth) + "px")
         page.style.setProperty("min-height", doubleToString(roomHeight) + "px")
+      }
+      // Reflowed, its own width read again as it now stands, the pane's
+      // scrollbars back: one the page's height brought cost it that much
+      // width, and the room its run-on lines reach into (`--tei-reflow-width`)
+      // read the width it had without it (user, 2026-11-05: Chrome's 15px
+      // bar). Only how far those lines reach moves; the type area is
+      // centered by its own box (TEIView), whatever that width reads.
+      if reflowOn && codeView == nil, let standing = layer.getBoundingClientRect(),
+        abs(standing.width / screen.x - screenWidth) > 0.25
+      {
+        setReflowedZoom(layer, zoom, width: standing.width / screen.x)
       }
       if let codeView {
         // The code fills the pane at every zoom, its gutter and ground with
@@ -4219,9 +4569,55 @@
         pane.scrollLeft = oldScroll.x
         pane.scrollTop = oldScroll.y
       }
+      if reflowOn && codeView == nil {
+        keepReflowedPass(layer, in: pane, zoom: zoom, fit: heightFit, asked: asked, across: across)
+      }
       // Measurement and zoom can generate deferred scroll events too.
       // Only a subsequent reader scroll should start another sync.
       matchedScroll = (pane.scrollLeft, pane.scrollTop)
+    }
+
+    /// A reflowed pass's fit and the page as it left it (`applyZoomLayout`):
+    /// the layer; the pane's size; the layer's place in the pane's content
+    /// (its scroll added back) and its size; the zoom set; the height fit
+    /// found (`reflowedFit`), the zoom asked of it then, and the most its
+    /// width allowed of that (`reflowedWidthFit`).
+    private struct ReflowedPass {
+      let layer: DOM.Element
+      let pane: (width: Double, height: Double)
+      let place: (x: Double, y: Double, width: Double, height: Double)
+      let zoom: Double
+      let fit: Double
+      let asked: Double
+      let across: Double
+
+      /// Whether the pane and the layer stand as the pass left them, within
+      /// half a pixel.
+      func stands(pane paneBox: DOM.Rect, layer box: DOM.Rect, scroll: (x: Double, y: Double)) -> Bool {
+        abs(paneBox.width - pane.width) < 0.5 && abs(paneBox.height - pane.height) < 0.5
+          && abs(box.x - paneBox.x + scroll.x - place.x) < 0.5 && abs(box.y - paneBox.y + scroll.y - place.y) < 0.5
+          && abs(box.width - place.width) < 0.5 && abs(box.height - place.height) < 0.5
+      }
+    }
+
+    /// The last reflowed pass, nil until one has run, and once the page is
+    /// scaled or Reflow switched.
+    private var reflowedPass: ReflowedPass?
+
+    /// The reflowed page as this pass left it, read once its zoom, its page's
+    /// room and its scroll are set (the layout the frame would make anyway).
+    private func keepReflowedPass(
+      _ layer: DOM.Element, in pane: DOM.Element, zoom: Double, fit: Double, asked: Double, across: Double
+    ) {
+      guard let box = layer.getBoundingClientRect(), let paneBox = pane.getBoundingClientRect() else {
+        reflowedPass = nil
+        return
+      }
+      reflowedPass = ReflowedPass(
+        layer: layer, pane: (paneBox.width, paneBox.height),
+        place: (box.x - paneBox.x + pane.scrollLeft, box.y - paneBox.y + pane.scrollTop, box.width, box.height),
+        // As the next pass reads it back (`data-zoom`).
+        zoom: parseDouble(doubleToString(zoom)) ?? zoom, fit: fit, asked: asked, across: across)
     }
 
     /// A manifest that cannot be read pages as none is there: by the
@@ -4240,7 +4636,8 @@
     /// names images then pages by them, on the page on screen, and offers
     /// the switch; one that names none keeps it hidden.
     private func loadManifest(url: String) {
-      root.fetch(url) { [self] jsonStr in
+      // Read once a page, whichever reader asks first (`ManifestReads`).
+      ManifestReads.read(url) { [self] jsonStr in
         let manifest = ArtifactManifest.parse(jsonStr)
         let first = manifestRetries == 0
         switch manifest.canvasSwitch {
@@ -4860,6 +5257,30 @@
         root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
         return
       }
+      // A markup that follows the image (`markup-follows-canvas`): its page
+      // reads the canvas shown, whichever it is, on screen wherever it
+      // belongs (`markupFrames`: every frame where none are named); on any
+      // other frame the pane is empty (user, 2026-11-05: a typed quote's
+      // text is its own frames' alone), as the server paints it
+      // (`data-markup-shown`). The service its page was drawn with is kept
+      // (`data-drawn-service-id`): what its host's slots name it by.
+      if markupFollowsCanvas {
+        let frames = markupFrames
+        let shown = frames.isEmpty || frames.contains(index + 1)
+        for pane in markupPanes {
+          if case .none = pane.getAttribute(data("drawn-service-id")) {
+            pane.setAttribute(data("drawn-service-id"), pane.getAttribute(data("service-id")) ?? "")
+          }
+          pane.setAttribute(data("service-id"), service)
+          pane.setAttribute(data("active"), shown ? "true" : "false")
+        }
+        root.setAttribute(data("markup-shown"), shown ? "true" : "false")
+        root.dispatchEvent(CustomEvent(type: "artifact-canvas-change", detail: service))
+        reflectPageMarkup()
+        applyZoom(about: nil)
+        scheduleZoom()
+        return
+      }
       var matched = false
       for pane in markupPanes {
         let id = pane.dataset["service-id"] ?? ""
@@ -5242,8 +5663,14 @@
     /// its strokes at the screen's width. Shown while the overlay is on and
     /// the page's scan is laid by its text block; gnorium-python's review
     /// image draws the same scene for the model.
+    /// Never reflowed: Reflow puts the overlay away (`overlayAside`, user,
+    /// 2026-10-26: no page to lay on the scan), as it disables Detach, and
+    /// reflowed text no longer stands at its zones; the scene drawn on the
+    /// unreflowed page goes at once (user, 2026-11-05: overlay, then
+    /// Reflow, left its boxes at the page's old place, off the reflowed
+    /// text, and fully drawn once the overlay's fade was done).
     private func drawStructure() {
-      let shown = overlayRegistered && (overlayOn || overlayLeaving)
+      let shown = overlayRegistered && (overlayOn || overlayLeaving) && !reflowOn
       for drawn in root.querySelectorAll(".artifact-markup .artifact-structure") {
         if !shown { drawn.remove() }
       }
@@ -5251,7 +5678,10 @@
       // The lines first: their registration (`registrationShift`) lays the figures too.
       let structure = currentStructure()
       let figures = figurePairs(layer, page: page)
-      guard structure != nil || !figures.isEmpty else { return }
+      guard structure != nil || !figures.isEmpty else {
+        layer.querySelector(":scope > .artifact-structure")?.remove()
+        return
+      }
       let key =
         (page.getAttribute(data("service-id")) ?? "") + " " + (layer.getAttribute(data("layer")) ?? "") + " "
         + intToString(figures.count)

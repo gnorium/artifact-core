@@ -1469,7 +1469,8 @@
         vp.focus(DOM.FocusOptions(preventScroll: true))
         endDrag()
         if cropping, frameW > 0, frameH > 0 {
-          vp.focus()
+          // Focused above without a scroll; a second focus scrolled the
+          // boxes around the viewport.
           beginCrop(clientX: e.clientX, clientY: e.clientY, part: cropPart(clientX: e.clientX, clientY: e.clientY))
           return
         }

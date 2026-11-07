@@ -27,4 +27,4 @@ This directory is its own Git repository. The parent Gnorium workspace is not a 
 
 Keep zoom/pan synchronization free of feedback loops: only reader gestures drive matching, the latest queued gesture wins, and layout measurements preserve scroll and zoom anchors. Center a stable page frame, not shrink-wrapped short text.
 
-XML/code mode scrolls normally; it is independent of image zoom. Detach remains visible but disabled where pairing cannot apply. Recover from transient manifest failures without requiring a refresh.
+XML/code mode scrolls normally; it is independent of image zoom. Detach remains visible but disabled where pairing cannot apply on a traced reader; trace-less text (typed text beside its frames) has neither Detach nor Overlay, and nothing syncs text and image (user, 2026-11-05). Recover from transient manifest failures without requiring a refresh.
