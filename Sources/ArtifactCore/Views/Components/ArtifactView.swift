@@ -1356,6 +1356,11 @@
           width(ButtonView.smallMinSize).important()
           height(ButtonView.smallMinSize).important()
         }
+        // The header row steps down with its controls: a small control and
+        // the 8 above and under it, 48, never a medium one's 56.
+        selector("\(ButtonView.phoneStep) & .artifact-header-row") {
+          minHeight(ButtonView.smallMinSize + spacing8 * 2).important()
+        }
       }
     }
 
