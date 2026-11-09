@@ -92,6 +92,10 @@
     let canvasSwitch: Bool
     /// Controls the host adds to the header, at its end (a Find button).
     let actions: [DOM.Node]
+    /// What the host names right after the page's label (user, 2026-11-09:
+    /// a quote's source, its testament linked in a tooltip): the label and
+    /// it one title, the label fading before it does.
+    let afterLabel: [DOM.Node]
     /// A row the host adds under the header's own, the width of the viewer
     /// (a find bar), shown while the host marks the row open
     /// (`data-open="true"` on `.artifact-header-bar`). Closed, it takes no
@@ -169,7 +173,8 @@
       @HTMLBuilder actions: () -> [DOM.Node] = { [] },
       @HTMLBuilder bar: () -> [DOM.Node] = { [] },
       @HTMLBuilder underMarkup: () -> [DOM.Node] = { [] },
-      @HTMLBuilder underHeader: () -> [DOM.Node] = { [] }
+      @HTMLBuilder underHeader: () -> [DOM.Node] = { [] },
+      @HTMLBuilder afterLabel: () -> [DOM.Node] = { [] }
     ) {
       self.manifestURL = manifestURL
       self.style = style
@@ -193,6 +198,7 @@
       self.bar = bar()
       self.underMarkup = underMarkup()
       self.underHeader = underHeader()
+      self.afterLabel = afterLabel()
     }
 
     /// Whether the header shows the page-images switch: only when there are
@@ -233,6 +239,16 @@
     /// the bottom left of every box), and the host's controls take its
     /// end.
 
+    /// The page on screen's label, filled by the reader as it is paged;
+    /// alone at the row's start, or the start of its title.
+    private var canvasLabel: DOM.Node {
+      span {}
+        .id("artifact-canvas-label")
+        .class("artifact-canvas-label")
+        .data("edge-fade-view", "expand")
+        .build()
+    }
+
     public func build() -> DOM.Node {
       // An image the reader draws itself, for an image the slot lacks, is
       // styled by the image's own sheet, which the page must link.
@@ -246,11 +262,17 @@
           div {
           // The page on screen, by its canvas's label, at the row's start
           // (user, 2026-10-10); the host's controls take the rest of the
-          // row, at its end.
-          span {}
-            .id("artifact-canvas-label")
-            .class("artifact-canvas-label")
-            .data("edge-fade-view", "expand")
+          // row, at its end. What the host names after the label
+          // (`afterLabel`) follows it, the two one title.
+          if afterLabel.isEmpty {
+            canvasLabel
+          } else {
+            div {
+              canvasLabel
+              afterLabel
+            }
+            .class("artifact-canvas-title")
+          }
           if !actions.isEmpty || switchesCanvas {
             div {
               actions
@@ -1242,6 +1264,23 @@
         minWidth(0)
       }
       edgeFadeView("& .artifact-canvas-label")
+      // The label and what the host names after it (`afterLabel`): the
+      // title takes the label's room, the label its own width, fading
+      // where the row is too narrow, and what follows it never shrunk.
+      descendant(".artifact-canvas-title") {
+        display(.flex)
+        alignItems(.center)
+        gap(spacing8)
+        flex(1)
+        minWidth(0)
+      }
+      selector("& .artifact-canvas-title > .artifact-canvas-label") {
+        flexGrow(0)
+        flexBasis("auto")
+      }
+      selector("& .artifact-canvas-title > :not(.artifact-canvas-label)") {
+        flexShrink(0)
+      }
       selector(".artifact-fullscreen-button") {
         display(.flex)
         alignItems(.center)
