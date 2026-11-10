@@ -5088,7 +5088,10 @@
         }
         // An arrow typed in a field moves its caret, never the pages: a
         // form may hold a viewer among its fields.
-        if let _ = e.target?.closest("input, textarea, select, [contenteditable='true']") { return }
+        // (Text typed in is `plaintext-only`: a quote's pane, a page's code.)
+        if let _ = e.target?.closest("input, textarea, select, [contenteditable='true'], [contenteditable='plaintext-only']") {
+          return
+        }
         // A focused pane's arrows pan it, as its own keys do.
         if let target = e.target, let pane = target.closest(".artifact-markup, .frame-viewport"), pane.id == target.id {
           return
