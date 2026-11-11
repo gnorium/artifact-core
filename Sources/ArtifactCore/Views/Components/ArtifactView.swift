@@ -4671,7 +4671,9 @@
     /// it, its detail the number of canvases read ("0" for a manifest that
     /// could not be read), so a host can show the viewer or say why not.
     /// When the answer says why there are none, an `artifact-manifest-error`
-    /// event, its detail the reason, comes first.
+    /// event, its detail the reason, comes first. A manifest not read this
+    /// time is no error: an `artifact-manifest-pending` event comes first
+    /// instead, and the error or the canvases when a later read settles it.
     ///
     /// A manifest not read this time (no answer; the server's `"unread"`: a
     /// timeout, too many reads) pages the markup meanwhile, its switch
@@ -4687,9 +4689,9 @@
         switch manifest.canvasSwitch {
         case .pending:
           if first {
-            if let reason = manifest.error {
-              root.dispatchEvent(CustomEvent(type: "artifact-manifest-error", detail: reason))
-            }
+            // Not read yet is no failure: a host holds what it says of the
+            // address until an answer settles it.
+            root.dispatchEvent(CustomEvent(type: "artifact-manifest-pending", detail: manifest.error ?? ""))
             root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "0"))
             pageMarkup()
           }
@@ -4703,7 +4705,14 @@
         // Read again after the markup paged meanwhile: by the manifest now,
         // on the page on screen.
         if !first {
-          if manifest.pages.isEmpty { return }
+          if manifest.pages.isEmpty {
+            // Settled as none after the wait: said as a first answer is.
+            if let reason = manifest.error {
+              root.dispatchEvent(CustomEvent(type: "artifact-manifest-error", detail: reason))
+            }
+            root.dispatchEvent(CustomEvent(type: "artifact-manifest-load", detail: "0"))
+            return
+          }
           if canvasIndex < serviceIDs.count { startService = serviceIDs[canvasIndex] }
           serviceIDs = []
           frameWidths = []
