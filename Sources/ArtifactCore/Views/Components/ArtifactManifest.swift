@@ -100,10 +100,17 @@ struct ArtifactManifest {
   }
 
   /// The waits, in milliseconds, before each read again of an unread
-  /// Back off to 30 seconds, then keep trying while the reader is attached.
-  static let retryDelays: [Double] = [4000, 8000, 16000, 30000]
+  /// manifest: the first, then twice the one before each time, while the
+  /// reader is attached (user, 2026-11-11: a plain doubling, no list).
+  static let firstRetryDelay: Double = 4000
 
   static func retryDelay(after attempts: Int) -> Double {
-    retryDelays[min(max(0, attempts), retryDelays.count - 1)]
+    var delay = firstRetryDelay
+    var doubled = 0
+    while doubled < attempts {
+      delay *= 2
+      doubled += 1
+    }
+    return delay
   }
 }

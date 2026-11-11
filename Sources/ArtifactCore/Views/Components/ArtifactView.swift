@@ -4677,8 +4677,8 @@
     ///
     /// A manifest not read this time (no answer; the server's `"unread"`: a
     /// timeout, too many reads) pages the markup meanwhile, its switch
-    /// hidden, and is asked for again with capped backoff
-    /// (`ArtifactManifest.retryDelays`, user, 2026-10-10). An answer that
+    /// hidden, and is asked for again, each wait twice the one before
+    /// (`ArtifactManifest.retryDelay`). An answer that
     /// names images then pages by them, on the page on screen, and offers
     /// the switch; one that names none keeps it hidden.
     private func loadManifest(url: String) {
@@ -4744,7 +4744,7 @@
     }
 
     /// A temporary failure never settles "no images": keep retrying with
-    /// capped backoff while the viewer remains in the document.
+    /// doubling waits while the viewer remains in the document.
     private func retryManifest(url: String) {
       guard isInDocument else { return }
       let delay = ArtifactManifest.retryDelay(after: manifestRetries)

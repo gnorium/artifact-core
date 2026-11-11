@@ -24,11 +24,11 @@ final class ArtifactManifestTests: XCTestCase {
     let timedOut = ArtifactManifest.parse(#"{"canvases":[],"error":"The source URL took too long.","unread":true}"#)
     XCTAssertEqual(timedOut.canvasSwitch, .pending)
     XCTAssertEqual(timedOut.error, "The source URL took too long.")
-    XCTAssertFalse(ArtifactManifest.retryDelays.isEmpty)
+    XCTAssertEqual(ArtifactManifest.retryDelay(after: 0), ArtifactManifest.firstRetryDelay)
     XCTAssertEqual(ArtifactManifest.parse(#"{"error":"Network error"}"#).canvasSwitch, .pending)
     XCTAssertEqual(ArtifactManifest.parse("null").canvasSwitch, .pending)
     XCTAssertEqual(ArtifactManifest.parse("").canvasSwitch, .pending)
-    XCTAssertEqual(ArtifactManifest.retryDelay(after: 20), 30000)
+    XCTAssertEqual(ArtifactManifest.retryDelay(after: 3), ArtifactManifest.firstRetryDelay * 8)
   }
 
   /// A page changed at its source whose image that was sent isn't archived
