@@ -102,7 +102,7 @@ struct ArtifactManifest {
   /// The waits, in milliseconds, before each read again of an unread
   /// manifest: the first, then twice the one before each time, while the
   /// reader is attached (user, 2026-11-11: a plain doubling, no list).
-  static let firstRetryDelay: Double = 4000
+  static let firstRetryDelay: Double = 2000
 
   static func retryDelay(after attempts: Int) -> Double {
     var delay = firstRetryDelay
