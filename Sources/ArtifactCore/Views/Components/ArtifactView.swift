@@ -477,8 +477,10 @@
           // width. Text alone on one page has none to turn.
           if !textOnly || (pageCount ?? 1) > 1 {
           PaginationView(
-            currentPage: min((startCanvas ?? 0) + 1, pageCount ?? 1),
-            totalPages: pageCount ?? 1,
+            // The page it opens on, even before its count is known (a
+            // quote's on frame 361 read "1" until its manifest came).
+            currentPage: pageCount.map { min((startCanvas ?? 0) + 1, $0) } ?? (startCanvas ?? 0) + 1,
+            totalPages: pageCount ?? max((startCanvas ?? 0) + 1, 1),
             size: .medium,
             showControls: true,
             kind: "artifact",
