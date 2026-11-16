@@ -114,7 +114,7 @@
     /// How many pages the markup has, when the host knows: the pager
     /// counts them from the start, before a manifest is read (which may
     /// count its canvases instead). Nil: unknown until the reader counts
-    /// them, and the pager is hidden until then—never "of —".
+    /// them, the pager reading "1 of —" till then (user, 2026-11-17).
     let pageCount: Int?
     /// Whether the markup holds only some of its pages—the one on screen
     /// and those either side—and the host fetches the rest as they are
@@ -662,10 +662,8 @@
       selector("& .artifact-page-nav", "& .artifact-xml-toggle", "& .artifact-header-toggle", "& .artifact-english-toggle", "& .artifact-reflow-toggle", "& .artifact-detach-toggle", "& .artifact-overlay-toggle") {
         flexShrink(0)
       }
-      // Its total unknown, the pager waits unseen rather than read "of —".
-      selector("&[data-pages-known='false'] .artifact-page-nav") {
-        visibility(.hidden)
-      }
+      // Its total unknown, the pager reads "1 of —" till it is known
+      // (user, 2026-11-17), never popping in.
       selector("&[data-canvas-confirmed='false'] .artifact-canvas-toggle") {
         display(.none)
       }
