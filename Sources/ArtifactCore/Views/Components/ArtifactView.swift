@@ -1086,10 +1086,16 @@
         CSS.Property("padding-inline-start", "0")
       }
       selector("& .artifact-markup .code-view[data-lined='true'] .code-line", "& .artifact-document-header .code-view[data-lined='true'] .code-line", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line") {
-        CSS.Property("padding-inline-start", "calc(var(--gutter) + 2 * \(spacing4.value))")
+        // Its numbers centered in a gutter 12 wider either side (user,
+        // 2026-11-17): the code's edge is where its diff's "Diff" and text
+        // start below it, the diff's signs centered as the numbers are.
+        CSS.Property("padding-inline-start", "calc(var(--gutter) + 2 * \(spacing12.value))")
       }
       selector("& .artifact-markup .code-view[data-lined='true'] .code-line::before", "& .artifact-document-header .code-view[data-lined='true'] .code-line::before", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line::before") {
         CSS.Property("inset-inline-start", "0")
+        CSS.Property("width", "calc(var(--gutter) + 2 * \(spacing12.value))")
+        CSS.Property("padding-inline", "0")
+        textAlign(.center)
       }
       // A code line whose box the image shows as the pointer is on it
       // (`markRegionLine`): its ground a selected line's, gutter to edge,
