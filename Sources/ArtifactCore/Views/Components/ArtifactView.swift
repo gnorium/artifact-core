@@ -151,11 +151,12 @@
     /// under it; the wheel the pane's own.
     let typedText: Bool
 
-    /// A reader's code gutter: its diff's "± Diff" reach where one is drawn
-    /// (8, the icon at 16, 8), else the same by its measure; never narrower
-    /// than its numbers with 4 either side.
+    /// A reader's code gutter (user, 2026-11-17): as wide as its diff's
+    /// "± Diff" icon with 8 either side, or its numbers with 8 either side,
+    /// whichever is wider; its numbers a column centered in it, each set to
+    /// its end so their units stand in a line.
     static let readerGutter =
-      "max(var(--reader-gutter, calc(2 * \(spacing8.value) + 0.798em)), calc(var(--gutter) + 2 * \(spacing4.value)))"
+      "max(calc(2 * \(spacing8.value) + 0.798em), calc(var(--gutter) + 2 * \(spacing8.value)))"
 
     public init(
       manifestURL: String = "",
@@ -1092,16 +1093,16 @@
         CSS.Property("padding-inline-start", "0")
       }
       selector("& .artifact-markup .code-view[data-lined='true'] .code-line", "& .artifact-document-header .code-view[data-lined='true'] .code-line", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line") {
-        // Its numbers centered in a gutter as wide as its diff's "± Diff"
-        // reaches (`--reader-gutter`, PassageDiffSyncView: 8, the icon, 8;
-        // user, 2026-11-17), never narrower than its numbers.
+        // Its gutter (`readerGutter`), where its diff's "Diff" word and text
+        // start below it (PassageDiffSyncView).
         CSS.Property("padding-inline-start", Self.readerGutter)
       }
       selector("& .artifact-markup .code-view[data-lined='true'] .code-line::before", "& .artifact-document-header .code-view[data-lined='true'] .code-line::before", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line::before") {
         CSS.Property("inset-inline-start", "0")
         CSS.Property("width", Self.readerGutter)
-        CSS.Property("padding-inline", "0")
-        textAlign(.center)
+        CSS.Property("box-sizing", "border-box")
+        CSS.Property("padding-inline", "calc((\(Self.readerGutter) - var(--gutter)) / 2)")
+        textAlign(.end)
       }
       // A code line whose box the image shows as the pointer is on it
       // (`markRegionLine`): its ground a selected line's, gutter to edge,
