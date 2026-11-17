@@ -151,6 +151,12 @@
     /// under it; the wheel the pane's own.
     let typedText: Bool
 
+    /// A reader's code gutter: its diff's "± Diff" reach where one is drawn
+    /// (8, the icon at 16, 8), else the same by its measure; never narrower
+    /// than its numbers with 4 either side.
+    static let readerGutter =
+      "max(var(--reader-gutter, calc(2 * \(spacing8.value) + 0.798em)), calc(var(--gutter) + 2 * \(spacing4.value)))"
+
     public init(
       manifestURL: String = "",
       style: CSSStyle = .default,
@@ -1086,14 +1092,14 @@
         CSS.Property("padding-inline-start", "0")
       }
       selector("& .artifact-markup .code-view[data-lined='true'] .code-line", "& .artifact-document-header .code-view[data-lined='true'] .code-line", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line") {
-        // Its numbers centered in a gutter 12 wider either side (user,
-        // 2026-11-17): the code's edge is where its diff's "Diff" and text
-        // start below it, the diff's signs centered as the numbers are.
-        CSS.Property("padding-inline-start", "calc(var(--gutter) + 2 * \(spacing12.value))")
+        // Its numbers centered in a gutter as wide as its diff's "± Diff"
+        // reaches (`--reader-gutter`, PassageDiffSyncView: 8, the icon, 8;
+        // user, 2026-11-17), never narrower than its numbers.
+        CSS.Property("padding-inline-start", Self.readerGutter)
       }
       selector("& .artifact-markup .code-view[data-lined='true'] .code-line::before", "& .artifact-document-header .code-view[data-lined='true'] .code-line::before", "& .artifact-xml-handoff .code-view[data-lined='true'] .code-line::before") {
         CSS.Property("inset-inline-start", "0")
-        CSS.Property("width", "calc(var(--gutter) + 2 * \(spacing12.value))")
+        CSS.Property("width", Self.readerGutter)
         CSS.Property("padding-inline", "0")
         textAlign(.center)
       }
